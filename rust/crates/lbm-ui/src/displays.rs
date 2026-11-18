@@ -1,4 +1,4 @@
-//! System outputs stay reachable even when detached from the desktop/map.
+//! System commands for the selected monitor; guards use the entire output inventory.
 use lbm_ipc::displays::{Change, Outputs};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -10,6 +10,7 @@ pub enum Did {
 
 #[derive(Default)]
 pub struct Panel {
+    pub selected: Option<String>,
     pub confirm: Option<(String, Change)>,
 }
 
@@ -31,10 +32,18 @@ impl Panel {
         warn: bool,
         can_stop: bool,
     ) -> Option<Did> {
+        if self
+            .confirm
+            .as_ref()
+            .is_some_and(|(connector, _)| Some(connector) != self.selected.as_ref())
+        {
+            self.confirm = None;
+        }
+        let selected = self.selected.as_deref()?;
         let mut did = None;
-        ui.heading("System displays");
+        ui.heading("System display");
         ui.label("These actions change the desktop configuration immediately.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui
                 .add_enabled(!busy, egui::Button::new("Refresh outputs"))
                 .clicked()
@@ -61,8 +70,12 @@ impl Panel {
             return did;
         };
         let enabled = outputs.outputs.iter().filter(|o| o.enabled).count();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for output in &outputs.outputs {
+        ui.vertical(|ui| {
+            for output in outputs
+                .outputs
+                .iter()
+                .filter(|output| output.connector == selected)
+            {
                 ui.push_id(&output.connector, |ui| {
                     ui.group(|ui| {
                         ui.label(format!("{} · {}", output.name, output.connector));
@@ -73,7 +86,7 @@ impl Panel {
                         } else {
                             "Attached"
                         });
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for (change, available) in [
                                 (Change::Primary, output.enabled && !output.primary),
                                 (Change::Attach, !output.enabled),
@@ -108,7 +121,7 @@ impl Panel {
                     Change::Attach => "This screen will join the desktop.",
                     Change::Primary => "This screen will become the primary display.",
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
                             !busy && blocked.is_none(),

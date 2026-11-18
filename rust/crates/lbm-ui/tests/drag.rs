@@ -57,12 +57,19 @@ enum Said {
 }
 
 fn watching<'a>(log: &'a std::cell::RefCell<Vec<Said>>) -> Harness<'a> {
+    watching_with_movement(log, true)
+}
+
+fn watching_with_movement<'a>(
+    log: &'a std::cell::RefCell<Vec<Said>>,
+    movable: bool,
+) -> Harness<'a> {
     let screens = two_screens();
     Harness::builder()
         .with_size(egui::vec2(1200.0, 900.0))
         .build_ui(move |ui| {
             let fit = map::fit(map::extent(&screens), ui.max_rect());
-            if let Some(gesture) = map::draw(ui, &screens, &fit, None) {
+            if let Some(gesture) = map::draw_movable(ui, &screens, &fit, None, movable) {
                 log.borrow_mut().push(match gesture {
                     map::Gesture::Clicked(id) => Said::Clicked(id.to_owned()),
                     map::Gesture::Dragged { id, by } => Said::Dragged(id.to_owned(), by),
@@ -70,6 +77,31 @@ fn watching<'a>(log: &'a std::cell::RefCell<Vec<Said>>) -> Harness<'a> {
                 });
             }
         })
+}
+
+#[test]
+fn a_selection_only_map_never_moves_screens() {
+    let log = std::cell::RefCell::new(Vec::new());
+    let mut harness = watching_with_movement(&log, false);
+    harness.run();
+    let from = middle_of(&harness, "Right screen");
+    let to = from + egui::vec2(-60., 25.);
+    harness.drag_at(from);
+    harness.step();
+    harness.hover_at(to);
+    harness.step();
+    harness.drop_at(to);
+    harness.step();
+    assert!(
+        log.borrow().is_empty(),
+        "dragging must not emit a move or drop"
+    );
+
+    harness.drag_at(from);
+    harness.step();
+    harness.drop_at(from);
+    harness.step();
+    assert_eq!(*log.borrow(), vec![Said::Clicked("right".into())]);
 }
 
 /// Where the right screen is drawn, so the pointer can be put on it.

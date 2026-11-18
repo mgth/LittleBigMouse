@@ -43,33 +43,26 @@ pub fn panel(
     seen: &[String],
 ) -> Option<Did> {
     let mut did = None;
-    ui.add_space(10.0);
-    ui.label(
-        egui::RichText::new("Excluded processes")
-            .strong()
-            .size(15.0),
-    );
-    ui.separator();
-
+    ui.horizontal(|ui| {
+        crate::settings_icons::Icon::Excluded.show(ui);
+        ui.label(
+            egui::RichText::new("Application exclusions")
+                .strong()
+                .size(15.0),
+        );
+    });
+    ui.add(egui::Label::new(egui::RichText::new("Pause cursor routing while these applications are focused. Changes are saved automatically.").small().color(crate::theme::MUTED)).wrap());
+    ui.add_space(8.0);
     let Some(list) = list else {
         ui.label(
             egui::RichText::new(
-                "The excluded list has not been read, so it is not offered for editing — \
-                 removing entries that are merely not loaded would then be saved as \
-                 removals. It is read from Excluded.txt, which the agent creates.",
+                "Waiting for the agent to load your exclusions. Editing will be available once the list is loaded.",
             )
             .small()
             .color(ui.visuals().weak_text_color()),
         );
         return None;
     };
-
-    ui.label(
-        egui::RichText::new("LittleBigMouse pauses while these apps are focused")
-            .small()
-            .color(ui.visuals().weak_text_color()),
-    );
-    ui.add_space(4.0);
 
     if list.is_empty() {
         ui.label(
@@ -79,18 +72,26 @@ pub fn panel(
         );
     }
     for entry in list {
-        ui.horizontal(|ui| {
-            // The button carries the entry, so it has a name of its own in the
-            // accessibility tree — a row of buttons all called "Remove" is a row nobody
-            // can tell apart, by ear or from a test.
-            if ui
-                .button(format!("Remove {entry}"))
-                .on_hover_text("Stop excluding this")
-                .clicked()
-            {
-                did = Some(Did::Remove(entry.clone()));
-            }
-            ui.label(entry);
+        crate::theme::card().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let width = (ui.available_width() - 36.0).max(60.0);
+                ui.add_sized(
+                    [width, 0.0],
+                    egui::Label::new(entry).wrap().halign(egui::Align::Min),
+                );
+                let response = ui.button("×").on_hover_text("Remove exclusion");
+                response.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::Button,
+                        ui.is_enabled(),
+                        format!("Remove {entry}"),
+                    )
+                });
+                if response.clicked() {
+                    did = Some(Did::Remove(entry.clone()));
+                }
+            });
         });
     }
 
@@ -99,7 +100,7 @@ pub fn panel(
         let typed = ui.add(
             egui::TextEdit::singleline(pattern)
                 .hint_text("game.exe or pattern")
-                .desired_width(200.0),
+                .desired_width((ui.available_width() - 88.0).max(80.0)),
         );
         let ready = can_add(list, pattern);
         // Enter is how a text field is submitted, and the button is how it is discovered.

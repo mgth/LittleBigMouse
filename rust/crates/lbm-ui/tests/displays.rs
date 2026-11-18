@@ -26,7 +26,10 @@ fn outputs() -> Outputs {
 #[test]
 fn a_detached_output_is_reachable_and_confirmation_can_be_cancelled() {
     let outputs = outputs();
-    let mut panel = Panel::default();
+    let mut panel = Panel {
+        selected: Some("HDMI-1".into()),
+        ..Default::default()
+    };
     let actions = RefCell::new(Vec::new());
     let mut harness = Harness::new_ui(|ui| {
         if let Some(did) = panel.draw(ui, Some(&outputs), None, false, true, false) {
@@ -35,7 +38,7 @@ fn a_detached_output_is_reachable_and_confirmation_can_be_cancelled() {
     });
     assert!(harness.query_by_label("Side · HDMI-1").is_some());
     let buttons: Vec<_> = harness.get_all_by_label("Attach").collect();
-    buttons[1].click();
+    buttons[0].click();
     harness.run();
     assert!(actions.borrow().is_empty());
     assert!(harness.query_by_label("Attach HDMI-1?").is_some());
@@ -43,7 +46,7 @@ fn a_detached_output_is_reachable_and_confirmation_can_be_cancelled() {
     harness.run();
     assert!(actions.borrow().is_empty());
     assert!(harness.query_by_label("Confirm change").is_none());
-    harness.get_all_by_label("Attach").nth(1).unwrap().click();
+    harness.get_by_label("Attach").click();
     harness.run();
     harness.get_by_label("Confirm change").click();
     harness.run();
@@ -56,21 +59,31 @@ fn a_detached_output_is_reachable_and_confirmation_can_be_cancelled() {
 #[test]
 fn disabling_warnings_does_not_disable_the_last_screen_guard() {
     let outputs = outputs();
-    let mut panel = Panel::default();
-    let actions = RefCell::new(Vec::new());
-    let mut harness = Harness::new_ui(|ui| {
-        if let Some(did) = panel.draw(ui, Some(&outputs), None, false, false, false) {
-            actions.borrow_mut().push(did);
-        }
-    });
-    harness.get_all_by_label("Detach").next().unwrap().click();
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, state: &mut (Panel, Option<Did>)| {
+            if let Some(did) = state.0.draw(ui, Some(&outputs), None, false, false, false) {
+                state.1 = Some(did);
+            }
+        },
+        (
+            Panel {
+                selected: Some("DP-1".into()),
+                ..Default::default()
+            },
+            None,
+        ),
+    );
+    harness.get_by_label("Detach").click();
     harness.run();
-    assert!(actions.borrow().is_empty());
-    harness.get_all_by_label("Attach").nth(1).unwrap().click();
+    assert!(harness.state().1.is_none());
+    assert!(harness.query_by_label("Side · HDMI-1").is_none());
+    harness.state_mut().0.selected = Some("HDMI-1".into());
+    harness.run();
+    harness.get_by_label("Attach").click();
     harness.run();
     assert_eq!(
-        *actions.borrow(),
-        vec![Did::Change("HDMI-1".into(), Change::Attach)]
+        harness.state().1,
+        Some(Did::Change("HDMI-1".into(), Change::Attach))
     );
 }
 
@@ -78,6 +91,7 @@ fn disabling_warnings_does_not_disable_the_last_screen_guard() {
 fn a_configuration_change_cancels_a_confirmation_and_blocks_its_action() {
     let outputs = outputs();
     let mut panel = Panel {
+        selected: Some("HDMI-1".into()),
         confirm: Some(("HDMI-1".into(), Change::Attach)),
     };
     let mut harness = Harness::new_ui(|ui| {
@@ -92,9 +106,44 @@ fn a_configuration_change_cancels_a_confirmation_and_blocks_its_action() {
             )
             .is_none());
     });
-    harness.get_all_by_label("Attach").nth(1).unwrap().click();
+    harness.get_by_label("Attach").click();
     harness.run();
     assert!(harness.query_by_label("Confirm change").is_none());
     drop(harness);
     assert!(panel.confirm.is_none());
+}
+
+#[test]
+fn selection_changes_cancel_confirmation_and_count_all_active_outputs() {
+    let mut outputs = outputs();
+    outputs.outputs[1].enabled = true;
+    let mut h = Harness::builder().build_ui_state(
+        |ui, state: &mut (Panel, Option<Did>)| {
+            if let Some(did) = state.0.draw(ui, Some(&outputs), None, false, true, false) {
+                state.1 = Some(did);
+            }
+        },
+        (
+            Panel {
+                selected: Some("DP-1".into()),
+                ..Default::default()
+            },
+            None,
+        ),
+    );
+    h.get_by_label("Detach").click();
+    h.run();
+    assert!(
+        h.query_by_label("Confirm change").is_some(),
+        "the other enabled output still counts"
+    );
+    h.state_mut().0.selected = Some("HDMI-1".into());
+    h.run();
+    assert!(h.query_by_label("Confirm change").is_none());
+    assert!(h.query_by_label("Main · DP-1").is_none());
+    h.state_mut().0.selected = None;
+    h.run();
+    assert!(h.query_by_label("Attach").is_none());
+    assert!(h.query_by_label("Detach").is_none());
+    assert!(h.state().1.is_none());
 }

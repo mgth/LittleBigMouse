@@ -1,22 +1,6 @@
-//! A monitor on the map: how big it is drawn, and what has to shrink with it.
-//!
-//! The map draws every screen at one ratio of millimetres to points, and everything
-//! inside a screen follows: the bezel, the name, the logo. Avalonia does it with a
-//! `VisualRatio` threaded through bindings; here it is arithmetic on the way in, so the
-//! view has nothing to decide.
-//!
-//! **Nothing here judges what is readable.** This port carried a legibility floor for a
-//! while — names below 7 points were dropped rather than drawn illegibly — and measuring
-//! it is what killed it: the name is half the *top bezel*, so on any multi-screen desktop
-//! in an ordinary window it lands between 1 and 5 points. The floor was not a rare relief
-//! valve, it decided the common case, and a map that silently loses every name is worse
-//! than one with small ones. Removed on the maintainer's call (2026-09-16), which also
-//! puts this back on the Avalonia rule: the C# draws the name at whatever size the
-//! arithmetic gives.
-//!
-//! What is left is arithmetic, not taste: a name is dropped only when its band has no
-//! height at all — a screen with no top bezel, or one drawn at a ratio of zero. A font
-//! size of zero is not a small name, it is not a size.
+//! Monitor geometry stays proportional to the physical layout. Names fill their
+//! top bezel using measured text bounds; cropped manufacturer logos fill the bottom
+//! bezel at their own aspect ratio. Neither decoration changes the screen geometry.
 
 use lbm_layout::geo::Rect;
 
@@ -39,7 +23,7 @@ pub struct Drawn {
     /// (0, 1). It is printed *on the plastic*, where a real monitor prints it, not over
     /// the picture.
     pub name_band: egui::Rect,
-    /// The height to set the name in, or `None` when it would be too small to read.
+    /// Target ink height for the name, or `None` when there is no top bezel.
     pub name_height: Option<f32>,
     /// Where the manufacturer logo goes: the bottom bezel, across the lit width — the
     /// frame's cell (2, 1), the name's opposite number
@@ -63,14 +47,8 @@ impl Drawn {
     }
 }
 
-/// A name is set at half the height of the bezel it is printed on.
-///
-/// `MonitorFrameView.axaml:184-186` binds the label's font size to `TopRow.Bounds.Height`
-/// through a `Scale` converter with a parameter of `0.5`, and `TopRow` is the border
-/// stretched into the frame grid's cell (0, 0) — whose height is `Unrotated.TopBorder`
-/// (`:155-158`, rows `Auto,*,Auto`). So the name is measured against **the bezel**, and
-/// a screen with a thin bezel gets a small name however large its panel is.
-const NAME_SHARE_OF_TOP_BEZEL: f64 = 0.5;
+/// Use nearly the full bezel height, leaving a small margin around the ink.
+const NAME_SHARE_OF_TOP_BEZEL: f64 = 0.9;
 
 /// Where a monitor lands on the map, and how big its parts are.
 ///
@@ -105,7 +83,7 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
         outside,
         content,
         name_band,
-        // No floor: whatever the arithmetic gives, however small — the Avalonia rule.
+        // No visibility cutoff: small monitors keep their names.
         // `None` only when there is no band to print on, which is not a judgement about
         // readability but about whether there is a size at all.
         name_height: (name_height > 0.0).then_some(name_height),
@@ -119,13 +97,13 @@ pub fn draw(mm_outside: Rect, mm_content: Rect, origin: (f64, f64), ratio: Ratio
 /// fixed pair of gradient brushes, so light grey always lands on the same dark plastic.
 /// This frame paints the bezel from the theme, so a fixed light grey would be light on
 /// light in a light theme. Following the theme is what keeps the *intent* of that
-/// LightGray — a logo that is present but recedes — rather than its literal value.
+/// LightGray while retaining enough contrast on a small reflective bezel.
 pub fn logo_colour(visuals: &egui::Visuals) -> egui::Color32 {
-    visuals.weak_text_color()
+    visuals.text_color()
 }
 
-/// How much of the logo shows through: `Opacity="0.8"`, kept as it is.
-pub const LOGO_OPACITY: f32 = 0.8;
+/// Strong enough to survive downscaling on the reflective bezel.
+pub const LOGO_OPACITY: f32 = 0.95;
 
 /// The largest rectangle of `of`'s shape that fits centred inside `into` — Avalonia's
 /// `Stretch="Uniform"`, which is what an `Image` inside an `IconView` does by default.
@@ -199,7 +177,7 @@ pub struct Look<'a> {
 /// off what does not fit — the same thing the C#'s grid does inside its cell.
 fn write_details(ui: &mut egui::Ui, content: egui::Rect, rows: &[(&str, String)]) {
     // Off the edges, so the text does not touch the bezel.
-    let inside = content.shrink(4.0);
+    let inside = content.shrink(10.0);
     if inside.width() < 24.0 || inside.height() < 12.0 {
         return;
     }
@@ -209,7 +187,7 @@ fn write_details(ui: &mut egui::Ui, content: egui::Rect, rows: &[(&str, String)]
             .layout(egui::Layout::top_down(egui::Align::LEFT)),
     );
     ui.set_clip_rect(inside);
-    ui.spacing_mut().item_spacing.y = 1.0;
+    ui.spacing_mut().item_spacing.y = 5.0;
     for (label, value) in rows {
         ui.horizontal(|ui| {
             ui.label(
@@ -220,6 +198,127 @@ fn write_details(ui: &mut egui::Ui, content: egui::Rect, rows: &[(&str, String)]
             ui.label(egui::RichText::new(value).small().monospace());
         });
     }
+}
+
+/// A fine inset shared by names and logos: at least one physical pixel at normal
+/// sizes, capped on tiny bezels so the margin cannot consume the whole band.
+fn bezel_inner(band: egui::Rect, pixels_per_point: f32) -> egui::Rect {
+    let margin = (band.height() * 0.06)
+        .max(1.0 / pixels_per_point)
+        .min(band.height().max(0.0) * 0.2)
+        .min(band.width().max(0.0) * 0.2);
+    band.shrink(margin)
+}
+
+/// Fit the ink rather than the font's line box: ascender/descender padding otherwise
+/// wastes most of a thin bezel. Long names shrink as one line instead of wrapping.
+fn write_name(ui: &mut egui::Ui, band: egui::Rect, height: f32, name: &str) {
+    if name.is_empty() || !band.is_positive() {
+        return;
+    }
+    let band = bezel_inner(band, ui.ctx().pixels_per_point());
+    let target = egui::Rect::from_center_size(
+        band.center(),
+        egui::vec2(band.width(), height.min(band.height())),
+    );
+    let color = ui.visuals().text_color();
+    let layout = |size| {
+        ui.painter()
+            .layout_no_wrap(name.to_owned(), egui::FontId::proportional(size), color)
+    };
+    let mut size = height * 1.4;
+    let mut galley = layout(size);
+    for _ in 0..3 {
+        let ink = galley.mesh_bounds.size();
+        if ink.x <= 0.0 || ink.y <= 0.0 {
+            break;
+        }
+        let scale = (target.width() / ink.x).min(target.height() / ink.y);
+        if (scale - 1.0).abs() < 0.02 {
+            break;
+        }
+        size *= scale;
+        galley = layout(size);
+    }
+    // At subpixel scales the rasterizer can produce no ink. Keep the accessible
+    // name and its real band rather than silently removing the monitor's label.
+    let ink = if galley.mesh_bounds.is_positive() {
+        galley.mesh_bounds
+    } else {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, target.size())
+    };
+    let origin = egui::pos2(
+        target.left() - ink.left(),
+        target.center().y - ink.center().y,
+    );
+    let bounds = ink.translate(origin.to_vec2()).intersect(band);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(band), |ui| {
+        let response = ui.allocate_rect(bounds, egui::Sense::hover());
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), name)
+        });
+        ui.painter()
+            .with_clip_rect(band.intersect(ui.clip_rect()))
+            .galley(origin, galley, color);
+    });
+}
+
+/// The C# casing's diagonal reflection: a bright ramp ending sharply halfway
+/// across the surface, then a darker ramp. Both sides share the same geometry,
+/// including rounded corners, so the highlight also works on portrait monitors.
+fn reflection(painter: &egui::Painter, rect: egui::Rect, radius: f32, strength: u8) {
+    if !rect.is_positive() {
+        return;
+    }
+    // MonitorFrameView.axaml: StartPoint="0%,40%", EndPoint="100%,60%".
+    let start = rect.min + egui::vec2(0.0, rect.height() * 0.4);
+    let direction = egui::vec2(rect.width(), rect.height() * 0.2);
+    let position = |p: egui::Pos2| (p - start).dot(direction) / direction.length_sq();
+    let radius = radius.min(rect.width() * 0.5).min(rect.height() * 0.5);
+    let mut outline = Vec::with_capacity(36);
+    for (center, quarter) in [
+        (rect.right_top() + egui::vec2(-radius, radius), -1.0),
+        (rect.right_bottom() + egui::vec2(-radius, -radius), 0.0),
+        (rect.left_bottom() + egui::vec2(radius, -radius), 1.0),
+        (rect.left_top() + egui::vec2(radius, radius), 2.0),
+    ] {
+        for step in 0..=8 {
+            let angle = (quarter + step as f32 / 8.0) * std::f32::consts::FRAC_PI_2;
+            outline.push(center + egui::vec2(angle.cos(), angle.sin()) * radius);
+        }
+    }
+    let mut mesh = egui::Mesh::default();
+    for bright in [true, false] {
+        let mut polygon = Vec::with_capacity(outline.len() + 2);
+        // Clip the rounded outline at the gradient's middle stop. Duplicating the
+        // shared edge lets the light jump there, just like the two 0.5 stops in C#.
+        for i in 0..outline.len() {
+            let a = outline[i];
+            let b = outline[(i + 1) % outline.len()];
+            let ta = position(a);
+            let tb = position(b);
+            let inside = |t: f32| if bright { t <= 0.5 } else { t >= 0.5 };
+            if inside(ta) {
+                polygon.push(a);
+            }
+            if inside(ta) != inside(tb) {
+                polygon.push(a + (b - a) * ((0.5 - ta) / (tb - ta)));
+            }
+        }
+        let first = mesh.vertices.len() as u32;
+        for &p in &polygon {
+            let t = position(p).clamp(0.0, 1.0);
+            let alpha = if bright { 2.0 * t } else { 0.16 * (1.0 - t) };
+            mesh.colored_vertex(
+                p,
+                egui::Color32::from_white_alpha((alpha * strength as f32) as u8),
+            );
+        }
+        for i in 1..polygon.len().saturating_sub(1) {
+            mesh.add_triangle(first, first + i as u32, first + i as u32 + 1);
+        }
+    }
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 /// Draws one monitor. Returns the rectangle it took, so a caller can lay several out.
@@ -236,8 +335,39 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
     let painter = ui.painter();
     // The bezel is what is between the two rectangles; drawing the outside first and
     // the lit part over it is the whole of it.
-    painter.rect_filled(drawn.outside, 2.0, fill);
-    painter.rect_filled(drawn.content, 0.0, ui.visuals().extreme_bg_color);
+    let radius = (drawn.outside.height() * 0.025).clamp(2.0, 9.0);
+    // Rounded casing, a soft lower shadow and a lit upper edge, like the C# frame.
+    for spread in (1..=4).rev() {
+        painter.rect_filled(
+            drawn
+                .outside
+                .translate(egui::vec2(0.0, 3.0))
+                .expand(spread as f32),
+            radius + spread as f32,
+            egui::Color32::from_black_alpha(10),
+        );
+    }
+    painter.rect_filled(drawn.outside, radius, fill);
+    reflection(painter, drawn.outside, radius, 72);
+    painter.rect_stroke(
+        drawn.outside,
+        radius,
+        egui::Stroke::new(
+            1.0,
+            if selected {
+                ui.visuals().selection.stroke.color
+            } else {
+                crate::theme::BORDER
+            },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    crate::theme::gradient(
+        painter,
+        drawn.content,
+        egui::Color32::from_rgb(27, 38, 46),
+        ui.visuals().extreme_bg_color,
+    );
     if let Some(picture) = wallpaper {
         // Over the background colour and under everything else, as the frame's third
         // grid is: what is on the screen, not what is written about it.
@@ -249,28 +379,37 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         );
     }
 
-    if let Some(height) = drawn.name_height {
-        // In the bezel band, at its own size, not stretched to fill it: the rectangle it
-        // ends up with has to be the text's, or nothing downstream — a test, a screen
-        // reader — can tell a big name from a small one in a big frame.
-        //
-        // Sat on the bottom of the band, as `VerticalAlignment="Bottom"` does: the name
-        // rests on the edge of the screen rather than floating in the plastic.
-        ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(drawn.name_band)
-                .layout(egui::Layout::bottom_up(egui::Align::LEFT)),
-            |ui| {
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(name)
-                            .size(height)
-                            .color(ui.visuals().text_color()),
-                    )
-                    .selectable(false),
-                );
+    // A quieter sheen over the glass (and wallpaper), aligned with the casing.
+    // Information and crossing overlays are drawn afterwards to stay crisp.
+    reflection(
+        &painter.with_clip_rect(drawn.content.intersect(painter.clip_rect())),
+        drawn.outside,
+        radius,
+        26,
+    );
+
+    painter.rect_stroke(
+        drawn.content,
+        0.0,
+        egui::Stroke::new(1.0, egui::Color32::from_black_alpha(150)),
+        egui::StrokeKind::Inside,
+    );
+    // The original's small power indicator on the lower bezel.
+    if drawn.logo_band.height() >= 4.0 {
+        let center = egui::pos2(drawn.content.right() - 5.0, drawn.logo_band.center().y);
+        painter.circle_filled(
+            center,
+            (drawn.logo_band.height() * 0.12).clamp(1.0, 2.0),
+            if selected {
+                crate::theme::ACCENT
+            } else {
+                crate::theme::MUTED
             },
         );
+    }
+
+    if let Some(height) = drawn.name_height {
+        write_name(ui, drawn.name_band, height, name);
     }
 
     if !details.is_empty() {
@@ -284,7 +423,10 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
         // Uniform and centred in the bottom bezel, as the `IconView`'s `Image` is. The
         // colour is already in the texture — `lbm_icons::load` paints the black paths on
         // the way in — so the tint carries only the opacity.
-        let where_ = fit_uniform(drawn.logo_band, logo.size_vec2());
+        let where_ = fit_uniform(
+            bezel_inner(drawn.logo_band, ui.ctx().pixels_per_point()),
+            logo.size_vec2(),
+        );
         if where_.width() >= 1.0 && where_.height() >= 1.0 {
             ui.painter().image(
                 logo.id(),
@@ -311,7 +453,7 @@ mod tests {
     #[test]
     fn everything_scales_with_the_ratio() {
         let (outside, content) = screen();
-        // A name of 10 points and one of 20, out of the 10 mm bezel.
+        // Both bands and their target ink heights scale with the physical bezel.
         let one = draw(outside, content, (0.0, 0.0), Ratio { x: 2.0, y: 2.0 });
         let two = draw(outside, content, (0.0, 0.0), Ratio { x: 4.0, y: 4.0 });
 
@@ -446,8 +588,8 @@ mod tests {
     fn a_tiny_name_is_still_drawn() {
         let (outside, content) = screen();
         let tiny = draw(outside, content, (0.0, 0.0), Ratio { x: 0.01, y: 0.01 });
-        // 10 mm of bezel at 0.01, halved: five hundredths of a point.
-        assert_eq!(tiny.name_height, Some(0.05));
+        // Small names stay present rather than being hidden by a size threshold.
+        assert!((tiny.name_height.unwrap() - 0.09).abs() < 1e-6);
     }
 
     /// The one case left, and it is arithmetic rather than taste: a screen whose panel
@@ -483,8 +625,7 @@ mod tests {
         assert_eq!(drawn.name_band.right(), drawn.content.right());
     }
 
-    /// Half the bezel it is printed on, and nothing to do with the size of the panel.
-    /// A wide screen with a thin bezel gets a small name; that is the Avalonia rule.
+    /// The target ink height uses the bezel, not the lit panel.
     #[test]
     fn the_name_is_measured_against_the_bezel_not_the_panel() {
         let ratio = Ratio { x: 20.0, y: 20.0 };
@@ -502,12 +643,8 @@ mod tests {
             ratio,
         );
 
-        assert_eq!(
-            thin.name_height,
-            Some(20.0),
-            "half of a 2 mm bezel, at 20:1"
-        );
-        assert_eq!(thick.name_height, Some(200.0), "half of a 20 mm bezel");
+        assert_eq!(thin.name_height, Some(36.0), "90% of a 2 mm bezel, at 20:1");
+        assert_eq!(thick.name_height, Some(360.0), "90% of a 20 mm bezel");
         assert_eq!(
             thin.content.height(),
             thick.content.height(),

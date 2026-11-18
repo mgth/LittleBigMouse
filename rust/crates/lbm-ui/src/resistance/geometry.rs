@@ -121,18 +121,26 @@ impl Grab {
         }
     }
 }
-pub fn grip(s: &BorderSection, scale: f64) -> f64 {
-    (6.0 / scale).min((s.to() - s.from()) / 3.0)
+/// The visible cap and its hit target share the same size, including the mitre.
+pub fn grip(boundary: f64, section_length: f64, scale: f64, length: f64, thickness: f64) -> f64 {
+    let basic = 6.0_f64.max(thickness / 2.0) / scale;
+    let from_end = boundary.min(length - boundary);
+    basic
+        .max(thickness / scale - from_end)
+        .min(section_length / 3.0)
 }
-pub fn grab(sections: &[BorderSection], at: f64, scale: f64) -> Grab {
+pub fn grab(sections: &[BorderSection], at: f64, scale: f64, length: f64, thickness: f64) -> Grab {
+    let handle =
+        |s: &BorderSection, boundary| grip(boundary, s.to() - s.from(), scale, length, thickness);
     let containing = sections.iter().position(|s| at >= s.from() && at < s.to());
     let near = || {
         sections
             .iter()
             .enumerate()
             .filter_map(|(i, s)| {
-                let d = (at - s.from()).abs().min((at - s.to()).abs());
-                (d <= grip(s, scale)).then_some((i, d))
+                let boundary = if at < s.from() { s.from() } else { s.to() };
+                let d = (at - boundary).abs();
+                (d <= handle(s, boundary)).then_some((i, d))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i)
@@ -141,9 +149,9 @@ pub fn grab(sections: &[BorderSection], at: f64, scale: f64) -> Grab {
         return Grab::Draw;
     };
     let s = &sections[i];
-    if at <= s.from() + grip(s, scale) {
+    if at <= s.from() + handle(s, s.from()) {
         Grab::From(i)
-    } else if at >= s.to() - grip(s, scale) {
+    } else if at >= s.to() - handle(s, s.to()) {
         Grab::To(i)
     } else {
         Grab::Move(i)

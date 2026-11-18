@@ -192,7 +192,7 @@ pub fn recolour(source: &str, foreground: Rgba) -> String {
     out
 }
 
-/// Renders `tree` into `size`x`size` RGBA pixels, for a test to look at or a frontend to
+/// Renders `tree` into `size`x`size` premultiplied RGBA pixels, for a test to look at or a frontend to
 /// upload as a texture.
 pub fn render(tree: &usvg::Tree, size: u32) -> Option<Vec<u8>> {
     let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
@@ -203,4 +203,44 @@ pub fn render(tree: &usvg::Tree, size: u32) -> Option<Vec<u8>> {
         &mut pixmap.as_mut(),
     );
     Some(pixmap.take())
+}
+
+/// A tightly cropped logo. Pixels are premultiplied RGBA, as produced by tiny-skia.
+pub struct LogoImage {
+    pub size: [usize; 2],
+    pub pixels: Vec<u8>,
+}
+
+/// Remove transparent canvas before fitting a manufacturer mark into a thin bezel.
+/// The general icon renderer keeps its square contract; wordmarks need their own
+/// aspect ratio or most of the bezel's height is spent on invisible padding.
+pub fn render_logo(tree: &usvg::Tree, size: u32) -> Option<LogoImage> {
+    let pixels = render(tree, size)?;
+    let side = size as usize;
+    let (mut left, mut top, mut right, mut bottom) = (side, side, 0, 0);
+    for (i, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
+        if pixel[3] != 0 {
+            left = left.min(i % side);
+            top = top.min(i / side);
+            right = right.max(i % side + 1);
+            bottom = bottom.max(i / side + 1);
+        }
+    }
+    if left >= right || top >= bottom {
+        return None;
+    }
+    // One transparent texel protects antialiased edges when the texture is filtered.
+    let width = right - left + 2;
+    let height = bottom - top + 2;
+    let mut cropped = vec![0; width * height * 4];
+    for y in top..bottom {
+        let src = (y * side + left) * 4;
+        let dst = ((y - top + 1) * width + 1) * 4;
+        cropped[dst..dst + (right - left) * 4]
+            .copy_from_slice(&pixels[src..src + (right - left) * 4]);
+    }
+    Some(LogoImage {
+        size: [width, height],
+        pixels: cropped,
+    })
 }

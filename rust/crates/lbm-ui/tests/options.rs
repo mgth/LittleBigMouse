@@ -27,11 +27,20 @@ fn watching<'a>(
     app: &'a std::cell::Cell<usize>,
     layout: &'static std::sync::atomic::AtomicUsize,
 ) -> Harness<'a> {
+    let mut page = options::Page::General;
     Harness::builder()
         .with_size(egui::vec2(560.0, 2200.0))
         .build_ui(move |ui| {
             let mut recording = lbm_ui::shortcut::Recording::default();
-            let what = options::panel(ui, &mut options.borrow_mut(), true, &mut recording, None);
+            options::navigation(ui, &mut page);
+            let what = options::panel(
+                ui,
+                &mut options.borrow_mut(),
+                true,
+                &mut recording,
+                None,
+                page,
+            );
             if what.app {
                 app.set(app.get() + 1);
             }
@@ -55,7 +64,10 @@ fn a_toggle_the_user_moves_reaches_the_options() {
     assert_eq!(saved.get(), 0, "nobody touched anything yet");
 
     harness
-        .get_by_label("Check for updates automatically")
+        .get_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "Check for updates automatically",
+        )
         .click();
     harness.run();
 
@@ -90,17 +102,30 @@ fn the_experimental_switch_is_there_only_while_vcp_is() {
 
     assert!(
         harness
-            .query_by_label("Enable experimental features")
+            .query_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "Enable experimental features"
+            )
             .is_none(),
         "the sub-option is offered with nothing to apply it to"
     );
 
-    harness.get_by_label("Enable VCP monitor control").click();
+    harness.get_by_label("Advanced").click();
+    harness.run();
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "Enable VCP monitor control",
+        )
+        .click();
     harness.run();
     assert!(options.borrow().vcp_control);
     assert!(
         harness
-            .query_by_label("Enable experimental features")
+            .query_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "Enable experimental features"
+            )
             .is_some(),
         "VCP is on and its sub-option did not appear"
     );
@@ -115,13 +140,16 @@ fn a_choice_stores_the_wire_spelling_and_not_the_caption() {
     let mut harness = panel(&options, &saved);
     harness.run();
 
+    harness.get_by_label("Layout").click();
+    harness.run();
+
     // Opened by its name. `ComboBox::from_label` puts the header in the node's label and
     // the current choice in its value, which is what a screen reader reads out too.
     harness
         .get_by_role_and_label(egui::accesskit::Role::ComboBox, "Border values")
         .click();
     harness.run();
-    harness.get_by_label(PER_MONITOR).click();
+    harness.get_by_label("Per monitor").click();
     harness.run();
 
     assert_eq!(options.borrow().border_values, PER_MONITOR);
@@ -132,7 +160,7 @@ fn a_choice_stores_the_wire_spelling_and_not_the_caption() {
         .get_by_role_and_label(egui::accesskit::Role::ComboBox, "Border values")
         .click();
     harness.run();
-    harness.get_by_label(PER_MONITOR).click();
+    harness.get_by_label("Per monitor").click();
     harness.run();
     assert_eq!(
         saved.get(),
@@ -156,7 +184,11 @@ fn a_layout_setting_is_an_edit_and_not_a_save() {
     harness.run();
     LAYOUT_EDITS.store(0, Ordering::Relaxed);
 
-    harness.get_by_label("Allow discontinuity").click();
+    harness.get_by_label("Layout").click();
+    harness.run();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "Allow discontinuity")
+        .click();
     harness.run();
     assert!(
         options.borrow().allow_discontinuity,
@@ -175,7 +207,11 @@ fn a_layout_setting_is_an_edit_and_not_a_save() {
 
     // And the other way round: an app-wide one is not an edit of the layout.
     LAYOUT_EDITS.store(0, Ordering::Relaxed);
-    harness.get_by_label("Activate debug tools").click();
+    harness.get_by_label("Advanced").click();
+    harness.run();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "Activate debug tools")
+        .click();
     harness.run();
     assert_eq!(app.get(), 1);
     assert_eq!(

@@ -18,6 +18,39 @@ fn assets() -> PathBuf {
 }
 
 #[test]
+fn wordmarks_keep_their_visible_aspect_ratio_instead_of_a_square_canvas() {
+    let (found, _) = catalogue(&assets());
+    for code in ["SAM", "PHL"] {
+        let source = std::fs::read(resolve(&found, &format!("icon/pnp/{code}")).unwrap()).unwrap();
+        let tree = lbm_icons::load(&source, Rgba(230, 235, 240, 255)).unwrap();
+        let logo = lbm_icons::render_logo(&tree, 512).unwrap();
+        assert!(
+            logo.size[0] > logo.size[1] * 3,
+            "{code} was squeezed into a square"
+        );
+        assert_eq!(logo.pixels.len(), logo.size[0] * logo.size[1] * 4);
+        assert!(
+            logo.pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[..3].iter().all(|&c| c <= p[3])),
+            "pixels must remain premultiplied"
+        );
+    }
+}
+
+#[test]
+fn an_empty_logo_has_no_visible_bounds() {
+    let tree = lbm_icons::load(
+        br#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20"/>"#,
+        Rgba(255, 255, 255, 255),
+    )
+    .unwrap();
+    assert!(lbm_icons::render_logo(&tree, 128).is_none());
+}
+
+#[test]
 fn every_dot_in_a_name_is_another_code_the_logo_answers_to() {
     let (found, collisions) = catalogue(&assets());
 

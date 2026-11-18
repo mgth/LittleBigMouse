@@ -247,6 +247,17 @@ pub fn draw<'a>(
     fit: &Fit,
     selected: Option<&str>,
 ) -> Option<Gesture<'a>> {
+    draw_movable(ui, monitors, fit, selected, true)
+}
+
+/// `movable` enables screen dragging; selection remains available in every mode.
+pub fn draw_movable<'a>(
+    ui: &mut egui::Ui,
+    monitors: &[MapMonitor<'a>],
+    fit: &Fit,
+    selected: Option<&str>,
+    movable: bool,
+) -> Option<Gesture<'a>> {
     let mut gesture = None;
     for m in monitors {
         let drawn = fit.place(m);
@@ -262,7 +273,11 @@ pub fn draw<'a>(
         let response = ui.interact(
             drawn.outside,
             ui.id().with(("monitor", m.id)),
-            egui::Sense::click_and_drag(),
+            if movable {
+                egui::Sense::click_and_drag()
+            } else {
+                egui::Sense::click()
+            },
         );
         frame::monitor(
             ui,
@@ -278,9 +293,9 @@ pub fn draw<'a>(
         );
         if response.clicked() {
             gesture = Some(Gesture::Clicked(m.id));
-        } else if response.drag_stopped() {
+        } else if movable && response.drag_stopped() {
             gesture = Some(Gesture::Dropped { id: m.id });
-        } else if let Some(by) = response.total_drag_delta() {
+        } else if let Some(by) = response.total_drag_delta().filter(|_| movable) {
             gesture = Some(Gesture::Dragged { id: m.id, by });
         }
     }

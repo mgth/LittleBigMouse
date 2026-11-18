@@ -32,7 +32,7 @@ fn bar<'a>(
 }
 
 #[test]
-fn every_mode_the_c_sharp_registers_has_a_button() {
+fn every_monitor_mode_has_a_button() {
     let (harness, _) = bar(Mode::Default, Offered::default());
     for mode in Mode::ALL {
         assert!(
@@ -55,7 +55,7 @@ fn what_is_not_ported_is_shown_and_disabled() {
     let (harness, _) = bar(Mode::Default, Offered::default());
     let disabled = |label: &str| harness.get_by_label(label).accesskit_node().is_disabled();
     assert!(!disabled(Mode::Location.label()), "Location is drawn today");
-    assert!(!disabled(Mode::About.label()), "About is drawn today");
+    assert!(harness.query_by_label("About").is_none());
     assert!(!disabled(Mode::Info.label()));
     assert!(!disabled(Mode::Size.label()));
     assert!(!disabled(Mode::Resistance.label()));
@@ -89,6 +89,32 @@ fn a_mode_that_stops_being_available_does_not_stay_on() {
         chosen.get(),
         Some(Mode::Default),
         "the mode was dropped without anyone pressing anything"
+    );
+}
+
+#[test]
+fn toolbar_has_settings_and_modes_but_no_view_switch() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(450.0, 70.0))
+        .build_ui_state(
+            |ui, chosen| {
+                if let Some(action) = mode::toolbar(ui, Mode::Location, &Offered::default(), false)
+                {
+                    *chosen = Some(action);
+                }
+            },
+            None,
+        );
+    harness.get_by_label("Settings").click();
+    harness.run();
+    assert_eq!(*harness.state(), Some(mode::ToolbarAction::Options));
+    assert!(harness.query_by_label("Single screen view").is_none());
+    assert!(harness.query_by_label("List").is_none());
+    harness.get_by_label("Size").click();
+    harness.run();
+    assert_eq!(
+        *harness.state(),
+        Some(mode::ToolbarAction::Mode(Mode::Size))
     );
 }
 

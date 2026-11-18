@@ -1,12 +1,14 @@
 //! The resistance editor: values in the properties panel, intervals on the map.
+mod applet;
 mod bands;
 pub mod geometry;
+mod shape;
 pub use bands::{band, owner, segment};
 pub use geometry::SnapKind;
 use geometry::{Span, MAX_SECTIONS};
 use lbm_layout::{
     geo::Rect,
-    model::{BorderResistance, BorderSection},
+    model::{BorderResistance, BorderSection, ResistanceDefaults},
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -115,9 +117,11 @@ impl Action {
 }
 #[derive(Default)]
 pub struct Editor {
+    pub defaults: ResistanceDefaults,
     pub selected: Option<Selection>,
     side: Side,
     gesture: Option<bands::Gesture>,
+    applet: applet::State,
 }
 /// Ephemeral feedback in physical layout coordinates, shared by every view of the gesture.
 #[derive(Clone, Debug, PartialEq)]
@@ -137,6 +141,7 @@ impl Editor {
     }
     pub fn clear(&mut self) {
         self.selected = None;
+        self.applet = applet::State::default();
         self.cancel();
     }
     pub fn select_monitor(&mut self, id: &str) {
@@ -218,9 +223,7 @@ impl Editor {
             )
             .clicked()
         {
-            let section = free
-                .unwrap()
-                .section(BorderSection::new(0.0, 0.0, 0.0, true, 0.0, false));
+            let section = free.unwrap().section(new_section());
             action = Some(Edit::Insert(section));
         }
         if let Some(selected) = &self.selected {
@@ -232,24 +235,14 @@ impl Editor {
                     let mut s = *original;
                     let mut from = s.from();
                     let mut to = s.to();
-                    let mut movement = s.move_resistance();
-                    let mut drag = s.drag();
-                    let mut move_block = s.move_block();
-                    let mut drag_block = s.drag_block();
                     let mut span_changed = false;
                     let mut values_changed = false;
                     egui::Grid::new("section-values").num_columns(2).show(ui, |ui| {
                         span_changed |= number(ui, "From", &mut from, length, true);
                         span_changed |= number(ui, "To", &mut to, length, true);
-                        values_changed |= number(ui, "Move resistance", &mut movement, f64::MAX, !move_block);
-                        values_changed |= number(ui, "Drag resistance", &mut drag, f64::MAX, !drag_block);
                     });
-                    values_changed |= ui.checkbox(&mut move_block, "Block moves").changed();
-                    values_changed |= ui.checkbox(&mut drag_block, "Block drags").changed();
-                    s.set_move_resistance(movement);
-                    s.set_drag(drag);
-                    s.set_move_block(move_block);
-                    s.set_drag_block(drag_block);
+                    values_changed |= applet::channel(ui, "Move", &mut s, self.defaults, false);
+                    values_changed |= applet::channel(ui, "Drag", &mut s, self.defaults, true);
                     if span_changed {
                         if let Some(span) = geometry::clamp(
                             Span::new(from, to),
@@ -327,4 +320,86 @@ pub fn description(s: &BorderSection) -> String {
         format!("{:.1} mm", s.drag())
     };
     format!("Move: {movement}\nDrag: {drag}")
+}
+
+/// A freshly drawn section follows both layout defaults.
+fn new_section() -> BorderSection {
+    let mut section = BorderSection::default();
+    section.set_move_mode(lbm_layout::model::ResistanceMode::Resist);
+    section.set_drag_mode(lbm_layout::model::ResistanceMode::Resist);
+    section
+}
+
+/// Layout-wide defaults precede monitor selection in the properties panel.
+pub fn defaults(ui: &mut egui::Ui, values: &mut ResistanceDefaults) -> bool {
+    let mut changed = false;
+    crate::theme::card().show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.strong("Default resistance")
+            .on_hover_text("Shared by sections set to Resist. Saved with this layout.");
+        for (name, value, outside) in [
+            ("Move", &mut values.movement, &mut values.move_without_section),
+            ("Drag", &mut values.drag, &mut values.drag_without_section),
+        ] {
+            ui.push_id(name, |ui| {
+                ui.horizontal(|ui| {
+                    let label = ui.add_sized(egui::vec2(34., 20.), egui::Label::new(name));
+                    changed |= ui.add(egui::DragValue::new(value)
+                        .range(0.0..=f64::MAX).clamp_existing_to_range(false)
+                        .speed(0.1).max_decimals(2).suffix(" mm"))
+                        .labelled_by(label.id).changed();
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(egui::RichText::new("Outside sections").small())
+                            .on_hover_text("Apply this default to crossings without a section. Explicit sections always keep their own mode.");
+                        changed |= outside_switch(ui, outside, name);
+                    });
+                });
+            });
+        }
+    });
+    ui.add_space(8.);
+    changed
+}
+
+fn outside_switch(ui: &mut egui::Ui, value: &mut bool, name: &str) -> bool {
+    let (rect, mut response) = ui.allocate_exact_size(egui::vec2(30., 18.), egui::Sense::click());
+    if response.clicked() {
+        *value = !*value;
+        response.mark_changed();
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            *value,
+            format!("{name}: apply to crossings without a section"),
+        )
+    });
+    let visuals = ui.style().interact_selectable(&response, *value);
+    ui.painter().rect(
+        rect,
+        9.,
+        if *value {
+            crate::theme::ACCENT
+        } else {
+            crate::theme::RAISED
+        },
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+    let x = if *value {
+        rect.right() - 9.
+    } else {
+        rect.left() + 9.
+    };
+    ui.painter().circle_filled(
+        egui::pos2(x, rect.center().y),
+        6.,
+        if *value {
+            crate::theme::BACKGROUND
+        } else {
+            crate::theme::TEXT
+        },
+    );
+    response.on_hover_text("Apply this default to crossings without a section. Explicit sections always keep their own mode.").changed()
 }

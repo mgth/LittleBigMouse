@@ -239,3 +239,35 @@ fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
         assert_eq!(size(&landed, &id).unwrap().physical, shown, "{edit:?}");
     }
 }
+
+#[test]
+fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
+    let mut layout = layout(PER_MONITOR);
+    let detected = Detected::of(&layout);
+    let id = layout.monitors()[0].id.clone();
+    let initial = lbm_app::properties::location(&layout, &id).unwrap();
+    apply(&mut layout, &detected, &id, Edit::X(-123.45)).unwrap();
+    let p = lbm_app::properties::location(&layout, &id).unwrap();
+    assert_eq!((p.x, p.y), (-123.45, initial.y));
+    apply(&mut layout, &detected, &id, Edit::Y(67.8)).unwrap();
+    apply(&mut layout, &detected, &id, Edit::ScaleX(125.)).unwrap();
+    apply(&mut layout, &detected, &id, Edit::ScaleY(90.)).unwrap();
+    let p = lbm_app::properties::location(&layout, &id).unwrap();
+    assert_eq!((p.x, p.y, p.scale_x, p.scale_y), (-123.45, 67.8, 125., 90.));
+    let (_, request) = lbm_app::settings::save_layout(&layout);
+    let document: lbm_store::LayoutDocument =
+        serde_json::from_value(request["Document"].clone()).unwrap();
+    let mut restored = self::layout(PER_MONITOR);
+    document.apply(&mut restored);
+    assert!(lbm_app::saved::Reference::of(&layout).holds(&restored));
+    let reference = lbm_app::saved::Reference::of(&layout);
+    for edit in [
+        Edit::X(f64::NAN),
+        Edit::Y(f64::INFINITY),
+        Edit::ScaleX(0.),
+        Edit::ScaleY(-5.),
+    ] {
+        assert!(apply(&mut layout, &detected, &id, edit).is_err());
+        assert!(reference.holds(&layout));
+    }
+}

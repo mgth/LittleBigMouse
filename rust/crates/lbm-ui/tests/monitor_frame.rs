@@ -1,10 +1,4 @@
-//! The drawn frame, through the accessibility tree.
-//!
-//! The arithmetic is tested beside the code it lives in. What is tested here is the part
-//! arithmetic cannot answer: that the name egui actually laid out grows with the frame,
-//! and that a name refused for being too small is really absent rather than merely
-//! small. Both are questions about what was drawn, and the harness is the only way to
-//! ask them without a window.
+//! Name visibility and containment through the accessibility tree.
 
 use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::Harness;
@@ -35,8 +29,7 @@ fn name_height_drawn(ratio: f64) -> Option<f64> {
 
 #[test]
 fn the_name_grows_with_the_frame() {
-    // Ratios that keep a 10 mm bezel's name — half of it — above the legibility floor,
-    // so what is measured is the growth and not the floor.
+    // The name uses the increasing bezel height.
     let small = name_height_drawn(2.0).expect("drawn at 2.0");
     let large = name_height_drawn(4.0).expect("drawn at 4.0");
 
@@ -47,7 +40,7 @@ fn the_name_grows_with_the_frame() {
 }
 
 /// **However small.** The legibility floor this port carried is gone (maintainer's call,
-/// 2026-09-16), so a name of a twentieth of a point is laid out like any other. Asked
+/// 2026-09-16), so even a subpixel name keeps its accessible label. Asked
 /// through the harness rather than of the arithmetic: what the floor used to remove was a
 /// real label in a real tree, and this is the same question the other way round.
 #[test]
@@ -74,5 +67,37 @@ fn the_screen_is_drawn_even_when_its_name_is_not() {
     assert!(
         drawn.content.width() < drawn.outside.width(),
         "the side bezels are still there"
+    );
+}
+
+#[test]
+fn a_long_name_fits_one_bezel_line_and_keeps_its_full_accessible_name() {
+    let drawn = frame::draw(
+        Rect::new(0., 0., 100., 80.),
+        Rect::new(5., 15., 90., 60.),
+        (0., 0.),
+        Ratio { x: 1., y: 1. },
+    );
+    let name = "A very long manufacturer and monitor model name";
+    let harness = Harness::new_ui(|ui| {
+        frame::monitor(
+            ui,
+            &drawn,
+            &frame::Look {
+                name,
+                ..Default::default()
+            },
+        );
+    });
+    let bounds = harness
+        .get_by_label(name)
+        .accesskit_node()
+        .bounding_box()
+        .unwrap();
+    assert!(
+        bounds.x0 >= drawn.name_band.left() as f64 && bounds.x1 <= drawn.name_band.right() as f64
+    );
+    assert!(
+        bounds.y0 >= drawn.name_band.top() as f64 && bounds.y1 <= drawn.name_band.bottom() as f64
     );
 }

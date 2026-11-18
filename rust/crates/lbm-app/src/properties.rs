@@ -2,7 +2,17 @@
 use std::collections::HashMap;
 
 use lbm_layout::model::Layout;
-use lbm_ui::properties::{Edit, Size};
+use lbm_ui::properties::{Edit, Location, Size};
+
+pub fn location(layout: &Layout, id: &str) -> Option<Location> {
+    let m = layout.monitor(id)?;
+    Some(Location {
+        x: m.location().x,
+        y: m.location().y,
+        scale_x: m.depth_ratio.x * 100.,
+        scale_y: m.depth_ratio.y * 100.,
+    })
+}
 
 pub fn size(layout: &Layout, id: &str) -> Option<Size> {
     let monitor = layout.monitors().iter().find(|m| m.id == id)?;
@@ -44,6 +54,35 @@ pub fn apply(layout: &mut Layout, detected: &Detected, id: &str, edit: Edit) -> 
         .iter()
         .find(|m| m.id == id)
         .ok_or("monitor no longer present")?;
+    match edit {
+        Edit::X(v) | Edit::Y(v) => {
+            if !v.is_finite() {
+                return Err("position must be finite".into());
+            }
+            let mut point = monitor.location();
+            if matches!(edit, Edit::X(_)) {
+                point.x = v;
+            } else {
+                point.y = v;
+            }
+            layout.set_location(id, point);
+            return Ok(());
+        }
+        Edit::ScaleX(v) | Edit::ScaleY(v) => {
+            if !v.is_finite() || !(5. ..=2000.).contains(&v) {
+                return Err("scale must be between 5 and 2000 percent".into());
+            }
+            let mut ratio = monitor.depth_ratio;
+            if matches!(edit, Edit::ScaleX(_)) {
+                ratio.x = v / 100.;
+            } else {
+                ratio.y = v / 100.;
+            }
+            layout.set_depth_ratio(id, ratio);
+            return Ok(());
+        }
+        _ => {}
+    }
     let rotation = monitor
         .active_source
         .as_deref()
@@ -72,7 +111,9 @@ pub fn apply(layout: &mut Layout, detected: &Detected, id: &str, edit: Edit) -> 
         | Edit::Bottom(v)
         | Edit::OutsideWidth(v)
         | Edit::OutsideHeight(v) => v,
-        Edit::Lock(_) => unreachable!(),
+        Edit::Lock(_) | Edit::X(_) | Edit::Y(_) | Edit::ScaleX(_) | Edit::ScaleY(_) => {
+            unreachable!()
+        }
     };
     if !number.is_finite() || number < 0.0 {
         return Err("measurements must be finite and non-negative".into());
@@ -211,4 +252,56 @@ pub fn layout_info(layout: &Layout, id: &str) -> Vec<(String, String)> {
         ));
     }
     rows
+}
+
+/// Data for the original C# monitor overlays; unavailable values remain absent.
+pub fn monitor_info(layout: &Layout, id: &str) -> Option<lbm_ui::monitor_info::Info> {
+    let m = layout.monitor(id)?;
+    let physical = layout.source(m.active_source.as_deref()?)?;
+    let source = &physical.source;
+    let model = layout.model(&m.model)?;
+    Some(lbm_ui::monitor_info::Info {
+        number: source
+            .source_number
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                (layout
+                    .monitors()
+                    .iter()
+                    .position(|m| m.id == id)
+                    .unwrap_or(0)
+                    + 1)
+                .to_string()
+            }),
+        pnp: model.pnp_code.clone(),
+        name: model.pnp_device_name.clone().unwrap_or_default(),
+        connector: source
+            .interface_name
+            .clone()
+            .or_else(|| source.source_name.clone())
+            .unwrap_or_default(),
+        serial: m.serial_number.clone().unwrap_or_default(),
+        resolution: format!(
+            "{:.0} × {:.0} px",
+            source.in_pixel.width, source.in_pixel.height
+        ),
+        density: layout
+            .real_dpi(physical)
+            .filter(|d| d.x.is_finite() && d.y.is_finite())
+            .map(|d| format!("{:.0} dpi", (d.x + d.y) / 2.))
+            .unwrap_or_default(),
+        diagonal: layout
+            .diagonal(m)
+            .filter(|d| d.is_finite() && *d > 0.)
+            .map(|d| format!("{:.1} in", d / 25.4))
+            .unwrap_or_default(),
+        refresh: if source.display_frequency > 0 {
+            format!("{} Hz", source.display_frequency)
+        } else {
+            String::new()
+        },
+        primary: source.primary,
+        excluded: m.excluded_from_layout,
+    })
 }

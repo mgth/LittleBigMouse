@@ -17,11 +17,10 @@
 //! edit like dragging a screen and waits for Save. The C# does the same, `SaveLive`
 //! against the layout's own document.
 //!
-//! What the Avalonia panel has and this does not, each for a reason worth stating:
-//! the **excluded processes** (a list with add, remove, defaults and the seen
-//! processes — `SaveOptions` carries it in a separate field, so it is a slice of its own),
-//! and the **Ko-fi card**, which is a link and not a setting.
+//! Excluded processes are loaded separately by the caller. The shared Ko-fi card
+//! stays above the scrolling settings, as in Avalonia.
 
+use crate::settings_icons::Icon;
 use lbm_layout::model::{LayoutOptions, PER_MODEL, PER_MONITOR};
 
 /// The crossing algorithms, wire spelling first — `LbmOptionsViewModel.AlgorithmList`.
@@ -71,295 +70,568 @@ pub const BORDER_VALUES: [(&str, &str); 2] = [
     (PER_MONITOR, "Each monitor keeps its own"),
 ];
 
-/// The explanation under a setting.
-///
-/// `SettingRow`'s `Description` in the AXAML. Not decoration: several of these are
-/// unguessable from their name — `BoundToAgent` above all — and the C# spells every one
-/// of them out.
+/// Settings categories, kept independently of the monitor view and its mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Page {
+    #[default]
+    General,
+    Mouse,
+    Layout,
+    Applications,
+    Advanced,
+}
+
+impl Page {
+    pub const ALL: [Self; 5] = [
+        Self::General,
+        Self::Mouse,
+        Self::Layout,
+        Self::Applications,
+        Self::Advanced,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::General => "General",
+            Self::Mouse => "Mouse",
+            Self::Layout => "Layout",
+            Self::Applications => "Applications",
+            Self::Advanced => "Advanced",
+        }
+    }
+}
+
+pub fn navigation(ui: &mut egui::Ui, page: &mut Page) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+        ui.spacing_mut().button_padding = egui::vec2(7.0, 6.0);
+        for item in Page::ALL {
+            ui.selectable_value(page, item, item.label());
+        }
+    });
+}
+
+/// A bounded overlay, like the C# SplitView pane: the map keeps its dimensions and
+/// the toolbar and Save controls remain available outside the pane's bounds.
+/// Escape can be reserved for the shortcut recorder by the caller.
+pub fn drawer(
+    ctx: &egui::Context,
+    bounds: egui::Rect,
+    open: &mut bool,
+    page: &mut Page,
+    escape_closes: bool,
+    mut content: impl FnMut(&mut egui::Ui, Page),
+) {
+    if !*open {
+        return;
+    }
+    if escape_closes && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        *open = false;
+        return;
+    }
+    egui::Area::new(egui::Id::new("settings-drawer"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(bounds.min)
+        .movable(false)
+        .constrain(false)
+        .show(ctx, |ui| {
+            ui.set_min_size(bounds.size());
+            ui.set_max_size(bounds.size());
+            let outside = ui.interact(bounds, ui.id().with("dismiss"), egui::Sense::click());
+            ui.painter()
+                .rect_filled(bounds, 0.0, egui::Color32::from_black_alpha(72));
+            let pane = egui::Rect::from_min_size(
+                bounds.min,
+                egui::vec2(bounds.width().min(460.0), bounds.height()),
+            );
+            ui.painter().rect_filled(pane, 0.0, crate::theme::SURFACE);
+            ui.painter().vline(
+                pane.right(),
+                pane.y_range(),
+                egui::Stroke::new(1.0, crate::theme::BORDER),
+            );
+            // The panel itself consumes clicks; only the uncovered backdrop dismisses.
+            ui.interact(pane, ui.id().with("pane"), egui::Sense::click());
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(pane.shrink(16.0))
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading("Settings");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .button("Close")
+                                .on_hover_text("Close settings · Esc")
+                                .clicked()
+                            {
+                                *open = false;
+                            }
+                        });
+                    });
+                    ui.add_space(5.0);
+                    navigation(ui, page);
+                    ui.add_space(5.0);
+                    ui.separator();
+                    let compact_key = ui.id().with(("support-compact", *page as u8));
+                    let compact = ui.available_height() < 450.
+                        || ctx.data(|d| d.get_temp::<bool>(compact_key).unwrap_or(false));
+                    crate::support::card(ui, compact);
+                    ui.add_space(8.);
+                    let scroll = egui::ScrollArea::vertical()
+                        .id_salt(("settings-content", *page as u8))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            content(ui, *page);
+                        });
+                    ctx.data_mut(|d| d.insert_temp(compact_key, scroll.state.offset.y > 1.));
+                },
+            );
+            if outside.clicked()
+                && outside
+                    .interact_pointer_pos()
+                    .is_some_and(|pos| !pane.contains(pos))
+            {
+                *open = false;
+            }
+        });
+}
+
 fn note(ui: &mut egui::Ui, description: &str) {
     if !description.is_empty() {
-        ui.indent(description, |ui| {
-            ui.label(
+        ui.add(
+            egui::Label::new(
                 egui::RichText::new(description)
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
-        });
+                    .size(11.5)
+                    .color(crate::theme::MUTED),
+            )
+            .wrap(),
+        );
     }
-    ui.add_space(4.0);
 }
 
-/// A toggle row. `true` when the user moved it.
-///
-/// **The control carries the header, rather than a bare switch beside a label.** The
-/// AXAML puts the name on the left and a `ToggleSwitch` on the right, and the first try
-/// here did the same, handing the switch the label's id through `Response::labelled_by`.
-/// It does not work: a plain `ui.label` puts its text in the accessibility node's
-/// **value**, not its label, so the name resolves to nothing — the switch ends up with no
-/// accessible name at all. A screen reader would announce "checkbox", and `egui_kittest`
-/// could not find it either, which is how this was noticed. `ui.checkbox` gives the
-/// control its own text, and accesskit takes a checkbox's name from its descendants.
-fn toggle(ui: &mut egui::Ui, header: &str, description: &str, value: &mut bool) -> bool {
-    let changed = ui.checkbox(value, header).changed();
-    note(ui, description);
-    changed
+fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+    ui.add_space(9.0);
+    ui.label(egui::RichText::new(title).size(13.0).strong());
+    crate::theme::card()
+        .fill(crate::theme::BACKGROUND)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 9.0;
+            content(ui);
+        });
 }
 
-/// A row of one choice among a list, each with its own explanation.
+/// The label and description share a column, while every control shares the right edge.
+fn row<R>(
+    ui: &mut egui::Ui,
+    icon: Icon,
+    header: &str,
+    description: &str,
+    width: f32,
+    control: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    ui.horizontal(|ui| {
+        icon.show(ui);
+        let text_width = (ui.available_width() - width - 12.0).max(40.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(text_width, 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.spacing_mut().item_spacing.y = 3.0;
+                ui.add(egui::Label::new(egui::RichText::new(header).strong()).wrap());
+                note(ui, description);
+            },
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), control)
+            .inner
+    })
+    .inner
+}
+
+fn toggle(
+    ui: &mut egui::Ui,
+    icon: Icon,
+    header: &str,
+    description: &str,
+    value: &mut bool,
+) -> bool {
+    row(ui, icon, header, description, 36.0, |ui| {
+        let (rect, mut response) =
+            ui.allocate_exact_size(egui::vec2(36.0, 20.0), egui::Sense::click());
+        if response.clicked() {
+            *value = !*value;
+            response.mark_changed();
+        }
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *value, header)
+        });
+        let visuals = ui.style().interact_selectable(&response, *value);
+        let fill = if *value {
+            crate::theme::ACCENT
+        } else {
+            crate::theme::RAISED
+        };
+        ui.painter().rect(
+            rect,
+            10.0,
+            fill,
+            visuals.bg_stroke,
+            egui::StrokeKind::Inside,
+        );
+        let x = if *value {
+            rect.right() - 10.0
+        } else {
+            rect.left() + 10.0
+        };
+        ui.painter().circle_filled(
+            egui::pos2(x, rect.center().y),
+            7.0,
+            if *value {
+                crate::theme::BACKGROUND
+            } else {
+                crate::theme::TEXT
+            },
+        );
+        response.changed()
+    })
+}
+
+fn caption(value: &str) -> &str {
+    match value {
+        "Strait" => "Straight",
+        "Cross" => "Corners",
+        PER_MODEL => "Per model",
+        PER_MONITOR => "Per monitor",
+        "Below" => "Below normal",
+        "Above" => "Above normal",
+        other => other,
+    }
+}
+
 fn choice(
     ui: &mut egui::Ui,
+    icon: Icon,
     header: &str,
     description: &str,
     items: &[(&str, &str)],
     value: &mut String,
 ) -> bool {
-    let mut changed = false;
-    egui::ComboBox::from_label(header)
-        .selected_text(value.clone())
-        .show_ui(ui, |ui| {
-            for (id, what) in items {
-                let picked = value == *id;
-                if ui
-                    .selectable_label(picked, *id)
-                    .on_hover_text(*what)
-                    .clicked()
-                    && !picked
-                {
-                    *value = (*id).to_owned();
-                    changed = true;
+    row(ui, icon, header, description, 120.0, |ui| {
+        let mut changed = false;
+        let result = egui::ComboBox::from_id_salt(header)
+            .width(120.0)
+            .selected_text(caption(value))
+            .show_ui(ui, |ui| {
+                for (id, what) in items {
+                    let picked = value == *id;
+                    if ui
+                        .selectable_label(picked, caption(id))
+                        .on_hover_text(*what)
+                        .clicked()
+                        && !picked
+                    {
+                        *value = (*id).to_owned();
+                        changed = true;
+                    }
                 }
-            }
+            });
+        result.response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, ui.is_enabled(), header)
         });
-    note(ui, description);
-    changed
+        changed
+    })
 }
 
-/// A number row, with the unit in the description as the AXAML puts it.
 fn number(
     ui: &mut egui::Ui,
+    icon: Icon,
     header: &str,
     description: &str,
-    range: std::ops::RangeInclusive<f64>,
-    step: f64,
+    format: (std::ops::RangeInclusive<f64>, f64, &str),
     value: &mut f64,
 ) -> bool {
-    let changed = ui
-        .horizontal(|ui| {
-            let changed = ui
-                .add(egui::DragValue::new(value).range(range).speed(step))
-                .changed();
-            ui.label(header);
-            changed
-        })
-        .inner;
-    note(ui, description);
-    changed
+    let (range, step, unit) = format;
+    row(ui, icon, header, description, 86.0, |ui| {
+        let response = ui.add(
+            egui::DragValue::new(value)
+                .range(range)
+                .speed(step)
+                .suffix(format!(" {unit}")),
+        );
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::DragValue, ui.is_enabled(), header)
+        });
+        response.changed()
+    })
 }
 
-fn section(ui: &mut egui::Ui, title: &str) {
-    ui.add_space(10.0);
-    ui.label(egui::RichText::new(title).strong().size(15.0));
-    ui.separator();
-}
-
-/// Draws the panel and edits `options` in place, saying which half was touched.
-///
-/// `elevated` says whether this build can offer the elevation switch at all: it is a
-/// Windows notion (a process token, a scheduled task) and there is nothing behind it on
-/// Linux, so the row is absent rather than present and dead.
+/// Edits one category; the caller owns the single scroll area, including exclusions.
+/// Global settings still save immediately, layout settings use the main Save button.
 pub fn panel(
     ui: &mut egui::Ui,
     options: &mut LayoutOptions,
     elevated: bool,
     rescue: &mut crate::shortcut::Recording,
     unavailable: Option<&str>,
+    page: Page,
 ) -> Changed {
     let mut what = Changed::default();
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        section(ui, "General");
-        what.app |= toggle(
-            ui,
-            "Check for updates automatically",
-            "Look for new versions online in the background",
-            &mut options.auto_update,
-        );
-        what.app |= toggle(
-            ui,
-            "Load at startup",
-            "Start LittleBigMouse when you sign in",
-            &mut options.load_at_startup,
-        );
-        what.app |= toggle(
-            ui,
-            "Start minimized to tray",
-            "",
-            &mut options.start_minimized,
-        );
-        what.app |= toggle(
-            ui,
-            "Hide tray icon",
-            "Reopen the window by launching LittleBigMouse again",
-            &mut options.hide_tray_icon,
-        );
-        what.app |= toggle(
-            ui,
-            "Stop the mouse engine with LittleBigMouse",
-            "Off: the engine keeps routing the cursor if LittleBigMouse stops, and picks \
-             up again when it comes back",
-            &mut options.bound_to_agent,
-        );
-        if elevated {
-            what.app |= toggle(
-                ui,
-                "Start with elevated privileges",
-                "Keeps working over elevated apps (admin accounts only)",
-                &mut options.start_elevated,
-            );
-        }
-        what.app |= toggle(
-            ui,
-            "Enable VCP monitor control",
-            "Brightness, contrast, inputs and smart-TV remotes over DDC/CI",
-            &mut options.vcp_control,
-        );
-        // A sub-option of VCP: the C# hides it outright when VCP is off
-        // (`IsVisible="{Binding Model.VcpControl}"`), because it only adds tools *inside*
-        // the VCP panel.
-        if options.vcp_control {
-            ui.indent("vcp", |ui| {
+    match page {
+        Page::General => {
+            note(ui, "Application preferences · saved automatically");
+            group(ui, "Startup", |ui| {
                 what.app |= toggle(
                     ui,
-                    "Enable experimental features",
-                    "Argyll colour calibration and smart-TV remote test tools",
-                    &mut options.experimental_features,
+                    Icon::Startup,
+                    "Load at startup",
+                    "Start LittleBigMouse when you sign in",
+                    &mut options.load_at_startup,
+                );
+                ui.separator();
+                what.app |= toggle(
+                    ui,
+                    Icon::Startup,
+                    "Start minimized to tray",
+                    "Keep the main window closed at startup",
+                    &mut options.start_minimized,
+                );
+                if elevated {
+                    ui.separator();
+                    what.app |= toggle(
+                        ui,
+                        Icon::Shield,
+                        "Start with elevated privileges",
+                        "Keep working over administrator apps",
+                        &mut options.start_elevated,
+                    );
+                }
+            });
+            group(ui, "Appearance", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Virtual,
+                    "Hide tray icon",
+                    "Launch LittleBigMouse again to reopen its window",
+                    &mut options.hide_tray_icon,
+                );
+            });
+            group(ui, "Updates", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Update,
+                    "Check for updates automatically",
+                    "Look for new versions in the background",
+                    &mut options.auto_update,
                 );
             });
         }
-        what.app |= toggle(
-            ui,
-            "Activate debug tools",
-            "Extra tools for troubleshooting, like viewing exported layouts",
-            &mut options.debug_tools,
-        );
-
-        section(ui, "Daemon priority");
-        what.app |= choice(
-            ui,
-            "While active (hooked)",
-            "Process priority of the mouse engine",
-            &PRIORITIES,
-            &mut options.priority,
-        );
-        what.app |= choice(
-            ui,
-            "While inactive (unhooked)",
-            "",
-            &PRIORITIES,
-            &mut options.priority_unhooked,
-        );
-
-        // Everything below belongs to the layout, not to the app: it is saved with the
-        // layout's own profile, so it is an edit and the Save button carries it.
-        section(ui, "Mouse");
-        what.layout |= choice(
-            ui,
-            "Crossing algorithm",
-            "How the cursor jumps between screens",
-            &ALGORITHMS,
-            &mut options.algorithm,
-        );
-        what.layout |= number(
-            ui,
-            "Max travel distance",
-            "Maximum crossing jump, in pixels",
-            0.0..=10_000.0,
-            10.0,
-            &mut options.max_travel_distance,
-        );
-        what.layout |= toggle(
-            ui,
-            "Pause in games",
-            "Pause crossing while a game captures the mouse",
-            &mut options.freelook_enabled,
-        );
-        if options.freelook_enabled {
-            ui.indent("freelook", |ui| {
+        Page::Mouse => {
+            note(
+                ui,
+                "Cursor behaviour for this layout · use Save to keep changes",
+            );
+            group(ui, "Crossing between screens", |ui| {
+                what.layout |= choice(
+                    ui,
+                    Icon::Algorithm,
+                    "Crossing algorithm",
+                    "Straight transitions or crossing through corners",
+                    &ALGORITHMS,
+                    &mut options.algorithm,
+                );
+                ui.separator();
                 what.layout |= number(
                     ui,
-                    "Detection interval",
-                    "Re-check mouse capture while gaming, in ms. 0 checks on every mouse \
-                     event",
-                    0.0..=1000.0,
-                    10.0,
-                    &mut options.freelook_check_interval,
+                    Icon::Ruler,
+                    "Max travel distance",
+                    "Maximum jump between screens",
+                    (0.0..=10_000.0, 10.0, "px"),
+                    &mut options.max_travel_distance,
+                );
+                ui.separator();
+                what.layout |= toggle(
+                    ui,
+                    Icon::LoopH,
+                    "Horizontal loop",
+                    "Re-enter from the opposite horizontal edge",
+                    &mut options.loop_x,
+                );
+                ui.separator();
+                what.layout |= toggle(
+                    ui,
+                    Icon::LoopV,
+                    "Vertical loop",
+                    "Re-enter from the opposite vertical edge",
+                    &mut options.loop_y,
+                );
+            });
+            group(ui, "Pointer", |ui| {
+                what.layout |= toggle(
+                    ui,
+                    Icon::Mouse,
+                    "Adjust pointer speed",
+                    "Keep speed consistent across screen densities",
+                    &mut options.adjust_speed,
+                );
+                ui.separator();
+                what.layout |= toggle(
+                    ui,
+                    Icon::Pointer,
+                    "Adjust pointer size",
+                    "Keep size consistent across screen densities",
+                    &mut options.adjust_pointer,
+                );
+            });
+            group(ui, "Games", |ui| {
+                what.layout |= toggle(
+                    ui,
+                    Icon::Gamepad,
+                    "Pause in games",
+                    "Pause crossing while a game captures the mouse",
+                    &mut options.freelook_enabled,
+                );
+                if options.freelook_enabled {
+                    ui.separator();
+                    what.layout |= number(
+                        ui,
+                        Icon::Gamepad,
+                        "Detection interval",
+                        "0 checks on every mouse event",
+                        (0.0..=1000.0, 10.0, "ms"),
+                        &mut options.freelook_check_interval,
+                    );
+                }
+            });
+            group(ui, "Rescue shortcut", |ui| {
+                ui.horizontal(|ui| {
+                    Icon::Shield.show(ui);
+                    note(
+                        ui,
+                        "Hold this shortcut to free a trapped cursor. Saved automatically.",
+                    );
+                });
+                if let Some(recorded) =
+                    crate::shortcut::recorder(ui, &options.rescue_shortcut, rescue, unavailable)
+                {
+                    options.rescue_shortcut = recorded;
+                    what.app = true;
+                }
+            });
+        }
+        Page::Layout => {
+            note(
+                ui,
+                "Screen arrangement for this layout · use Save to keep changes",
+            );
+            group(ui, "Screen arrangement", |ui| {
+                what.layout |= toggle(
+                    ui,
+                    Icon::Overlap,
+                    "Allow overlaps",
+                    "Screens may overlap in the layout",
+                    &mut options.allow_overlaps,
+                );
+                ui.separator();
+                what.layout |= toggle(
+                    ui,
+                    Icon::Gap,
+                    "Allow discontinuity",
+                    "Allow gaps between monitors",
+                    &mut options.allow_discontinuity,
+                );
+                ui.separator();
+                what.layout |= number(
+                    ui,
+                    Icon::Ruler,
+                    "Minimal edge overlap",
+                    "Shared edge needed to join screens; 0 allows simple contact",
+                    (0.0..=1000.0, 5.0, "mm"),
+                    &mut options.minimal_edge_overlap,
+                );
+            });
+            group(ui, "Monitor measurements", |ui| {
+                what.app |= choice(
+                    ui,
+                    Icon::Ruler,
+                    "Border values",
+                    "Share bezel measurements by model, or measure each monitor separately",
+                    &BORDER_VALUES,
+                    &mut options.border_values,
+                );
+                note(ui, "Measurement storage is saved automatically.");
+            });
+            group(ui, "Monitor actions", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Warning,
+                    "Warn before monitor actions",
+                    "Confirm before attaching, detaching or changing the primary monitor",
+                    &mut options.show_monitor_action_warning,
+                );
+                note(ui, "This preference is saved automatically.");
+            });
+        }
+        Page::Advanced => {
+            note(ui, "Engine and optional tools · saved automatically");
+            group(ui, "Mouse engine", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Priority,
+                    "Stop the mouse engine with LittleBigMouse",
+                    "When off, cursor routing continues after closing the app",
+                    &mut options.bound_to_agent,
+                );
+                ui.separator();
+                what.app |= choice(
+                    ui,
+                    Icon::Priority,
+                    "While active (hooked)",
+                    "Engine process priority",
+                    &PRIORITIES,
+                    &mut options.priority,
+                );
+                ui.separator();
+                what.app |= choice(
+                    ui,
+                    Icon::Priority,
+                    "While inactive (unhooked)",
+                    "Priority while cursor routing is stopped",
+                    &PRIORITIES,
+                    &mut options.priority_unhooked,
+                );
+            });
+            group(ui, "Monitor control", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Vcp,
+                    "Enable VCP monitor control",
+                    "Brightness, contrast and colour over DDC/CI",
+                    &mut options.vcp_control,
+                );
+                if options.vcp_control {
+                    ui.separator();
+                    what.app |= toggle(
+                        ui,
+                        Icon::Experimental,
+                        "Enable experimental features",
+                        "Colour calibration and smart-TV test tools",
+                        &mut options.experimental_features,
+                    );
+                }
+            });
+            group(ui, "Diagnostics", |ui| {
+                what.app |= toggle(
+                    ui,
+                    Icon::Debug,
+                    "Activate debug tools",
+                    "Extra troubleshooting and layout inspection tools",
+                    &mut options.debug_tools,
                 );
             });
         }
-        what.layout |= toggle(
-            ui,
-            "Horizontal loop",
-            "Re-enter from the opposite side",
-            &mut options.loop_x,
-        );
-        what.layout |= toggle(ui, "Vertical loop", "", &mut options.loop_y);
-        what.layout |= toggle(
-            ui,
-            "Adjust pointer speed",
-            "Keep speed consistent across DPI",
-            &mut options.adjust_speed,
-        );
-        what.layout |= toggle(
-            ui,
-            "Adjust pointer size",
-            "Keep size consistent across DPI",
-            &mut options.adjust_pointer,
-        );
-
-        // The rescue belongs with the mouse: it is the way out when the cursor is
-        // trapped where the layout put it.
-        if let Some(recorded) =
-            crate::shortcut::recorder(ui, &options.rescue_shortcut, rescue, unavailable)
-        {
-            options.rescue_shortcut = recorded;
-            what.app = true;
-        }
-
-        section(ui, "Layout");
-        what.layout |= toggle(
-            ui,
-            "Allow overlaps",
-            "Screens may overlap in the layout",
-            &mut options.allow_overlaps,
-        );
-        what.layout |= toggle(
-            ui,
-            "Allow discontinuity",
-            "Gaps between monitors are allowed",
-            &mut options.allow_discontinuity,
-        );
-        what.layout |= number(
-            ui,
-            "Minimal edge overlap",
-            "Display surface two touching screens must share, in mm. 0 only asks for \
-             contact",
-            0.0..=1000.0,
-            5.0,
-            &mut options.minimal_edge_overlap,
-        );
-        what.app |= choice(
-            ui,
-            "Border values",
-            "Where each monitor's bezel borders are stored",
-            &BORDER_VALUES,
-            &mut options.border_values,
-        );
-        what.app |= toggle(
-            ui,
-            "Warn before monitor actions",
-            "Ask before attaching, detaching or making a monitor primary",
-            &mut options.show_monitor_action_warning,
-        );
-    });
+        Page::Applications => {} // The separately loaded excluded list is owned by the caller.
+    }
     what
 }
 

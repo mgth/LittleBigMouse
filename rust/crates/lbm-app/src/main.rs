@@ -102,8 +102,6 @@ enum Did {
 enum View {
     Map,
     List,
-    Settings,
-    Displays,
 }
 
 struct App {
@@ -156,7 +154,8 @@ struct App {
     pattern: String,
     /// Whether the apply asks for the scales too. Remembered between openings of the
     /// menu, not across runs — it is a choice about this apply, not a setting.
-    adjust_scale: bool,
+    placement: lbm_ui::placement::Panel,
+    topology_pending: Option<u64>,
     /// Whether the rescue recorder is waiting for a combination.
     recording: lbm_ui::shortcut::Recording,
     /// The document the agent was last given, as it went on the wire, and when.
@@ -173,19 +172,22 @@ struct App {
     /// at five times a second it does not show.
     previewed: Option<(String, std::time::Instant)>,
     view: View,
+    settings_open: bool,
+    about_open: bool,
+    settings_page: lbm_ui::options::Page,
     /// What every frame shows inside it — the mode bar's choice. See `lbm_ui::mode`.
     mode: lbm_ui::mode::Mode,
     icons: Catalogue,
     /// Uploaded logos, by icon path. Loaded once, on the frame that first needs one.
     textures: HashMap<String, egui::TextureHandle>,
-    /// Uploaded wallpaper thumbnails, by screen id.
+    /// Uploaded editor previews, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
     wallpaper: lbm_app::wallpaper_editor::Editor,
     wallpaper_preview_requested: bool,
     wallpaper_picking: bool,
     /// Where Browse was pressed (view, mode, screen), while its chooser is open. Checked
     /// on every pass: any departure retires the choice, even if the user comes back.
-    wallpaper_choice_context: Option<(View, lbm_ui::mode::Mode, Option<String>)>,
+    wallpaper_choice_context: Option<(View, bool, lbm_ui::mode::Mode, Option<String>)>,
     picker_parent: lbm_app::image_picker::Parent,
     wallpaper_preview_busy: Option<u64>,
     wallpaper_previewed: bool,
@@ -301,9 +303,8 @@ fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detecte
 /// The stored profile onto the layout in memory: the app-wide options, the layout's own
 /// options, and every monitor's saved place and model.
 ///
-/// **Read, never written.** The frontend reads files the agent owns, exactly as it
-/// already reads `wallpaper.json` for the thumbnails; writing goes back through the
-/// agent, which stays the only writer.
+/// **Read, never written.** The frontend reads the profile files the agent owns;
+/// writing goes back through the agent, which stays the only writer.
 ///
 /// **Not `LayoutPersistence::load`, deliberately.** That is the same read plus the
 /// excluded list — and `ExcludedListPersistence::load` **writes `Excluded.txt`** when it
@@ -389,17 +390,6 @@ fn details_of(
             }
             rows
         }
-        // C# `AboutMonitorView`: this app's version, and what identifies the screen.
-        Mode::About => {
-            let mut rows = vec![
-                ("version", env!("CARGO_PKG_VERSION").to_owned()),
-                ("id", monitor.id.clone()),
-            ];
-            if let Some(serial) = &monitor.serial_number {
-                rows.push(("serial", serial.clone()));
-            }
-            rows
-        }
         // These modes use the selected-monitor properties panel instead of map rows.
         Mode::Info | Mode::Size | Mode::Resistance => Vec::new(),
         // Wallpaper has its own image editor, with no text inside monitor frames.
@@ -461,6 +451,7 @@ impl App {
     }
 
     fn with_config(ctx: egui::Context, config: Option<lbm_app::session::Config>) -> Self {
+        lbm_ui::theme::install(&ctx);
         let icons = icons_root()
             .map(|root| lbm_icons::catalogue(&root).0)
             .unwrap_or_default();
@@ -519,10 +510,14 @@ impl App {
             outputs: Default::default(),
             excluded: None,
             pattern: String::new(),
-            adjust_scale: false,
+            placement: Default::default(),
+            topology_pending: None,
             recording: lbm_ui::shortcut::Recording::default(),
             previewed: None,
             view: View::Map,
+            settings_open: false,
+            about_open: false,
+            settings_page: lbm_ui::options::Page::default(),
             mode: lbm_ui::mode::Mode::default(),
             icons,
             textures: HashMap::new(),
@@ -552,6 +547,8 @@ impl App {
         use lbm_app::session::Event;
         match event {
             Event::Connected { requests, snapshot } => {
+                self.placement = Default::default();
+                self.topology_pending = None;
                 self.outputs = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
@@ -576,6 +573,8 @@ impl App {
                 self.wallpaper_preview_busy = None;
                 self.screen_overlay_mode = lbm_overlay::Mode::Off;
                 self.screen_overlay.clear();
+                self.placement = Default::default();
+                self.topology_pending = None;
                 self.outputs = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
@@ -694,10 +693,14 @@ impl App {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
-        let (method, mut extra) = lbm_app::settings::apply_topology(layout, self.adjust_scale);
+        let (method, mut extra) =
+            lbm_app::settings::apply_topology(layout, self.placement.adjust_scale);
         extra["LayoutRevision"] =
             serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
-        self.send(method, extra);
+        let earned = lbm_app::saved::Reference::of(layout);
+        let id = self.send(method, extra);
+        self.agent.earning(id, earned);
+        self.topology_pending = Some(id);
     }
 
     /// The command lines an apply ran, or would run.
@@ -764,10 +767,11 @@ impl App {
             return;
         };
         self.agent.topology = None;
-        let (method, mut extra) = lbm_app::settings::dry_run_topology(layout, self.adjust_scale);
+        let (method, mut extra) =
+            lbm_app::settings::dry_run_topology(layout, self.placement.adjust_scale);
         extra["LayoutRevision"] =
             serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
-        self.send(method, extra);
+        self.topology_pending = Some(self.send(method, extra));
     }
 
     /// Stops previewing: the agent goes back to the layout it had.
@@ -782,7 +786,7 @@ impl App {
     /// Called every frame; the interval is a **rate limit**, not a clock — egui redraws
     /// for its own reasons and this must not turn a repaint into a layout swap.
     fn preview_tick(&mut self, ctx: &egui::Context) {
-        if !self.state.live {
+        if !self.state.live || self.topology_pending.is_some() {
             return;
         }
         // Without this the window only redraws when something happens, so an edit made
@@ -893,7 +897,7 @@ impl App {
     ///
     /// The request itself is [`lbm_app::settings::save_options`], where a test can check
     /// the very frame this sends.
-    fn save_options(&mut self) {
+    fn save_options(&mut self, before: &LayoutOptions, excluded_changed: bool) {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
@@ -901,8 +905,15 @@ impl App {
         // before. Cleared here rather than in the panel, because this is the moment the
         // change actually leaves — the hook will say again if the new one is no better.
         self.agent.shortcut_changed();
-        let (method, extra) =
-            lbm_app::settings::save_options(&layout.options, self.excluded.as_deref());
+        let (method, extra) = lbm_app::settings::save_options(
+            before,
+            &layout.options,
+            if excluded_changed {
+                self.excluded.as_deref()
+            } else {
+                None
+            },
+        );
         self.send(method, extra);
     }
 
@@ -919,6 +930,9 @@ impl App {
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
         if let Message::Answer { id, result } = &message {
+            if self.topology_pending == Some(*id) {
+                self.topology_pending = None;
+            }
             if self.wallpaper.answered(*id, result) {
                 self.wallpaper_preview_requested = self.wallpaper.error.is_none();
                 return;
@@ -979,9 +993,8 @@ impl App {
             Rgba(colour.r(), colour.g(), colour.b(), colour.a()),
         )
         .ok()?;
-        const SIDE: u32 = 128;
-        let pixels = lbm_icons::render(&tree, SIDE)?;
-        let image = egui::ColorImage::from_rgba_unmultiplied([SIDE as usize; 2], &pixels);
+        let logo = lbm_icons::render_logo(&tree, 512)?;
+        let image = egui::ColorImage::from_rgba_premultiplied(logo.size, &logo.pixels);
         let handle = ctx.load_texture(path, image, egui::TextureOptions::LINEAR);
         self.textures.insert(path.to_owned(), handle.clone());
         Some(handle)
@@ -1002,6 +1015,9 @@ impl App {
         fit: &map::Fit,
         anchors: bool,
     ) -> Option<(usize, (f64, f64), drag::Snap)> {
+        if self.mode != lbm_ui::mode::Mode::Location {
+            return None;
+        }
         let drag = self.drag.as_ref()?;
         let i = monitors.iter().position(|m| m.id == drag.id)?;
         // Points back to millimetres, `FrameMover.cs:172`. The ratio should not be zero
@@ -1033,6 +1049,13 @@ impl App {
         total: Option<(f64, f64)>,
         ctx: &egui::Context,
     ) {
+        // A mode change cancels a move, including a late release or lost-pointer drop.
+        if self.mode != lbm_ui::mode::Mode::Location {
+            self.drag = None;
+            if !matches!(did, Some(Did::Clicked(_))) {
+                return;
+            }
+        }
         match did {
             Some(Did::Clicked(id)) => {
                 if self.selected.as_ref() != Some(&id) {
@@ -1102,8 +1125,17 @@ impl App {
                     .as_ref()
                     .and_then(|p| p.to_str())
                     .and_then(|p| logos.get(p)),
-                details: &s.details,
-                probe: if self.mode == lbm_ui::mode::Mode::Resistance {
+                details: if self.mode == lbm_ui::mode::Mode::Location {
+                    &[]
+                } else {
+                    &s.details
+                },
+                probe: if matches!(
+                    self.mode,
+                    lbm_ui::mode::Mode::Resistance
+                        | lbm_ui::mode::Mode::Info
+                        | lbm_ui::mode::Mode::Location
+                ) {
                     None
                 } else {
                     self.probe.overlay(&s.source_id, s.pixels)
@@ -1300,8 +1332,14 @@ impl App {
             self.wallpaper.error = Some(format!("Could not open the image chooser: {e}"));
         }
     }
-    fn wallpaper_choice_here(&self) -> (View, lbm_ui::mode::Mode, Option<String>) {
-        (self.view, self.mode, self.selected.clone())
+    fn wallpaper_choice_here(&self) -> (View, bool, lbm_ui::mode::Mode, Option<String>) {
+        // The settings drawer covers the editor: opening it leaves the choice's context.
+        (
+            self.view,
+            self.settings_open,
+            self.mode,
+            self.selected.clone(),
+        )
     }
     fn begin_file_choice(&mut self) -> Option<lbm_app::wallpaper_editor::FileChoice> {
         let choice = self.wallpaper.choose_file(self.selected.as_deref())?;
@@ -1329,7 +1367,8 @@ impl App {
         self.retire_departed_file_choice();
         self.wallpaper_picking = false;
         self.wallpaper_choice_context = None;
-        if matches!(self.view, View::Map | View::List)
+        if !self.settings_open
+            && matches!(self.view, View::Map | View::List)
             && self.mode == lbm_ui::mode::Mode::Wallpaper
             && self
                 .wallpaper
@@ -1354,21 +1393,14 @@ impl App {
             && !self.state.live
             && !self.agent.previewing
             && !self.agent.suspended
-            && !self.outputs.changing();
+            && !(self.outputs.changing() || self.topology_pending.is_some());
         lbm_ui::properties::panel(ui, |ui| {
+            if self.settings_open {
+                ui.disable();
+            }
             egui::ScrollArea::vertical().show(ui,|ui|{
             ui.heading("Wallpaper");
-            egui::ComboBox::from_id_salt("wallpaper-monitor")
-                .selected_text(self.selected.as_deref().unwrap_or("Select a screen"))
-                .show_ui(ui, |ui| {
-                    for screen in &self.screens {
-                        ui.selectable_value(
-                            &mut self.selected,
-                            Some(screen.id.clone()),
-                            &screen.name,
-                        );
-                    }
-                });
+            self.screen_selector(ui);
             if !stable {
                 ui.label("The connection or displays changed. Your wallpaper edits are kept; reload before applying.");
             }
@@ -1440,126 +1472,370 @@ impl App {
         }
     }
 
-    fn properties(&mut self, ui: &mut egui::Ui) {
-        if !matches!(self.view, View::Map | View::List)
-            || !matches!(
-                self.mode,
-                lbm_ui::mode::Mode::Size
-                    | lbm_ui::mode::Mode::Info
-                    | lbm_ui::mode::Mode::Resistance
-            )
-        {
-            return;
+    fn inline_properties<'a>(
+        &self,
+        ui: &mut egui::Ui,
+        placements: impl Iterator<Item = (&'a str, lbm_ui::frame::Drawn)>,
+        edits: &mut Vec<(String, lbm_ui::properties::Edit)>,
+    ) -> Option<&'a str> {
+        use lbm_ui::mode::Mode;
+        if !matches!(self.mode, Mode::Info | Mode::Location | Mode::Size) {
+            return None;
         }
-        lbm_ui::properties::panel(ui, |ui| {
-            ui.heading(self.mode.label());
-            let Some(layout) = &self.layout else {
-                ui.label("Waiting for displays…");
-                return;
-            };
-            let previous = self.selected.clone();
-            egui::ComboBox::from_id_salt("properties-monitor")
-                .selected_text(self.selected.as_deref().unwrap_or("Select a monitor"))
-                .show_ui(ui, |ui| {
-                    for monitor in layout.monitors() {
-                        let name = layout
-                            .model(&monitor.model)
-                            .and_then(|m| m.pnp_device_name.as_deref())
-                            .unwrap_or(&monitor.id);
-                        ui.selectable_value(
-                            &mut self.selected,
-                            Some(monitor.id.clone()),
-                            format!("{name} · {}", monitor.id),
-                        );
-                    }
-                });
-            if previous != self.selected {
-                self.resistance.clear();
-                self.property_error = None;
-            }
-            let Some(id) = self.selected.clone() else {
-                ui.label("Select a screen on the map, in the list or above.");
-                return;
-            };
-            let blocked = self.refresh.pending() || self.outputs.changing() || self.drag.is_some();
-            let mut edits = Vec::new();
-            let mut section_edit = None;
-            ui.push_id(("properties", &id), |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt("monitor-properties-scroll")
-                    .show(ui, |ui| {
-                        if self.mode == lbm_ui::mode::Mode::Resistance {
-                            let monitors = lbm_app::resistance::monitors(layout);
-                            section_edit = ui
-                                .add_enabled_ui(
-                                    !blocked && !layout.is_virtual() && !self.resistance.active(),
-                                    |ui| {
-                                        self.resistance.panel(
-                                            ui,
-                                            &monitors,
-                                            &id,
-                                            layout.options.max_travel_distance,
-                                        )
-                                    },
-                                )
-                                .inner;
-                            return;
-                        }
-                        if self.mode == lbm_ui::mode::Mode::Info {
-                            ui.heading("Detected · last display refresh");
-                            let report = layout
-                                .monitors()
-                                .iter()
-                                .find(|m| m.id == id)
-                                .and_then(|m| m.device_id.as_ref())
-                                .and_then(|device| self.reports.get(device));
-                            if let Some(rows) = report {
-                                lbm_ui::properties::rows(ui, rows);
-                            } else {
-                                ui.label("No hardware report available for this monitor.");
-                            }
-                            ui.separator();
-                            ui.heading("Current layout");
-                            lbm_ui::properties::rows(
-                                ui,
-                                &lbm_app::properties::layout_info(layout, &id),
-                            );
-                            return;
-                        }
-                        let Some(size) = lbm_app::properties::size(layout, &id) else {
-                            ui.label("No active source for this monitor.");
-                            return;
-                        };
-                        edits = ui
-                            .add_enabled_ui(!blocked && !layout.is_virtual(), |ui| {
-                                lbm_ui::properties::size(ui, &size)
-                            })
-                            .inner;
-                    });
-            });
-            if let Some(action) = section_edit {
-                self.section_edit(action);
-            }
-            for edit in edits {
-                if let Some(layout) = self.layout.as_mut() {
-                    match lbm_app::properties::apply(layout, &self.detected, &id, edit) {
-                        Ok(()) => {
-                            self.property_error = None;
-                            self.screens = screens_of(layout, self.mode);
-                            self.probe.want(None, std::time::Instant::now());
-                        }
-                        Err(error) => self.property_error = Some(error),
+        let layout = self.layout.as_deref()?;
+        let enabled = !layout.is_virtual()
+            && !self.refresh.pending()
+            && !(self.outputs.changing() || self.topology_pending.is_some())
+            && self.drag.is_none();
+        let mut picked = None;
+        for (id, drawn) in placements {
+            if matches!(self.mode, Mode::Info | Mode::Location) {
+                if let Some(info) = lbm_app::properties::monitor_info(layout, id) {
+                    let presentation = if self.mode == Mode::Location {
+                        lbm_ui::monitor_info::Presentation::Location
+                    } else {
+                        lbm_ui::monitor_info::Presentation::Info
+                    };
+                    lbm_ui::monitor_info::draw(ui, drawn.content, &info, presentation);
+                }
+                if let Some(screen) = self.screens.iter().find(|s| s.id == id) {
+                    if let Some(probe) = self.probe.overlay(&screen.source_id, screen.pixels) {
+                        probe.draw(ui, drawn.content);
                     }
                 }
             }
-            if let Some(error) = &self.property_error {
-                ui.colored_label(ui.visuals().error_fg_color, error);
+            let interaction = ui
+                .add_enabled_ui(enabled, |ui| match self.mode {
+                    Mode::Location => lbm_app::properties::location(layout, id)
+                        .map(|value| lbm_ui::inline::location(ui, id, drawn.content, &value)),
+                    Mode::Size => lbm_app::properties::size(layout, id)
+                        .map(|value| lbm_ui::inline::size(ui, id, &drawn, &value)),
+                    _ => None,
+                })
+                .inner;
+            if let Some(interaction) = interaction {
+                if interaction.engaged {
+                    picked = Some(id);
+                }
+                edits.extend(
+                    interaction
+                        .edits
+                        .into_iter()
+                        .map(|edit| (id.to_owned(), edit)),
+                );
             }
+        }
+        picked
+    }
+
+    fn screen_selector(&mut self, ui: &mut egui::Ui) {
+        let previous = self.selected.clone();
+        let mut single = self.view == View::List;
+        let monitors = self
+            .layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .monitors()
+                    .iter()
+                    .map(|monitor| {
+                        let name = layout
+                            .model(&monitor.model)
+                            .and_then(|model| model.pnp_device_name.as_deref())
+                            .unwrap_or(&monitor.id);
+                        (monitor.id.as_str(), name)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        lbm_ui::properties::monitor_selector(ui, &mut self.selected, &monitors, &mut single);
+        if single != (self.view == View::List) {
+            self.view = if single { View::List } else { View::Map };
+            self.drag = None;
+            self.resistance.cancel();
+            self.screen_overlay_mode = lbm_overlay::Mode::Off;
+            self.screen_overlay.clear();
+        }
+        if previous != self.selected {
+            self.outputs.panel.confirm = None;
+            self.resistance.clear();
+            self.property_error = None;
+        }
+    }
+
+    fn properties(&mut self, ui: &mut egui::Ui) {
+        if self.mode == lbm_ui::mode::Mode::Wallpaper {
+            return;
+        }
+        let location = self.mode == lbm_ui::mode::Mode::Location;
+        if location && self.requests.is_some() && self.outputs.needs_read() {
+            self.output_request("DisplayOutputs", serde_json::json!({}), false);
+        }
+        lbm_ui::properties::panel(ui, |ui| {
+            if self.settings_open {
+                ui.disable();
+            }
+            ui.heading(self.mode.label());
+            if self.mode == lbm_ui::mode::Mode::Resistance {
+                if let Some(layout) = self.layout.as_mut() {
+                    let mut defaults = layout.options.resistance_defaults;
+                    let enabled = !layout.is_virtual()
+                        && !self.refresh.pending()
+                        && !(self.outputs.changing() || self.topology_pending.is_some())
+                        && !self.resistance.active();
+                    if ui
+                        .add_enabled_ui(enabled, |ui| {
+                            lbm_ui::resistance::defaults(ui, &mut defaults)
+                        })
+                        .inner
+                    {
+                        layout.edit_options(|o| o.resistance_defaults = defaults);
+                        self.probe.want(None, std::time::Instant::now());
+                        self.next_screen_overlay = std::time::Instant::now();
+                    }
+                    self.resistance.defaults = defaults;
+                }
+            }
+            if location {
+                self.placement_properties(ui);
+                ui.separator();
+            }
+            self.screen_selector(ui);
+            self.screen_overlay_controls(ui);
+            egui::ScrollArea::vertical()
+                .id_salt(("monitor-properties-scroll", self.mode.id()))
+                .show(ui, |ui| {
+                    if location {
+                        self.crossing_controls(ui);
+                        ui.separator();
+                    }
+                    self.monitor_properties(ui);
+                    if location {
+                        self.system_display_properties(ui);
+                    }
+                });
         });
     }
 
+    fn monitor_properties(&mut self, ui: &mut egui::Ui) {
+        let Some(layout) = &self.layout else {
+            ui.label("Waiting for displays…");
+            return;
+        };
+        if !matches!(
+            self.mode,
+            lbm_ui::mode::Mode::Size
+                | lbm_ui::mode::Mode::Location
+                | lbm_ui::mode::Mode::Info
+                | lbm_ui::mode::Mode::Resistance
+        ) {
+            return;
+        }
+        let Some(id) = self.selected.clone() else {
+            ui.label("Select a screen on the map, in the list or above.");
+            return;
+        };
+        let blocked = self.refresh.pending()
+            || (self.outputs.changing() || self.topology_pending.is_some())
+            || self.drag.is_some();
+        let mut edits = Vec::new();
+        let mut section_edit = None;
+        ui.push_id(("properties", &id), |ui| {
+            ui.vertical(|ui| {
+                if self.mode == lbm_ui::mode::Mode::Resistance {
+                    let monitors = lbm_app::resistance::monitors(layout);
+                    section_edit = ui
+                        .add_enabled_ui(
+                            !blocked && !layout.is_virtual() && !self.resistance.active(),
+                            |ui| {
+                                self.resistance.panel(
+                                    ui,
+                                    &monitors,
+                                    &id,
+                                    layout.options.max_travel_distance,
+                                )
+                            },
+                        )
+                        .inner;
+                    return;
+                }
+                if self.mode == lbm_ui::mode::Mode::Info {
+                    ui.heading("Detected · last display refresh");
+                    let report = layout
+                        .monitors()
+                        .iter()
+                        .find(|m| m.id == id)
+                        .and_then(|m| m.device_id.as_ref())
+                        .and_then(|device| self.reports.get(device));
+                    if let Some(rows) = report {
+                        lbm_ui::properties::rows(ui, rows);
+                    } else {
+                        ui.label("No hardware report available for this monitor.");
+                    }
+                    ui.separator();
+                    ui.heading("Current layout");
+                    lbm_ui::properties::rows(ui, &lbm_app::properties::layout_info(layout, &id));
+                    return;
+                }
+                if self.mode == lbm_ui::mode::Mode::Location {
+                    ui.strong("Physical position");
+                    if let Some(location) = lbm_app::properties::location(layout, &id) {
+                        edits = ui
+                            .add_enabled_ui(!blocked && !layout.is_virtual(), |ui| {
+                                lbm_ui::properties::location(ui, &id, &location)
+                            })
+                            .inner;
+                    }
+                    if let Some(monitor) = layout.monitor(&id) {
+                        ui.separator();
+                        for (name, value) in
+                            details_of(layout, monitor, self.mode).into_iter().skip(2)
+                        {
+                            ui.label(format!("{name}: {value}"));
+                        }
+                    }
+                    return;
+                }
+                let Some(size) = lbm_app::properties::size(layout, &id) else {
+                    ui.label("No active source for this monitor.");
+                    return;
+                };
+                edits = ui
+                    .add_enabled_ui(!blocked && !layout.is_virtual(), |ui| {
+                        lbm_ui::properties::size(ui, &id, &size)
+                    })
+                    .inner;
+            });
+        });
+        if let Some(action) = section_edit {
+            self.section_edit(action);
+        }
+        for edit in edits {
+            if let Some(layout) = self.layout.as_mut() {
+                match lbm_app::properties::apply(layout, &self.detected, &id, edit) {
+                    Ok(()) => {
+                        self.property_error = None;
+                        self.screens = screens_of(layout, self.mode);
+                        self.probe.want(None, std::time::Instant::now());
+                    }
+                    Err(error) => self.property_error = Some(error),
+                }
+            }
+        }
+        if let Some(error) = &self.property_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+    }
+
+    fn placement_blocked(&self) -> Option<&'static str> {
+        if self.requests.is_none() {
+            Some("Connect to the agent to synchronize positions.")
+        } else if self.refresh.pending() {
+            Some("Reload the screen configuration first.")
+        } else if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
+            Some("A local screen layout is required.")
+        } else if self.agent.suspended {
+            Some("The display session is suspended.")
+        } else if self.state.waiting
+            || self.outputs.busy()
+            || self.topology_pending.is_some()
+            || self.drag.is_some()
+        {
+            Some("Wait for the current operation to finish.")
+        } else {
+            None
+        }
+    }
+
+    fn place_from_system(&mut self) {
+        if self.placement_blocked().is_some() {
+            return;
+        }
+        let Some(layout) = self.layout.as_mut() else {
+            return;
+        };
+        layout.set_locations_from_system_configuration(true);
+        self.screens = screens_of(layout, self.mode);
+        self.property_error = None;
+        self.probe.want(None, std::time::Instant::now());
+        self.next_screen_overlay = std::time::Instant::now();
+    }
+
+    fn placement_properties(&mut self, ui: &mut egui::Ui) {
+        let blocked = self.placement_blocked();
+        let needs_stop = cfg!(windows)
+            && (self.agent.enabled != Some(false)
+                || self.agent.previewing
+                || self.state.live
+                || matches!(
+                    self.state.engine,
+                    lbm_ui::Engine::Running | lbm_ui::Engine::Paused
+                ));
+        let action = self
+            .placement
+            .show(ui, blocked, needs_stop, cfg!(target_os = "linux"));
+        match action {
+            Some(lbm_ui::placement::Action::FromSystem) => self.place_from_system(),
+            Some(lbm_ui::placement::Action::Preview) => self.dry_run_topology(),
+            Some(lbm_ui::placement::Action::Apply) => self.apply_topology(),
+            None => {}
+        }
+    }
+
+    fn system_display_properties(&mut self, ui: &mut egui::Ui) {
+        // Linux connectors and Windows target interface paths are both carried here;
+        // monitor IDs and display names are not output identities.
+        let selected = self.layout.as_deref().and_then(|layout| {
+            let monitor = layout.monitor(self.selected.as_deref()?)?;
+            let source = layout.source(monitor.active_source.as_deref()?)?;
+            source
+                .source
+                .interface_path
+                .as_ref()
+                .filter(|path| !path.is_empty())
+                .cloned()
+        });
+        if self.outputs.panel.selected != selected {
+            self.outputs.panel.confirm = None;
+        }
+        self.outputs.panel.selected = selected;
+        if self.outputs.panel.selected.is_none() {
+            return;
+        }
+        ui.add_space(12.0);
+        ui.separator();
+        let blocked = self.output_blocked();
+        let busy = self.outputs.busy();
+        let can_stop = self.requests.is_some()
+            && !self.state.waiting
+            && (self.agent.enabled == Some(true)
+                || self.agent.previewing
+                || matches!(
+                    self.state.engine,
+                    lbm_ui::Engine::Running | lbm_ui::Engine::Paused
+                ));
+        let warn = self
+            .layout
+            .as_ref()
+            .is_none_or(|l| l.options.show_monitor_action_warning);
+        let action = self.outputs.panel.draw(
+            ui,
+            self.outputs.outputs.as_ref(),
+            blocked,
+            busy,
+            warn,
+            can_stop,
+        );
+        if let Some(error) = &self.outputs.error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        if let Some(action) = action {
+            self.output_action(action);
+        }
+    }
+
     fn section_edit(&mut self, action: lbm_ui::resistance::Action) {
-        if self.refresh.pending() || self.outputs.changing() {
+        if self.refresh.pending() || (self.outputs.changing() || self.topology_pending.is_some()) {
             return;
         }
         if let Some(layout) = self.layout.as_mut() {
@@ -1576,63 +1852,87 @@ impl App {
 
     fn screen_overlay_controls(&mut self, ui: &mut egui::Ui) {
         use lbm_overlay::Mode;
-        if !matches!(self.view, View::Map | View::List) {
+        let (mode, label, selected) = match self.mode {
+            lbm_ui::mode::Mode::Location => {
+                (Mode::Rulers, "Rulers on screens", self.selected.is_some())
+            }
+            lbm_ui::mode::Mode::Resistance => (Mode::Resistance, "Resistance on screens", true),
+            _ => return,
+        };
+        let available = !self.settings_open
+            && lbm_overlay::SUPPORTED
+            && self.requests.is_some()
+            && !self.refresh.pending()
+            && !(self.outputs.changing() || self.topology_pending.is_some())
+            && !self.agent.suspended
+            && self.layout.as_ref().is_some_and(|l| !l.is_virtual());
+        if ui
+            .add_enabled(
+                available && selected,
+                egui::Button::new(label).selected(self.screen_overlay_mode == mode),
+            )
+            .clicked()
+        {
+            self.screen_overlay_mode = if self.screen_overlay_mode == mode {
+                Mode::Off
+            } else {
+                mode
+            };
+            self.screen_overlay_error = None;
+            self.next_screen_overlay = std::time::Instant::now();
+        }
+        if !lbm_overlay::SUPPORTED {
+            ui.small("Screen overlays are unavailable on this platform.");
+        }
+        if self.screen_overlay_mode == mode {
+            ui.small(if mode == Mode::Rulers {
+                "Drag to align · wheel to scale · Ctrl: fine · Shift: coarse · Esc to cancel/hide"
+            } else {
+                "Drag to draw/move/resize · double-click to fill · Ctrl: no snap · Delete · Esc"
+            });
+        }
+        if let Some(error) = &self.screen_overlay_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.add_space(5.0);
+    }
+
+    fn crossing_controls(&mut self, ui: &mut egui::Ui) {
+        ui.checkbox(&mut self.show_probe, "Show crossings")
+            .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
+        if !self.show_probe {
             return;
         }
-        egui::Panel::top("screen-overlays").show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                let available = lbm_overlay::SUPPORTED
-                    && self.requests.is_some()
-                    && !self.refresh.pending()
-                    && !self.outputs.changing()
-                    && !self.agent.suspended
-                    && self.layout.as_ref().is_some_and(|l| !l.is_virtual());
-                for (mode, label, enabled) in [
-                    (Mode::Rulers, "Rulers on screens", self.selected.is_some()),
-                    (
-                        Mode::Resistance,
-                        "Resistance on screens",
-                        self.mode == lbm_ui::mode::Mode::Resistance,
-                    ),
-                ] {
-                    if ui
-                        .add_enabled(
-                            available && enabled,
-                            egui::Button::new(label).selected(self.screen_overlay_mode == mode),
-                        )
-                        .clicked()
-                    {
-                        self.screen_overlay_mode = if self.screen_overlay_mode == mode {
-                            Mode::Off
-                        } else {
-                            mode
-                        };
-                        self.screen_overlay_error = None;
-                        self.next_screen_overlay = std::time::Instant::now();
-                    }
-                }
-                if !lbm_overlay::SUPPORTED {
-                    ui.small("Screen overlays are unavailable on this platform.");
-                }
-                if self.screen_overlay_mode != Mode::Off {
-                    ui.small(if self.screen_overlay_mode == Mode::Rulers {
-                        "Millimetres · large numbers: decimetres · click-through · Esc to hide"
-                    } else {
-                        "Edited resistance sections · click-through · Esc to hide"
-                    });
-                }
-                if let Some(error) = &self.screen_overlay_error {
-                    ui.colored_label(ui.visuals().error_fg_color, error);
-                }
-            });
-        });
+        ui.small("Green: passage · Red: wall · Resistance bypassed");
+        if let Some(error) = &self.probe.error {
+            ui.colored_label(
+                ui.visuals().error_fg_color,
+                format!("Crossings unavailable: {error}"),
+            );
+            if ui.button("Retry crossings").clicked() {
+                self.probe.retry(std::time::Instant::now());
+                ui.ctx().request_repaint();
+            }
+        } else if self.probe.waiting() {
+            ui.small("Checking crossings…");
+        } else if self.requests.is_none() {
+            ui.small("Connect to the agent to show crossings");
+        } else if self
+            .agent
+            .layout
+            .as_ref()
+            .is_some_and(|s| s.revision.is_none())
+        {
+            ui.small("Update the agent to show crossings");
+        }
     }
 
     fn screen_overlay_tick(&mut self, ctx: &egui::Context, movement: Option<(f64, f64)>) {
         use lbm_overlay::Mode;
-        if self.requests.is_none()
+        if self.settings_open
+            || self.requests.is_none()
             || self.refresh.pending()
-            || self.outputs.changing()
+            || (self.outputs.changing() || self.topology_pending.is_some())
             || self.agent.suspended
             || !matches!(self.view, View::Map | View::List)
             || self.layout.as_ref().is_none_or(|l| l.is_virtual())
@@ -1916,94 +2216,52 @@ impl eframe::App for App {
         let logos = self.textures.clone();
 
         let previous_view = self.view;
+        let settings_was_open = self.settings_open;
         let previous_mode = self.mode;
-        egui::Panel::top("modes").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.view, View::Map, "Map");
-                ui.selectable_value(&mut self.view, View::List, "List");
-                ui.selectable_value(&mut self.view, View::Displays, "Displays");
-                ui.add_enabled(self.mode != lbm_ui::mode::Mode::Resistance, egui::Checkbox::new(&mut self.show_probe, "Show crossings"))
-                    .on_disabled_hover_text("Switch away from Border resistance to show the geometric crossing report.")
-                    .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
-                // Asked when the panel is opened rather than on a timer: the list only
-                // grows, and nobody is looking at it the rest of the time.
-                if ui
-                    .selectable_value(&mut self.view, View::Settings, "Settings")
-                    .clicked()
+        egui::Panel::top("modes")
+            .frame(lbm_ui::theme::toolbar())
+            .show(ui, |ui| {
+                if let Some(action) =
+                    lbm_ui::mode::toolbar(ui, self.mode, &self.offered(), self.settings_open)
                 {
-                    self.send("SeenProcesses", serde_json::json!({}));
-                }
-                ui.separator();
-                ui.label(match self.screens.len() {
-                    0 => "no screens detected".to_owned(),
-                    1 => "1 screen".to_owned(),
-                    n => format!("{n} screens"),
-                });
-                // What the frames show inside them — a second axis over Map/List, as in
-                // C# where `ContentViewMode` and the list toggle are separate. Not on the
-                // settings view, which has no frames to write in.
-                if matches!(self.view, View::Map | View::List) {
-                    ui.separator();
-                    if let Some(chosen) = lbm_ui::mode::bar(ui, self.mode, &self.offered()) {
-                        self.mode = chosen;
-                        self.drag = None;
-                        // The rows are built with the screens, so changing the mode is
-                        // reading them off the layout again.
-                        if let Some(layout) = self.layout.as_deref() {
-                            self.screens = screens_of(layout, chosen);
+                    use lbm_ui::mode::ToolbarAction;
+                    match action {
+                        ToolbarAction::About => {
+                            self.about_open = true;
+                            self.settings_open = false;
+                            self.drag = None;
+                            self.resistance.cancel();
+                            self.screen_overlay_mode = lbm_overlay::Mode::Off;
+                            self.screen_overlay.clear();
+                        }
+                        ToolbarAction::Options => {
+                            self.settings_open = !self.settings_open;
+                            if self.settings_open {
+                                self.send("SeenProcesses", serde_json::json!({}));
+                            }
+                        }
+                        ToolbarAction::Mode(chosen) => {
+                            self.settings_open = false;
+                            self.mode = chosen;
+                            self.drag = None;
+                            if let Some(layout) = self.layout.as_deref() {
+                                self.screens = screens_of(layout, chosen);
+                            }
                         }
                     }
                 }
-                ui.separator();
-                // Said plainly. A window that looked the same with and without an agent
-                // would leave the user guessing why the buttons do nothing.
-                match (&self.without_agent, &self.agent.refused) {
-                    (Some((why, where_)), _) => ui
-                        .label(format!("no agent — {why}"))
-                        .on_hover_text(where_.clone()),
-                    // A request the agent turned down used to vanish without a word.
-                    (None, Some(why)) => ui.colored_label(ui.visuals().error_fg_color, why.clone()),
-                    (None, None) => ui.label("agent connected"),
-                };
             });
-        });
 
-        if previous_view != self.view || previous_mode != self.mode || self.refresh.pending() {
+        if previous_view != self.view
+            || previous_mode != self.mode
+            || settings_was_open != self.settings_open
+            || self.refresh.pending()
+        {
+            self.drag = None;
             self.resistance.cancel();
             self.screen_overlay_mode = lbm_overlay::Mode::Off;
             self.screen_overlay.clear();
         }
-        self.screen_overlay_controls(ui);
-        self.probe_tick(&ctx);
-        if self.show_probe
-            && self.mode != lbm_ui::mode::Mode::Resistance
-            && matches!(self.view, View::Map | View::List)
-        {
-            egui::Panel::top("probe-status").show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Green: passage · Red: wall · Resistance bypassed");
-                    if let Some(error) = self.probe.error.clone() {
-                        ui.label(format!("Crossings unavailable: {error}"));
-                        if ui.button("Retry crossings").clicked() {
-                            self.probe.retry(std::time::Instant::now());
-                            ctx.request_repaint();
-                        }
-                    } else if self.probe.waiting() {
-                        ui.label("Checking crossings…");
-                    } else if self.requests.is_none() {
-                        ui.label("Connect to the agent to show crossings");
-                    } else if self
-                        .agent
-                        .layout
-                        .as_ref()
-                        .is_some_and(|s| s.revision.is_none())
-                    {
-                        ui.label("Update the agent to show crossings");
-                    }
-                });
-            });
-        }
-
         if self.refresh.pending() {
             egui::Panel::top("display-change").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -2022,58 +2280,72 @@ impl eframe::App for App {
             });
         }
 
-        egui::Panel::bottom("controls").show(ui, |ui| {
-            if self.refresh.pending() || self.outputs.changing() {
-                ui.disable();
-            }
-            // Without an agent every button is disabled on its own — `can` asks for a
-            // hook — so nothing here has to hide them.
-            // From the layout, every frame: the document it would save against the one it
-            // loaded or last saved, so the bar cannot fall out of step with what there is
-            // to save — and an edit undone by hand takes the buttons back out, which the
-            // ported `Saved` latch cannot do. See `lbm_app::saved`.
-            //
-            // Rebuilt rather than cached: the cache would be one more thing to keep in
-            // step with every edit anywhere in the window, which is the failure this is
-            // fixing. It is a walk over owned data, the same one the live preview already
-            // makes five times a second.
-            self.state.saved = match (&self.layout, &self.saved) {
-                (Some(layout), Some(reference)) => reference.holds(layout),
-                // Nothing loaded, or loaded without a reference: nothing to save.
-                _ => true,
-            };
-            if let Some(lbm_ui::Action::Pressed(press)) = lbm_ui::bottom_bar(ui, &self.state) {
-                for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
-                    match effect {
-                        lbm_ui::Effect::Ask(press) => self.ask(press),
-                        lbm_ui::Effect::EndPreview => self.end_preview(),
+        egui::Panel::bottom("controls")
+            .frame(lbm_ui::theme::toolbar())
+            .show(ui, |ui| {
+                if self.refresh.pending()
+                    || (self.outputs.changing() || self.topology_pending.is_some())
+                {
+                    ui.disable();
+                }
+                // Without an agent every button is disabled on its own — `can` asks for a
+                // hook — so nothing here has to hide them.
+                // From the layout, every frame: the document it would save against the one it
+                // loaded or last saved, so the bar cannot fall out of step with what there is
+                // to save — and an edit undone by hand takes the buttons back out, which the
+                // ported `Saved` latch cannot do. See `lbm_app::saved`.
+                //
+                // Rebuilt rather than cached: the cache would be one more thing to keep in
+                // step with every edit anywhere in the window, which is the failure this is
+                // fixing. It is a walk over owned data, the same one the live preview already
+                // makes five times a second.
+                self.state.saved = match (&self.layout, &self.saved) {
+                    (Some(layout), Some(reference)) => reference.holds(layout),
+                    // Nothing loaded, or loaded without a reference: nothing to save.
+                    _ => true,
+                };
+                if let Some(lbm_ui::Action::Pressed(press)) =
+                    lbm_ui::bottom_bar_with_agent(ui, &self.state, |ui| {
+                        match (&self.without_agent, &self.agent.refused) {
+                            (Some((why, where_)), _) => {
+                                lbm_ui::theme::status(
+                                    ui,
+                                    if why == "connecting to agent" {
+                                        "Connecting…"
+                                    } else {
+                                        "Agent disconnected"
+                                    },
+                                    lbm_ui::theme::AMBER,
+                                )
+                                .on_hover_text(format!("{why}\n{where_}"));
+                            }
+                            (None, Some(why)) => {
+                                ui.colored_label(ui.visuals().error_fg_color, why);
+                            }
+                            (None, None) => {
+                                lbm_ui::theme::status(ui, "Agent connected", lbm_ui::theme::ACCENT);
+                            }
+                        }
+                    })
+                {
+                    for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
+                        match effect {
+                            lbm_ui::Effect::Ask(press) => self.ask(press),
+                            lbm_ui::Effect::EndPreview => self.end_preview(),
+                        }
                     }
                 }
-            }
-        });
+            });
 
+        let settings_bounds = ui.available_rect_before_wrap();
         self.properties(ui);
         self.wallpaper_panel(ui);
+        self.probe_tick(&ctx);
 
         // The `Ui` handed to `App::ui` has no background of its own — the doc says so
         // outright — so the map would be drawn on nothing.
         let mut save_options = false;
         let mut excluded_did = None;
-        let mut apply = false;
-        let mut dry_run = false;
-        let mut adjust_scale = self.adjust_scale;
-        let topology_needs_stop = cfg!(windows)
-            && (self.agent.enabled != Some(false)
-                || self.agent.previewing
-                || self.agent.suspended
-                || matches!(
-                    self.state.engine,
-                    lbm_ui::Engine::Running | lbm_ui::Engine::Paused
-                ));
-        if self.view == View::Displays && self.requests.is_some() && self.outputs.needs_read() {
-            self.output_request("DisplayOutputs", serde_json::json!({}), false);
-        }
-        let mut output_action = None;
         let resistance_mode = self.mode == lbm_ui::mode::Mode::Resistance;
         let section_monitors = if resistance_mode {
             self.layout
@@ -2085,75 +2357,21 @@ impl eframe::App for App {
         };
         let mut section_editor = std::mem::take(&mut self.resistance);
         let mut section_action = None;
+        let mut inline_edits = Vec::new();
         let acted = egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(lbm_ui::theme::BACKGROUND)
+                    .inner_margin(14),
+            )
             .show(ui, |ui| {
-                if self.view == View::Displays {
-                    let blocked = self.output_blocked();
-                    let busy = self.outputs.busy();
-                    let can_stop = self.requests.is_some()
-                        && !self.state.waiting
-                        && (self.agent.enabled == Some(true)
-                            || self.agent.previewing
-                            || matches!(
-                                self.state.engine,
-                                lbm_ui::Engine::Running | lbm_ui::Engine::Paused
-                            ));
-                    let warn = self
-                        .layout
-                        .as_ref()
-                        .is_none_or(|l| l.options.show_monitor_action_warning);
-                    output_action = self.outputs.panel.draw(
-                        ui,
-                        self.outputs.outputs.as_ref(),
-                        blocked,
-                        busy,
-                        warn,
-                        can_stop,
-                    );
-                    if let Some(error) = &self.outputs.error {
-                        ui.colored_label(ui.visuals().error_fg_color, error);
-                    }
-                    return (None, None);
-                }
-                if self.refresh.pending() || self.outputs.changing() {
+                if self.settings_open {
                     ui.disable();
                 }
-                if self.view == View::Settings {
-                    let mut recording = self.recording;
-                    let unavailable = self.agent.shortcut_unavailable.clone();
-                    match self.layout.as_mut() {
-                        // `edit_options` is what marks the layout unsaved and what
-                        // republishes the extent when the border values move; a panel
-                        // writing round it would leave both wrong. The per-layout half
-                        // needs no more than that — being unsaved *is* what Save reads.
-                        Some(layout) => {
-                            layout.edit_options(|o| {
-                                save_options = lbm_ui::options::panel(
-                                    ui,
-                                    o,
-                                    cfg!(windows),
-                                    &mut recording,
-                                    unavailable.as_deref(),
-                                )
-                                .app;
-                            });
-                            // Outside `edit_options`: the excluded list is not one of the
-                            // layout's options here — the window keeps it apart precisely
-                            // because it may not have read it, and `LayoutOptions` has no
-                            // way to say "not read".
-                            excluded_did = lbm_ui::excluded::panel(
-                                ui,
-                                self.excluded.as_deref(),
-                                &mut self.pattern,
-                                &self.agent.seen,
-                            );
-                        }
-                        None => {
-                            ui.label("the displays have not been read yet");
-                        }
-                    }
-                    self.recording = recording;
-                    return (None, None);
+                if self.refresh.pending()
+                    || (self.outputs.changing() || self.topology_pending.is_some())
+                {
+                    ui.disable();
                 }
                 let monitors = self.monitors(&logos);
                 let at = ui.max_rect();
@@ -2184,7 +2402,18 @@ impl eframe::App for App {
                             });
                         }
 
-                        let gesture = map::draw(ui, &shown, &fit, self.selected.as_deref());
+                        let mut gesture = map::draw_movable(
+                            ui,
+                            &shown,
+                            &fit,
+                            self.selected.as_deref(),
+                            self.mode == lbm_ui::mode::Mode::Location,
+                        );
+                        let placements = shown.iter().map(|m| (m.id, fit.place(m)));
+                        let picked = self.inline_properties(ui, placements, &mut inline_edits);
+                        if let Some(picked) = picked {
+                            gesture = Some(map::Gesture::Clicked(picked));
+                        }
                         if resistance_mode {
                             if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
                                 ui.disable();
@@ -2208,56 +2437,6 @@ impl eframe::App for App {
                                     });
                             return (picked, None);
                         }
-                        // The presenter's context menu, as the C# has it. Right-click on
-                        // the map, not a button in the bar: this is the one action in the
-                        // window that moves the user's real screens, and it should take
-                        // some finding rather than sit next to Save.
-                        ui.response().context_menu(|ui| {
-                            ui.label("Apply this layout to the system configuration?");
-                            ui.label(
-                                egui::RichText::new(
-                                    "Your screens will move. The layout is saved first, \
-                                     because the system change reloads the saved one.",
-                                )
-                                .small()
-                                .color(ui.visuals().weak_text_color()),
-                            );
-                            if cfg!(windows) {
-                                adjust_scale = false;
-                                ui.label("Windows keeps the current display scales.");
-                                if topology_needs_stop {
-                                    ui.label(
-                                        "Stop the engine and end Live preview before applying.",
-                                    );
-                                }
-                            } else {
-                                ui.checkbox(&mut adjust_scale, "Also adjust the scales");
-                            }
-                            ui.separator();
-                            // Offered **above** Apply, and on purpose: this is the one
-                            // action in the window that cannot be undone, and reading
-                            // the commands costs a click and changes nothing.
-                            if ui
-                                .add_enabled(
-                                    !topology_needs_stop,
-                                    egui::Button::new("Show what it would run"),
-                                )
-                                .clicked()
-                            {
-                                dry_run = true;
-                                ui.close();
-                            }
-                            if ui
-                                .add_enabled(!topology_needs_stop, egui::Button::new("Apply"))
-                                .clicked()
-                            {
-                                apply = true;
-                                ui.close();
-                            }
-                            if ui.button("Cancel").clicked() {
-                                ui.close();
-                            }
-                        });
                         // After the frames: the lines are about the screens, so they are
                         // read over them. The C# adds its canvas to the panel the frames
                         // are already in, which puts it on top the same way.
@@ -2267,7 +2446,18 @@ impl eframe::App for App {
                         (owned(gesture), held.map(|(_, total, _)| total))
                     }
                     View::List => {
-                        let picked = list::draw(ui, at, &monitors, self.selected.as_deref());
+                        list::draw(ui, at, &monitors, self.selected.as_deref());
+                        let mut picked = None;
+                        let placements = monitors
+                            .iter()
+                            .filter(|m| Some(m.id) == self.selected.as_deref())
+                            .map(|m| {
+                                let fit = map::fit_in(list::screen_rect(at), m.mm_outside);
+                                (m.id, fit.place(m))
+                            });
+                        picked = self
+                            .inline_properties(ui, placements, &mut inline_edits)
+                            .or(picked);
                         if resistance_mode {
                             if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
                                 ui.disable();
@@ -2276,7 +2466,7 @@ impl eframe::App for App {
                                 .iter()
                                 .find(|m| Some(m.id) == self.selected.as_deref())
                                 .map(|m| {
-                                    let fit = map::fit_in(list::panes(at).screen, m.mm_outside);
+                                    let fit = map::fit_in(list::screen_rect(at), m.mm_outside);
                                     vec![(m.id.to_owned(), fit.place(m).content)]
                                 })
                                 .unwrap_or_default();
@@ -2286,34 +2476,79 @@ impl eframe::App for App {
                         }
                         (picked.map(|id| Did::Clicked(id.to_owned())), None)
                     }
-                    // Returned above, before the screens were borrowed: the panel edits
-                    // the very options they were read from.
-                    View::Settings | View::Displays => {
-                        unreachable!("handled before the monitors are built")
-                    }
                 }
             })
             .inner;
+        lbm_ui::properties::paint_measurement_highlights(&ctx);
         self.resistance = section_editor;
+        let options_before = self.layout.as_ref().map(|l| l.options.clone());
+        let mut settings_open = self.settings_open;
+        let mut settings_page = self.settings_page;
+        let escape_closes = self.recording != lbm_ui::shortcut::Recording::Yes;
+        lbm_ui::options::drawer(
+            &ctx,
+            settings_bounds,
+            &mut settings_open,
+            &mut settings_page,
+            escape_closes,
+            |ui, page| {
+                if self.refresh.pending()
+                    || (self.outputs.changing() || self.topology_pending.is_some())
+                {
+                    ui.disable();
+                }
+                if page == lbm_ui::options::Page::Applications {
+                    excluded_did = lbm_ui::excluded::panel(
+                        ui,
+                        self.excluded.as_deref(),
+                        &mut self.pattern,
+                        &self.agent.seen,
+                    );
+                } else if let Some(layout) = self.layout.as_mut() {
+                    layout.edit_options(|o| {
+                        save_options = lbm_ui::options::panel(
+                            ui,
+                            o,
+                            cfg!(windows),
+                            &mut self.recording,
+                            self.agent.shortcut_unavailable.as_deref(),
+                            page,
+                        )
+                        .app;
+                    });
+                } else {
+                    ui.label("Waiting for displays…");
+                }
+            },
+        );
+        if !settings_open || settings_page != self.settings_page {
+            self.recording = lbm_ui::shortcut::Recording::No;
+        }
+        self.settings_open = settings_open;
+        self.settings_page = settings_page;
+        for (id, edit) in inline_edits {
+            if let Some(layout) = self.layout.as_mut() {
+                match lbm_app::properties::apply(layout, &self.detected, &id, edit) {
+                    Ok(()) => {
+                        self.selected = Some(id);
+                        self.property_error = None;
+                        self.screens = screens_of(layout, self.mode);
+                        self.probe.want(None, std::time::Instant::now());
+                    }
+                    Err(error) => self.property_error = Some(error),
+                }
+            }
+        }
         if let Some(action) = section_action {
             self.section_edit(action);
         }
-        self.adjust_scale = adjust_scale;
-        if let Some(action) = output_action {
-            self.output_action(action);
+        let excluded_changed = excluded_did.is_some_and(|did| self.excluded_edit(did));
+        if save_options || excluded_changed {
+            if let Some(before) = &options_before {
+                self.save_options(before, excluded_changed);
+            }
         }
-        if dry_run {
-            self.dry_run_topology();
-        }
-        if apply {
-            self.apply_topology();
-        }
-        if let Some(did) = excluded_did {
-            save_options |= self.excluded_edit(did);
-        }
-        if save_options {
-            self.save_options();
-        }
+        lbm_ui::about::window(&ctx, &mut self.about_open, env!("CARGO_PKG_VERSION"));
         self.topology_report(&ctx);
         self.acted_on_the_map(acted.0, acted.1, &ctx);
         self.screen_overlay_tick(&ctx, acted.1);
@@ -2357,6 +2592,126 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[test]
+    fn placement_import_can_be_undone_and_export_sends_current_edits() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[
+                lbm_layout::linux::LinuxMonitor::fallback(),
+                lbm_layout::linux::LinuxMonitor {
+                    connector_name: "DP-2".into(),
+                    logical_x: 1920.,
+                    primary: false,
+                    ..lbm_layout::linux::LinuxMonitor::fallback()
+                },
+            ],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let monitor = layout.monitors()[1].id.clone();
+        layout.set_location(&monitor, lbm_layout::geo::Point::new(123., 456.));
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.layout = Some(Box::new(layout));
+        let (requests, incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        app.refresh = Default::default();
+        assert_eq!(app.placement_blocked(), None);
+        app.place_from_system();
+        assert!(app.dirty());
+        assert_ne!(
+            app.layout
+                .as_ref()
+                .unwrap()
+                .monitor(&monitor)
+                .unwrap()
+                .location(),
+            lbm_layout::geo::Point::new(123., 456.)
+        );
+        assert!(incoming.is_empty(), "Import only edits the local document");
+        app.saved
+            .as_ref()
+            .unwrap()
+            .restore(app.layout.as_mut().unwrap());
+        assert!(!app.dirty());
+        app.place_from_system();
+        let expected = lbm_app::settings::document(app.layout.as_ref().unwrap());
+        app.placement.adjust_scale = true;
+        app.apply_topology();
+        let mut incoming = incoming;
+        let (id, method, fields) = incoming.try_recv().unwrap();
+        assert_eq!(method, "ApplyTopology");
+        assert_eq!(fields["AdjustScale"], true);
+        assert_eq!(fields["Document"], serde_json::to_value(expected).unwrap());
+        assert_eq!(app.topology_pending, Some(id));
+        assert!(app.dirty(), "Sending is not acknowledgement");
+        app.agent_said(Message::Answer {
+            id,
+            result: Ok(serde_json::json!({"Commands": [], "DryRun": false})),
+        });
+        assert!(app.topology_pending.is_none());
+        assert!(
+            !app.dirty(),
+            "Successful apply saved exactly the sent layout"
+        );
+    }
+
+    #[test]
+    fn only_location_accepts_monitor_dragging_and_other_modes_keep_selection() {
+        use lbm_ui::mode::Mode;
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[lbm_layout::linux::LinuxMonitor::fallback()],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let id = layout.monitors()[0].id.clone();
+        let before = lbm_store::LayoutDocument::of(&layout);
+        app.layout = Some(Box::new(layout));
+        for mode in std::iter::once(Mode::Default).chain(Mode::ALL) {
+            if mode == Mode::Location {
+                continue;
+            }
+            app.mode = Mode::Location;
+            app.acted_on_the_map(
+                Some(Did::Dragged {
+                    id: id.clone(),
+                    by: egui::vec2(80., 40.),
+                }),
+                None,
+                &ctx,
+            );
+            assert!(app.drag.is_some());
+            app.mode = mode;
+            app.acted_on_the_map(
+                Some(Did::Dropped { id: id.clone() }),
+                Some((80., 40.)),
+                &ctx,
+            );
+            assert!(app.drag.is_none());
+            assert_eq!(
+                before,
+                lbm_store::LayoutDocument::of(app.layout.as_ref().unwrap())
+            );
+            app.acted_on_the_map(
+                Some(Did::Dragged {
+                    id: id.clone(),
+                    by: egui::vec2(80., 40.),
+                }),
+                None,
+                &ctx,
+            );
+            assert!(app.drag.is_none(), "{mode:?} accepted a monitor drag");
+            app.selected = None;
+            app.acted_on_the_map(Some(Did::Clicked(id.clone())), None, &ctx);
+            assert_eq!(app.selected.as_ref(), Some(&id));
+        }
+    }
     use lbm_app::session::Event;
     use serde_json::json;
 
@@ -2383,7 +2738,7 @@ mod lifecycle_tests {
                         lbm_layout::model::LayoutSource::VirtualImport
                 }
                 3 => app.agent.suspended = true,
-                4 => app.view = View::Settings,
+                4 => app.settings_open = true,
                 5 => input.events.push(egui::Event::Key {
                     key: egui::Key::Escape,
                     physical_key: None,
@@ -2462,6 +2817,86 @@ mod lifecycle_tests {
         assert_eq!(
             document,
             lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+    }
+
+    #[test]
+    fn location_properties_load_outputs_but_only_show_the_selected_monitor() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1100., 800.),
+            )),
+            ..Default::default()
+        };
+        app.mode = lbm_ui::mode::Mode::Size;
+        let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
+        output.textures_delta.clear();
+        assert!(incoming.try_recv().is_err());
+        app.mode = lbm_ui::mode::Mode::Location;
+        let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
+        output.textures_delta.clear();
+        let (id, method, _) = incoming.try_recv().unwrap();
+        assert_eq!(method, "DisplayOutputs");
+        let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
+        output.textures_delta.clear();
+        assert!(
+            incoming.try_recv().is_err(),
+            "do not poll an outstanding read"
+        );
+        app.outputs.answered(
+            id,
+            &Ok(json!({"Signature":"live", "Outputs":[
+                {"Connector":"HDMI-1", "Name":"Detached screen", "Enabled":false, "Primary":false}
+            ]})),
+        );
+        assert!(app.selected.is_none());
+        assert!(app.layout.is_none());
+        let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!text.contains("System display"), "{text}");
+        assert!(!text.contains("Attach"), "{text}");
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[lbm_layout::linux::LinuxMonitor {
+                connector_name: "HDMI-1".into(),
+                ..lbm_layout::linux::LinuxMonitor::fallback()
+            }],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        app.selected = Some(layout.monitors()[0].id.clone());
+        app.layout = Some(Box::new(layout));
+        let mut output = ctx.run_ui(input(), |ui| app.properties(ui));
+        output.textures_delta.clear();
+        assert_eq!(app.outputs.panel.selected.as_deref(), Some("HDMI-1"));
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("Detached screen · HDMI-1"), "{text}");
+        assert!(
+            incoming.try_recv().is_err(),
+            "viewing the panel must never change an output"
         );
     }
 
@@ -2656,7 +3091,7 @@ mod lifecycle_tests {
         );
         app.wallpaper_preview_requested = false;
         let choice = app.wallpaper.choose_file(None).unwrap();
-        app.view = View::Settings;
+        app.settings_open = true;
         app.wallpaper_picking = true;
         app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
         assert!(!app.wallpaper_picking);
@@ -2710,11 +3145,17 @@ mod lifecycle_tests {
         assert!(!app.wallpaper_preview_requested);
         assert_eq!(image_of(&app, "A"), None);
 
-        // The same round trip through another view.
+        // The same round trip through another view, and through the settings drawer.
         let choice = app.begin_file_choice().unwrap();
-        app.view = View::Settings;
+        app.view = View::List;
         app.retire_departed_file_choice();
         app.view = View::Map;
+        app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
+        assert_eq!(image_of(&app, "A"), None);
+        let choice = app.begin_file_choice().unwrap();
+        app.settings_open = true;
+        app.retire_departed_file_choice();
+        app.settings_open = false;
         app.wallpaper_file_chosen(choice, Ok(Some("/images/late.png".into())));
         assert_eq!(image_of(&app, "A"), None);
 

@@ -4,26 +4,8 @@
 //! every frame to the same `ContentViewMode`, so choosing "Location" turns all of them at
 //! once.
 //!
-//! # Why this is a closed set, and why that is not a product decision
-//!
-//! In C# a mode is contributed by a **plugin**: `ViewMode` (`IView.cs:28`) is an empty
-//! abstract class, each mode an empty subclass, and the type itself is the identity.
-//! Plugins register one with `AddViewModeButton<T>(id, icon, tooltip)`, discovered by
-//! scanning assemblies for `Bootloader` subclasses (`Program.cs:249-264`). Replacing that
-//! with an `enum` looks like it decides which plugins survive the port.
-//!
-//! It does not, and the survey is what settles it: **there are exactly seven
-//! registrations, and all seven are in this repository** — About, Info, Location, Border
-//! resistance, Size, Vcp control, Wallpaper. Every one of them ships in the app's own
-//! solution, is compiled into it, and is loaded by scanning the app's own DLLs. There is
-//! no third-party plugin, no published extension point, nothing outside that the
-//! mechanism serves. It is an internal indirection over a list this repository owns.
-//!
-//! So the enum is that list. What is genuinely a product decision — which of these
-//! features get ported, and when — is a different question, and it is answered here by
-//! [`Offered`] rather than by deleting a variant: a mode the port has not reached yet is
-//! **shown and disabled, saying so**. A bar of what is missing is worth more than a bar
-//! that pretends the missing things never existed.
+//! The six monitor modes retain the original plugin order. About is a separate
+//! application window, available at the right end of the toolbar.
 //!
 //! Two C# behaviours worth keeping, both easy to miss because neither is declared:
 //!
@@ -47,7 +29,6 @@ pub enum Mode {
     /// no button selects it — it is what the bar goes back to.
     #[default]
     Default,
-    About,
     Info,
     Location,
     Resistance,
@@ -57,9 +38,8 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// The seven that have a button, in the order the shipped app shows them.
-    pub const ALL: [Mode; 7] = [
-        Mode::About,
+    /// The six that have a button, in the order the shipped app shows them.
+    pub const ALL: [Mode; 6] = [
         Mode::Info,
         Mode::Location,
         Mode::Resistance,
@@ -73,7 +53,6 @@ impl Mode {
     pub fn id(self) -> &'static str {
         match self {
             Mode::Default => "default",
-            Mode::About => "about",
             Mode::Info => "info",
             Mode::Location => "location",
             Mode::Resistance => "resistance",
@@ -83,13 +62,10 @@ impl Mode {
         }
     }
 
-    /// What the button says. In C# the buttons are icon-only and this is the tooltip —
-    /// the only human-readable name a mode has. Here it is on the button itself, until
-    /// the icons are ported: a row of unlabelled glyphs is worse than a row of words.
+    /// The icon button's accessible name and tooltip title.
     pub fn label(self) -> &'static str {
         match self {
             Mode::Default => "Screens",
-            Mode::About => "About",
             Mode::Info => "Info",
             Mode::Location => "Location",
             Mode::Resistance => "Border resistance",
@@ -103,7 +79,6 @@ impl Mode {
     pub fn about(self) -> &'static str {
         match self {
             Mode::Default => "The screens as they look: the name and the maker's logo.",
-            Mode::About => "This app's version, and what identifies each screen.",
             Mode::Info => "Detected display details and the current layout values.",
             Mode::Location => "Where each screen is, how big it is, and at what pitch.",
             Mode::Resistance => {
@@ -140,7 +115,7 @@ pub struct Offered {
 pub fn why_not(mode: Mode, offered: &Offered) -> Option<&'static str> {
     match mode {
         // What the window can draw today.
-        Mode::Default | Mode::About | Mode::Location | Mode::Size | Mode::Info => None,
+        Mode::Default | Mode::Location | Mode::Size | Mode::Info => None,
         Mode::Vcp if !offered.vcp_enabled => {
             Some("VCP control is off in the settings — turn it on to see this")
         }
@@ -166,26 +141,84 @@ pub fn bar(ui: &mut egui::Ui, current: Mode, offered: &Offered) -> Option<Mode> 
     if why_not(current, offered).is_some() {
         return Some(Mode::Default);
     }
-    let mut chosen = None;
     ui.horizontal_wrapped(|ui| {
-        for mode in Mode::ALL {
-            let unavailable = why_not(mode, offered);
-            let on = current == mode;
-            let button = ui.add_enabled(
-                unavailable.is_none(),
-                egui::Button::selectable(on, mode.label()),
-            );
-            let button = match unavailable {
-                Some(why) => button.on_disabled_hover_text(why),
-                None => button.on_hover_text(mode.about()),
-            };
-            if button.clicked() {
-                // The toggle that behaves like a radio group: pressing the one that is
-                // already on turns it off, which means back to the default.
-                chosen = Some(if on { Mode::Default } else { mode });
-            }
+        ui.spacing_mut().item_spacing.x = 4.0;
+        buttons(ui, current, offered)
+    })
+    .inner
+}
+
+/// Settings and monitor modes in the main toolbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolbarAction {
+    Options,
+    About,
+    Mode(Mode),
+}
+
+/// Options, six mode toggles and a right-aligned About button; the view switch lives beside the monitor combo.
+pub fn toolbar(
+    ui: &mut egui::Ui,
+    current: Mode,
+    offered: &Offered,
+    options: bool,
+) -> Option<ToolbarAction> {
+    use crate::toolbar::{self, Icon};
+    let mut chosen = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        let left_width = (ui.available_width() - 44.0).max(0.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(left_width, 40.0),
+            egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+            |ui| {
+                ui.set_min_width(left_width);
+                if toolbar::button(ui, Icon::Options, "Settings", options, true)
+                    .on_hover_text("Options")
+                    .clicked()
+                {
+                    chosen = Some(ToolbarAction::Options);
+                }
+                toolbar::separator(ui);
+                if let Some(mode) = buttons(ui, current, offered) {
+                    chosen = Some(ToolbarAction::Mode(mode));
+                }
+            },
+        );
+        if toolbar::button(ui, Icon::About, "About", false, true)
+            .on_hover_text("About Little Big Mouse")
+            .clicked()
+        {
+            chosen = Some(ToolbarAction::About);
         }
     });
+    chosen
+}
+
+fn buttons(ui: &mut egui::Ui, current: Mode, offered: &Offered) -> Option<Mode> {
+    let mut chosen = why_not(current, offered).map(|_| Mode::Default);
+    for mode in Mode::ALL {
+        let unavailable = why_not(mode, offered);
+        let on = current == mode;
+        use crate::toolbar::{self, Icon};
+        let icon = match mode {
+            Mode::Default => Icon::About,
+            Mode::Info => Icon::Info,
+            Mode::Location => Icon::Location,
+            Mode::Resistance => Icon::Resistance,
+            Mode::Size => Icon::Size,
+            Mode::Vcp => Icon::Vcp,
+            Mode::Wallpaper => Icon::Wallpaper,
+        };
+        let button = toolbar::button(ui, icon, mode.label(), on, unavailable.is_none());
+        let tooltip = format!("{}\n{}", mode.label(), unavailable.unwrap_or(mode.about()));
+        let button = button
+            .on_hover_text(&tooltip)
+            .on_disabled_hover_text(&tooltip);
+        if button.clicked() {
+            chosen = Some(if on { Mode::Default } else { mode });
+        }
+    }
     chosen
 }
 
@@ -216,7 +249,7 @@ mod tests {
     #[test]
     fn the_default_has_no_button() {
         assert!(!Mode::ALL.contains(&Mode::Default));
-        assert_eq!(Mode::ALL.len(), 7, "the seven the C# registers, no more");
+        assert_eq!(Mode::ALL.len(), 6, "About belongs to its own window");
     }
 
     #[test]
@@ -232,9 +265,6 @@ mod tests {
             vcp_enabled: true,
             ..nothing
         };
-        assert!(
-            why_not(Mode::Vcp, &on).unwrap().contains("not ported"),
-            "with the setting on, what is left to say is that the port has not reached it"
-        );
+        assert!(why_not(Mode::Vcp, &on).unwrap().contains("not ported"));
     }
 }

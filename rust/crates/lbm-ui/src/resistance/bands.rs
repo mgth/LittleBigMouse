@@ -153,6 +153,7 @@ fn mm(at: egui::Pos2, band: egui::Rect, side: Side, length: f64) -> f64 {
 pub(super) struct Gesture {
     monitor: String,
     side: Side,
+    external: bool,
     expected: Vec<BorderSection>,
     grab: Grab,
     press: f64,
@@ -339,6 +340,98 @@ impl Editor {
         }
         responses
     }
+    pub fn external_active(&self) -> bool {
+        self.gesture.as_ref().is_some_and(|g| g.external)
+    }
+
+    /// The real-screen windows use exactly the map's snapping, gap and resize rules.
+    pub fn external(
+        &mut self,
+        monitors: &[Monitor],
+        pointer: ExternalPointer<'_>,
+        phase: ExternalPhase,
+    ) -> Option<Action> {
+        let m = monitors.iter().find(|m| m.id == pointer.monitor)?;
+        let side = pointer.side;
+        let length = side.length(m.bounds);
+        if !length.is_finite() || length <= 0. || pointer.length <= 0. {
+            return None;
+        }
+        let scale = pointer.length / length;
+        let at = pointer.at / scale;
+        let sections = side.sections(&m.resistance);
+        if self.gesture.as_ref().is_some_and(|g| {
+            g.external
+                && (g.monitor != m.id
+                    || g.side != side
+                    || g.expected != sections
+                    || g.bounds != m.bounds)
+        }) {
+            self.cancel();
+        }
+        if phase == ExternalPhase::Delete {
+            return self
+                .selected
+                .as_ref()
+                .filter(|s| s.monitor == m.id && s.side == side)
+                .map(|s| Action::new(m, side, Edit::Delete(s.index)));
+        }
+        let grab = geometry::grab(sections, at, scale, length, pointer.thickness);
+        if matches!(phase, ExternalPhase::Press | ExternalPhase::Expand) {
+            self.selected = grab.index().map(|index| Selection {
+                monitor: m.id.clone(),
+                side,
+                index,
+            });
+            self.side = side;
+        }
+        if phase == ExternalPhase::Expand {
+            self.cancel();
+            let span = geometry::gap(sections, grab.index(), at, length);
+            if span.length() < geometry::MIN_LENGTH {
+                return None;
+            }
+            let edit = if let Some(index) = grab.index() {
+                Edit::Replace {
+                    index,
+                    section: span.section(sections[index]),
+                }
+            } else {
+                Edit::Insert(span.section(super::new_section()))
+            };
+            return Some(Action::new(m, side, edit));
+        }
+        if phase == ExternalPhase::Press {
+            let original = grab
+                .index()
+                .map(|i| sections[i])
+                .unwrap_or_else(super::new_section);
+            let targets = geometry::targets(monitors, &m.id, side, grab.index());
+            self.gesture = Some(Gesture {
+                monitor: m.id.clone(),
+                side,
+                external: true,
+                expected: sections.to_vec(),
+                grab,
+                press: at,
+                anchor: geometry::snap(at, length, 8. / scale, &targets, pointer.snap),
+                original,
+                preview: grab.index().map(|_| original),
+                band: egui::Rect::NOTHING,
+                bounds: m.bounds,
+                guide: None,
+            });
+        } else if let Some(g) = self.gesture.as_mut().filter(|g| g.external) {
+            let targets = geometry::references(monitors, &m.id, side, g.grab.index());
+            g.update(at, length, scale, &targets, pointer.snap);
+            if phase == ExternalPhase::Release {
+                let action = g.action();
+                self.cancel();
+                return action;
+            }
+        }
+        None
+    }
     /// The uncommitted gesture, for drawing on a copy of the layout on real screens.
     pub fn preview_action(&self) -> Option<Action> {
         self.gesture.as_ref().and_then(Gesture::action)
@@ -363,7 +456,11 @@ impl Editor {
         placements: &[(String, egui::Rect)],
     ) -> Interaction {
         let mut result = Interaction::default();
-        if !ui.is_enabled() || ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
+        if !ui.is_enabled()
+            || ui.input(|i| {
+                i.key_pressed(egui::Key::Escape) || (!i.focused && !self.external_active())
+            })
+        {
             self.cancel();
         }
         if let Some(g) = &self.gesture {
@@ -373,10 +470,11 @@ impl Editor {
                 .is_some_and(|m| {
                     g.side.sections(&m.resistance) == g.expected && m.bounds == g.bounds
                 })
-                && placements
-                    .iter()
-                    .find(|(id, _)| *id == g.monitor)
-                    .is_some_and(|(_, r)| band(*r, g.side) == g.band);
+                && (g.external
+                    || placements
+                        .iter()
+                        .find(|(id, _)| *id == g.monitor)
+                        .is_some_and(|(_, r)| band(*r, g.side) == g.band));
             if !valid {
                 self.cancel();
             }
@@ -439,6 +537,7 @@ impl Editor {
                         self.gesture = Some(Gesture {
                             monitor: id.clone(),
                             side,
+                            external: false,
                             expected: sections.to_vec(),
                             grab,
                             press: raw,
@@ -459,13 +558,15 @@ impl Editor {
                     .filter(|g| g.monitor == *id && g.side == side)
                 {
                     let targets = geometry::references(monitors, id, side, g.grab.index());
-                    g.guide = None;
-                    if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                        g.update(mm(pos, rect, side, length), length, scale, &targets, snap);
+                    if !g.external {
+                        g.guide = None;
+                        if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+                            g.update(mm(pos, rect, side, length), length, scale, &targets, snap);
+                        }
                     }
                     preview = g.preview;
                     replacing = g.grab.index();
-                    if response.drag_stopped_by(egui::PointerButton::Primary) {
+                    if !g.external && response.drag_stopped_by(egui::PointerButton::Primary) {
                         result.action = g.action();
                     }
                 }
@@ -507,7 +608,7 @@ impl Editor {
             }
             paint(ui, &drawn);
         }
-        if ui.input(|i| !i.pointer.primary_down()) {
+        if !self.external_active() && ui.input(|i| !i.pointer.primary_down()) {
             self.cancel();
         }
         if let Some(guide) = self.guide() {

@@ -24,6 +24,7 @@ enum Command {
 #[derive(Debug, Serialize, Deserialize)]
 enum Reply {
     Ready,
+    Input(crate::input::Input),
     Error(String),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -233,6 +234,9 @@ pub fn run_host() -> i32 {
             if let Some(bands) = latest {
                 backend.present(&bands)?;
                 report(Reply::Ready);
+            }
+            for input in backend.take_input() {
+                report(Reply::Input(input));
             }
             mail.lock().unwrap().progress = Some(Instant::now());
             std::thread::sleep(Duration::from_millis(10));

@@ -1,5 +1,6 @@
 //! Native layered windows, owned and updated on egui's UI thread.
 use crate::{
+    input::{Capture, Input, Kind},
     raster,
     scene::{self, Band, Binding, Pixels},
     Backend,
@@ -19,7 +20,7 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::LibraryLoader::GetModuleHandleW,
-        UI::{HiDpi::*, WindowsAndMessaging::*},
+        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
 };
 
@@ -57,19 +58,90 @@ impl Drop for Dpi {
         }
     }
 }
+thread_local! {
+    static BANDS: std::cell::RefCell<std::collections::HashMap<isize,Band>> = Default::default();
+    static INPUT: std::cell::RefCell<Vec<Input>> = Default::default();
+    static CAPTURE: std::cell::Cell<Capture> = Default::default();
+}
+fn capture<T>(change: impl FnOnce(&mut Capture) -> T) -> T {
+    CAPTURE.with(|cell| {
+        let mut capture = cell.get();
+        let result = change(&mut capture);
+        cell.set(capture);
+        result
+    })
+}
 unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    let band = BANDS.with(|b| b.borrow().get(&(hwnd.0 as isize)).cloned());
+    let interactive = band
+        .as_ref()
+        .is_some_and(|b| !matches!(b.content, crate::scene::Content::Guide { .. }));
     match message {
-        WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
-        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_NCHITTEST => LRESULT(if interactive {
+            HTCLIENT as isize
+        } else {
+            HTTRANSPARENT as isize
+        }),
+        WM_MOUSEACTIVATE => LRESULT(if interactive {
+            MA_ACTIVATE
+        } else {
+            MA_NOACTIVATE
+        } as isize),
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
-            // Never keep a ruler visible in coordinates Windows just invalidated.
             INVALIDATED.store(true, Ordering::Release);
             let _ = ShowWindow(hwnd, SW_HIDE);
+            LRESULT(0)
+        }
+        WM_LBUTTONDOWN | WM_LBUTTONUP | WM_MOUSEMOVE | WM_MOUSEWHEEL | WM_KEYDOWN
+        | WM_CAPTURECHANGED
+            if interactive =>
+        {
+            let mut point = POINT {
+                x: (l.0 as u16 as i16).into(),
+                y: ((l.0 >> 16) as u16 as i16).into(),
+            };
+            let kind = match message {
+                WM_LBUTTONDOWN => {
+                    SetCapture(hwnd);
+                    capture(Capture::press);
+                    Some(Kind::Press)
+                }
+                WM_LBUTTONUP => {
+                    capture(Capture::release);
+                    Some(Kind::Release)
+                }
+                WM_MOUSEMOVE if GetCapture() == hwnd => Some(Kind::Move),
+                WM_MOUSEWHEEL => {
+                    let _ = ScreenToClient(hwnd, &mut point);
+                    Some(Kind::Wheel(f64::from((w.0 >> 16) as u16 as i16) / 120.))
+                }
+                WM_KEYDOWN if w.0 == usize::from(VK_ESCAPE.0) => Some(Kind::Escape),
+                WM_KEYDOWN if w.0 == usize::from(VK_DELETE.0) => Some(Kind::Delete),
+                WM_CAPTURECHANGED => capture(Capture::lost),
+                _ => None,
+            };
+            if let (Some(kind), Some(band)) = (kind, band) {
+                INPUT.with(|q| {
+                    q.borrow_mut().push(Input::new(
+                        &band,
+                        kind,
+                        (point.x.into(), point.y.into()),
+                        band.scale,
+                        GetMessageTime() as u32,
+                        GetKeyState(i32::from(VK_CONTROL.0)) < 0,
+                        GetKeyState(i32::from(VK_SHIFT.0)) < 0,
+                    ))
+                });
+            }
+            if message == WM_LBUTTONUP {
+                let _ = ReleaseCapture();
+            }
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, message, w, l),
     }
 }
+
 fn register() -> Result<(), String> {
     static CLASS_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
     CLASS_RESULT
@@ -159,7 +231,13 @@ impl Window {
         // SAFETY: the registered callback and static strings remain valid; no borrowed userdata.
         let hwnd = unsafe {
             CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+                WS_EX_LAYERED
+                    | WS_EX_TOOLWINDOW
+                    | if matches!(band.content, crate::scene::Content::Guide { .. }) {
+                        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+                    } else {
+                        WINDOW_EX_STYLE::default()
+                    },
                 CLASS,
                 w!("LittleBigMouse screen overlay"),
                 WS_POPUP,
@@ -249,6 +327,7 @@ impl Window {
                 return Err("Windows did not grant the requested overlay pixel bounds.".into());
             }
         }
+        BANDS.with(|b| b.borrow_mut().insert(self.hwnd.0 as isize, band.clone()));
         self.shown = Some(band.clone());
         Ok(())
     }
@@ -257,6 +336,7 @@ impl Drop for Window {
     fn drop(&mut self) {
         unsafe {
             let _ = DestroyWindow(self.hwnd);
+            BANDS.with(|b| b.borrow_mut().remove(&(self.hwnd.0 as isize)));
         }
     }
 }
@@ -268,6 +348,9 @@ pub struct Native {
     _ui_thread: PhantomData<Rc<()>>,
 }
 impl Backend for Native {
+    fn take_input(&mut self) -> Vec<Input> {
+        INPUT.with(|q| std::mem::take(&mut *q.borrow_mut()))
+    }
     fn present(&mut self, bands: &[Band]) -> Result<(), String> {
         if self.owner.is_invalid() {
             return Err("No frontend window to own the screen overlays.".into());
@@ -300,6 +383,7 @@ impl Backend for Native {
     }
     fn clear(&mut self) {
         self.windows.clear();
+        INPUT.with(|q| q.borrow_mut().clear());
         INVALIDATED.store(false, Ordering::Release);
     }
     fn invalidated(&mut self) -> bool {

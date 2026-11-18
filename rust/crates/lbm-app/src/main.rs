@@ -138,6 +138,7 @@ struct App {
     property_error: Option<String>,
     resistance: lbm_ui::resistance::Editor,
     screen_overlay: lbm_overlay::Overlay,
+    screen_input: lbm_app::screen_input::Controller,
     screen_overlay_mode: lbm_overlay::Mode,
     screen_overlay_error: Option<String>,
     next_screen_overlay: std::time::Instant,
@@ -500,6 +501,7 @@ impl App {
             property_error: None,
             resistance: lbm_ui::resistance::Editor::default(),
             screen_overlay: Default::default(),
+            screen_input: Default::default(),
             screen_overlay_mode: Default::default(),
             screen_overlay_error: None,
             next_screen_overlay: std::time::Instant::now(),
@@ -1505,7 +1507,8 @@ impl App {
         let enabled = !layout.is_virtual()
             && !self.refresh.pending()
             && !(self.outputs.changing() || self.topology_pending.is_some())
-            && self.drag.is_none();
+            && self.drag.is_none()
+            && !self.screen_input.active();
         let mut picked = None;
         for (id, drawn) in placements {
             if matches!(self.mode, Mode::Info | Mode::Location) {
@@ -1946,6 +1949,76 @@ impl App {
         }
     }
 
+    fn screen_overlay_input(&mut self) {
+        let allowed = !self.settings_open
+            && self.requests.is_some()
+            && !self.refresh.pending()
+            && !(self.outputs.changing() || self.topology_pending.is_some())
+            && !self.agent.suspended
+            && matches!(self.view, View::Map | View::List)
+            && self.screen_overlay_mode != lbm_overlay::Mode::Off;
+        for input in self.screen_overlay.take_input() {
+            if !allowed {
+                break;
+            }
+            let Some(layout) = self.layout.as_mut() else {
+                break;
+            };
+            let valid = lbm_overlay::scene::from_layout(
+                layout,
+                self.screen_overlay_mode,
+                self.selected.as_deref(),
+            )
+            .is_ok_and(|bands| {
+                bands.iter().any(|b| {
+                    b.monitor == input.band.monitor
+                        && b.connector == input.band.connector
+                        && b.screen == input.band.screen
+                        && b.side == input.band.side
+                        && std::mem::discriminant(&b.content)
+                            == std::mem::discriminant(&input.band.content)
+                })
+            });
+            if !valid {
+                self.screen_input.cancel(&mut self.resistance);
+                continue;
+            }
+            match self
+                .screen_input
+                .handle(layout, &mut self.resistance, input)
+            {
+                Ok(out) => {
+                    if out.hide {
+                        self.screen_overlay_mode = lbm_overlay::Mode::Off;
+                        break;
+                    }
+                    if let Some(id) = out.selected {
+                        self.selected = Some(id);
+                    }
+                    if out.changed {
+                        self.probe.want(None, std::time::Instant::now());
+                        self.property_error = None;
+                    }
+                }
+                Err(error) => {
+                    self.property_error = Some(error);
+                    self.screen_input.cancel(&mut self.resistance);
+                }
+            }
+            self.screens = screens_of(self.screen_input.preview().unwrap_or(layout), self.mode);
+            self.next_screen_overlay = std::time::Instant::now();
+        }
+        if !allowed {
+            let active = self.screen_input.active();
+            self.screen_input.cancel(&mut self.resistance);
+            if active {
+                if let Some(layout) = &self.layout {
+                    self.screens = screens_of(layout, self.mode);
+                }
+            }
+        }
+    }
+
     fn screen_overlay_tick(&mut self, ctx: &egui::Context, movement: Option<(f64, f64)>) {
         use lbm_overlay::Mode;
         if self.settings_open
@@ -1961,6 +2034,13 @@ impl App {
             self.screen_overlay_mode = Mode::Off;
         }
         if self.screen_overlay_mode == Mode::Off {
+            let active = self.screen_input.active();
+            self.screen_input.cancel(&mut self.resistance);
+            if active {
+                if let Some(layout) = &self.layout {
+                    self.screens = screens_of(layout, self.mode);
+                }
+            }
             self.screen_overlay.clear();
             return;
         }
@@ -1972,7 +2052,11 @@ impl App {
         }
         self.next_screen_overlay = now + std::time::Duration::from_millis(50);
         // Rendering follows local gestures; Save/Live only see the original committed layout.
-        let mut drawn = self.layout.as_deref().unwrap().clone();
+        let mut drawn = self
+            .screen_input
+            .preview()
+            .unwrap_or(self.layout.as_deref().unwrap())
+            .clone();
         if let Some(action) = self.resistance.preview_action() {
             let _ = lbm_app::resistance::apply(&mut drawn, action);
         }
@@ -1989,7 +2073,18 @@ impl App {
             self.selected.as_deref(),
             reference,
         )
-        .and_then(|bands| self.screen_overlay.sync(&bands));
+        .and_then(|mut bands| {
+            if let Some(selected) = &self.resistance.selected {
+                for band in &mut bands {
+                    if band.monitor == selected.monitor
+                        && lbm_app::screen_input::side(band.side) == selected.side
+                    {
+                        band.selected = Some(selected.index);
+                    }
+                }
+            }
+            self.screen_overlay.sync(&bands)
+        });
         if let Err(error) = result {
             self.screen_overlay.clear();
             self.screen_overlay_mode = Mode::Off;
@@ -2217,6 +2312,7 @@ impl eframe::App for App {
 
         self.read_displays(&ctx, false);
         self.sync_wallpaper(&ctx);
+        self.screen_overlay_input();
         if self.refresh.pending() && !self.dirty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }

@@ -723,3 +723,39 @@ fn both_halves_of_every_mitre_resize_their_own_edge_and_keep_capture() {
         }
     }
 }
+
+#[test]
+fn real_screen_gesture_survives_map_focus_loss_and_uses_the_same_snap_guide() {
+    use r::{ExternalPhase, ExternalPointer};
+    let editor = RefCell::new(Editor::default());
+    let monitors = RefCell::new(vec![monitor("a", 0., 0.)]);
+    let pointer = |at| ExternalPointer {
+        monitor: "a",
+        side: Side::Right,
+        at,
+        length: 600.,
+        thickness: 40.,
+        snap: true,
+    };
+    editor
+        .borrow_mut()
+        .external(&monitors.borrow(), pointer(100.), ExternalPhase::Press);
+    editor
+        .borrow_mut()
+        .external(&monitors.borrow(), pointer(298.), ExternalPhase::Move);
+    let actions = RefCell::new(vec![]);
+    let mut h = bands(&editor, &monitors, &actions);
+    h.input_mut().focused = false;
+    h.run();
+    assert!(editor.borrow().external_active());
+    assert_eq!(editor.borrow().guide().unwrap().kind, r::SnapKind::Middle);
+    assert!(actions.borrow().is_empty());
+    let action = editor
+        .borrow_mut()
+        .external(&monitors.borrow(), pointer(298.), ExternalPhase::Release)
+        .unwrap();
+    let Edit::Insert(s) = action.edit else {
+        panic!("insert")
+    };
+    assert_eq!((s.from(), s.to()), (50., 150.));
+}

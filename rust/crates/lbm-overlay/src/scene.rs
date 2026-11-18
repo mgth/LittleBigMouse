@@ -202,6 +202,8 @@ pub struct Band {
     pub axis_mm: f64,
     pub cross_pixels_per_mm: f64,
     pub content: Content,
+    #[serde(default)]
+    pub selected: Option<usize>,
 }
 impl Band {
     pub fn binding(&self) -> Binding {
@@ -382,6 +384,7 @@ pub fn from_layout(
                 screen.height as f64 / bounds.height()
             };
             bands.push(Band {
+                selected: None,
                 monitor: monitor.id.clone(),
                 connector: source
                     .interface_path

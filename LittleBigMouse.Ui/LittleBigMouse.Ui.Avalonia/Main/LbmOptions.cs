@@ -281,6 +281,38 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     }
     string _rescueShortcut = "Ctrl+Alt+Shift+M";
 
+    [DataMember]
+    public bool TouchMouseIndependent
+    {
+        get => _touchMouseIndependent;
+        set => SetUnsavedValue(ref _touchMouseIndependent, value);
+    }
+    bool _touchMouseIndependent;
+
+    [DataMember]
+    public bool TouchAllDisplays
+    {
+        get => _touchAllDisplays;
+        set => SetUnsavedValue(ref _touchAllDisplays, value);
+    }
+    bool _touchAllDisplays = true;
+
+    [DataMember]
+    public string TouchDisplayIds
+    {
+        get => _touchDisplayIds;
+        set => SetUnsavedValue(ref _touchDisplayIds, value ?? "");
+    }
+    string _touchDisplayIds = "";
+
+    [DataMember]
+    public string TouchOverrideModifier
+    {
+        get => _touchOverrideModifier;
+        set => SetUnsavedValue(ref _touchOverrideModifier, value ?? "");
+    }
+    string _touchOverrideModifier = "None";
+
     public ObservableCollection<string> ExcludedList { get; } = new();
 
     public string GetConfigPath(string layoutId, bool create)

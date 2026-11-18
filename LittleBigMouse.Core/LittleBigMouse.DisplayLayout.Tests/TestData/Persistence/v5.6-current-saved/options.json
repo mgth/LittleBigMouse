@@ -12,6 +12,10 @@
   "ShowMonitorActionWarning": false,
   "BorderValues": "PerMonitor",
   "RescueShortcut": "Ctrl\u002BAlt\u002BShift\u002BM",
+  "TouchMouseIndependent": false,
+  "TouchAllDisplays": true,
+  "TouchDisplayIds": "",
+  "TouchOverrideModifier": "None",
   "HideTrayIcon": true,
   "ExcludedDefaultsVersion": 2
 }

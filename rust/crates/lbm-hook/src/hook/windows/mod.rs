@@ -8,7 +8,10 @@
 
 pub mod display;
 pub mod mouse;
+mod native_touch;
 pub mod rescue_key;
+mod touch_contacts;
+mod touch_input;
 pub mod win_events;
 
 use std::sync::atomic::Ordering;
@@ -25,11 +28,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::ipc::protocol;
 use crate::platform;
 use crate::priority::Priority;
-use crate::shared::Shared;
+use crate::shared::{Shared, SHARED};
 
 /// Custom message that unwinds the pump so `run` re-reconciles the hooks
 /// (C++ `WM_BREAK_LOOP = WM_APP + 1`).
 const WM_BREAK_LOOP: u32 = WM_APP + 1;
+/// The touchscreen options changed: adjust to them without rebuilding the hooks.
+const WM_TOUCH_OPTIONS: u32 = WM_APP + 2;
 
 /// Record the pump thread id before the IPC server can accept a command that
 /// would post to it. Must be called from the thread that will call [`run`].
@@ -141,6 +146,7 @@ impl Hooker {
         self.hook_focus();
         self.hook_desktop();
         self.hwnd = display::create_window();
+        apply_touch_options();
     }
 
     /// C++ `Hooker::DoUnhook`.
@@ -156,6 +162,7 @@ impl Hooker {
 
     /// C++ `Hooker::HookMouse`.
     fn hook_mouse(&mut self, shared: &Shared) {
+        mouse::reset();
         match unsafe {
             SetWindowsHookExW(
                 WH_MOUSE_LL,
@@ -266,6 +273,10 @@ fn pump_messages() -> bool {
                 if msg.message == WM_BREAK_LOOP {
                     return true;
                 }
+                if msg.message == WM_TOUCH_OPTIONS {
+                    crate::hook::guard(apply_touch_options);
+                    continue;
+                }
                 unsafe {
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
@@ -273,6 +284,21 @@ fn pump_messages() -> bool {
             }
         }
     }
+}
+
+/// Nothing listens to the touchscreen until the user turns the feature on. Pump
+/// thread only.
+fn apply_touch_options() {
+    let Some(shared) = SHARED.get() else {
+        return;
+    };
+    native_touch::sync(shared.touch_mouse_independent.load(Ordering::SeqCst));
+}
+
+/// A Load may have changed the touchscreen options. A running hook is kept across
+/// a Load, so this cannot wait for the next `do_hook`.
+pub fn touch_options_changed(shared: &Shared) {
+    post(shared, WM_TOUCH_OPTIONS);
 }
 
 /// Ask the pump to install the mouse hook (C++ `Hooker::Hook`).

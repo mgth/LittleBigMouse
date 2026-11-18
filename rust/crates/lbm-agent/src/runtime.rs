@@ -210,7 +210,7 @@ impl<W: AgentWorld> Agent<W> {
                 load_at_startup,
             } => self
                 .world
-                .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
+                .save_options(options.as_deref(), excluded.as_deref(), load_at_startup)
                 .map(|()| {
                     self.tell_shortcut();
                     serde_json::Value::Null

@@ -139,6 +139,14 @@ pub(super) fn serialize(layout: &ZonesLayout) -> String {
         .boolean("LoopY", layout.loop_y)
         .boolean("Virtual", layout.virtual_layout)
         .string("RescueShortcut", Some(&layout.rescue_shortcut))
+        .boolean("TouchMouseIndependent", layout.touch_mouse_independent)
+        .boolean("TouchAllDisplays", layout.touch_all_displays)
+        .string("TouchDisplayIds", Some(&layout.touch_display_ids))
+        .string(
+            "TouchOverrideModifier",
+            Some(&layout.touch_override_modifier),
+        )
+        .string("TouchDisplayBounds", Some(&layout.touch_display_bounds))
         .string("Priority", layout.priority.as_deref())
         .string("PriorityUnhooked", layout.priority_unhooked.as_deref())
         .string("Algorithm", Some(&layout.algorithm))

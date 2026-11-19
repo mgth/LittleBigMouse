@@ -1670,9 +1670,6 @@ impl App {
                 ui.separator();
             }
             self.screen_selector(ui);
-            if self.mode == lbm_ui::mode::Mode::Vcp {
-                self.test_pattern_controls(ui);
-            }
             self.screen_overlay_controls(ui);
             egui::ScrollArea::vertical()
                 .id_salt(("monitor-properties-scroll", self.mode.id()))
@@ -1682,6 +1679,12 @@ impl App {
                         ui.separator();
                     }
                     self.monitor_properties(ui);
+                    // Inside the scrolled part and after the monitor's own controls, so a
+                    // short window still reaches brightness and contrast.
+                    if self.mode == lbm_ui::mode::Mode::Vcp {
+                        ui.separator();
+                        self.test_pattern_controls(ui);
+                    }
                     if location {
                         self.system_display_properties(ui);
                     }
@@ -2282,6 +2285,9 @@ impl App {
         }
         if let Some(error) = &self.test_patterns.error {
             ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        if let Some(note) = &self.test_patterns.note {
+            ui.colored_label(lbm_ui::theme::AMBER, note);
         }
     }
 
@@ -3350,6 +3356,37 @@ mod lifecycle_tests {
         assert_eq!(
             document,
             lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+    }
+
+    #[test]
+    fn a_short_window_still_shows_the_monitor_controls_of_display_lab() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480., 320.),
+                )),
+                ..Default::default()
+            },
+            |ui| app.properties(ui),
+        );
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("Connect to the agent to control the monitor."),
+            "{text}"
         );
     }
 

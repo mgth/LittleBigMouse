@@ -26,6 +26,11 @@ use wayland_client::{
 use wayland_protocols::wp::viewporter::client::{
     wp_viewport::WpViewport, wp_viewporter::WpViewporter,
 };
+use wayland_protocols::xdg::shell::client::{
+    xdg_surface::{self, XdgSurface},
+    xdg_toplevel::{self, XdgToplevel},
+    xdg_wm_base::{self, XdgWmBase},
+};
 #[derive(Default)]
 struct OutputInfo {
     name: Option<String>,
@@ -46,6 +51,9 @@ struct State {
     logical: Option<(i32, i32)>,
     drawn: bool,
     layer: Option<ZwlrLayerSurfaceV1>,
+    xdg: Option<(XdgSurface, XdgToplevel)>,
+    /// A revision received before the first frame, acknowledged once it is shown.
+    unshown: Option<u64>,
     exit: bool,
 }
 
@@ -62,6 +70,8 @@ impl State {
             logical: None,
             drawn: false,
             layer: None,
+            xdg: None,
+            unshown: None,
             exit: false,
         }
     }
@@ -100,8 +110,24 @@ impl State {
         surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
         surface.commit();
         self.drawn = true;
-        println!("READY 0");
+        println!("READY {}", self.first_revision());
         let _ = std::io::stdout().flush();
+    }
+
+    /// What the first frame acknowledges: the settings it was drawn with.
+    fn first_revision(&mut self) -> u64 {
+        self.unshown.take().unwrap_or(0)
+    }
+
+    /// The revision to acknowledge now, or `None` when nothing is on screen yet: an
+    /// owner told READY before the surface is mapped would take the pattern as shown.
+    fn acknowledge(&mut self, revision: u64) -> Option<u64> {
+        if self.drawn {
+            Some(revision)
+        } else {
+            self.unshown = Some(revision);
+            None
+        }
     }
 }
 
@@ -213,6 +239,9 @@ fn main_inner(mut args: impl Iterator<Item = String>) -> Result<i32, Box<dyn std
         pattern: pattern.unwrap_or(crate::Pattern::Contrast),
         ..Default::default()
     });
+    // The PNG call is the C# frontend's: a fullscreen window, as it always was, which
+    // only needs xdg-shell. Patterns are OSDs, and need layer-shell.
+    let window = png_path.is_some();
     let (width, height, pixels) = if pattern.is_some() {
         let mut pixels =
             crate::render_settings(&settings, native.0 as usize, native.1 as usize, false)?;
@@ -250,10 +279,26 @@ fn main_inner(mut args: impl Iterator<Item = String>) -> Result<i32, Box<dyn std
     state.surface = Some(surface.clone());
     state.buffer = Some(buffer);
     state.viewport = viewport;
+    if window {
+        let wm_base: XdgWmBase = globals.bind(&qh, 1..=6, ())?;
+        let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
+        let toplevel = xdg_surface.get_toplevel(&qh, ());
+        toplevel.set_app_id("io.mgth.littlebigmouse.pattern".into());
+        toplevel.set_title("LittleBigMouse test pattern".into());
+        toplevel.set_fullscreen(Some(&output));
+        state.xdg = Some((xdg_surface, toplevel));
+        surface.commit();
+        while !state.exit {
+            queue.blocking_dispatch(&mut state)?;
+        }
+        return Ok(0);
+    }
     state.logical = Some(native);
     // KWin recognizes this namespace as an OSD and skips window animations.
     // Both presentations use it: only stacking and keyboard focus differ.
-    let shell: ZwlrLayerShellV1 = globals.bind(&qh, 1..=4, ())?;
+    let shell: ZwlrLayerShellV1 = globals.bind(&qh, 1..=4, ()).map_err(|_| {
+        "Test patterns need a compositor with the wlr layer-shell protocol (KDE Plasma, Sway, Hyprland…)"
+    })?;
     let layer = shell.get_layer_surface(
         &surface,
         Some(&output),
@@ -299,8 +344,10 @@ fn main_inner(mut args: impl Iterator<Item = String>) -> Result<i32, Box<dyn std
             settings = update.settings;
             state.phase = settings.alternates() && blink_phase();
             present(&state);
-            println!("READY {}", update.revision);
-            let _ = std::io::stdout().flush();
+            if let Some(revision) = state.acknowledge(update.revision) {
+                println!("READY {revision}");
+                let _ = std::io::stdout().flush();
+            }
         }
         let phase = settings.alternates() && blink_phase();
         if state.drawn && state.phase != phase {
@@ -617,3 +664,69 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
     }
 }
 delegate_noop!(State: ignore ZwlrLayerShellV1);
+
+impl Dispatch<XdgWmBase, ()> for State {
+    fn event(
+        _: &mut Self,
+        wm_base: &XdgWmBase,
+        event: xdg_wm_base::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let xdg_wm_base::Event::Ping { serial } = event {
+            wm_base.pong(serial);
+        }
+    }
+}
+
+impl Dispatch<XdgSurface, ()> for State {
+    fn event(
+        state: &mut Self,
+        xdg_surface: &XdgSurface,
+        event: xdg_surface::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let xdg_surface::Event::Configure { serial } = event {
+            xdg_surface.ack_configure(serial);
+            state.commit_content();
+        }
+    }
+}
+
+impl Dispatch<XdgToplevel, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &XdgToplevel,
+        event: xdg_toplevel::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            xdg_toplevel::Event::Configure { width, height, .. } => {
+                if width > 0 && height > 0 {
+                    state.logical = Some((width, height));
+                }
+            }
+            xdg_toplevel::Event::Close => state.exit = true,
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn a_revision_received_before_the_first_frame_is_acknowledged_by_that_frame() {
+        let mut state = State::new();
+        assert_eq!(state.acknowledge(1), None, "nothing is on screen yet");
+        assert_eq!(state.first_revision(), 1);
+        state.drawn = true;
+        assert_eq!(state.acknowledge(2), Some(2));
+        assert_eq!(State::new().first_revision(), 0);
+    }
+}

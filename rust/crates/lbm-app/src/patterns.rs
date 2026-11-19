@@ -32,6 +32,8 @@ pub struct Controller {
     pending: Option<Settings>,
     last_sent: Option<Instant>,
     pub error: Option<String>,
+    /// Why the patterns cover the editor, when it cannot be kept above them.
+    pub note: Option<String>,
 }
 impl Controller {
     pub fn supported() -> bool {
@@ -58,6 +60,7 @@ impl Controller {
         self.raised = false;
         self.settings = None;
         self.pending = None;
+        self.note = None;
     }
     pub fn show(&mut self, targets: &[String], settings: &Settings, ctx: &egui::Context) {
         if targets.is_empty() {
@@ -78,25 +81,31 @@ impl Controller {
         self.pending = None;
         self.raised = false;
         self.error = None;
+        self.note = None;
         self.settings = Some(settings.clone());
         let result = (|| -> Result<(), String> {
+            // Only KWin can keep the editor above them. Elsewhere the patterns are shown
+            // on their own, with the keyboard, and any key or click closes them.
             #[cfg(target_os = "linux")]
             if self.editor.is_none() {
-                self.editor = Some(editor::Guard::new(std::process::id())?);
+                match editor::Guard::new(std::process::id()) {
+                    Ok(guard) => self.editor = Some(guard),
+                    Err(error) => {
+                        self.note = Some(format!(
+                            "{error}. The patterns cover the editor: press a key or click one to close them."
+                        ))
+                    }
+                }
             }
+            #[cfg(target_os = "linux")]
+            let with_editor = self.editor.is_some();
+            #[cfg(not(target_os = "linux"))]
+            let with_editor = false;
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             let config = serde_json::to_string(settings).map_err(|e| e.to_string())?;
             for target in targets {
                 let mut command = Command::new(&exe);
-                command.args([
-                    "--test-pattern-host",
-                    "--owned",
-                    "--with-editor",
-                    "--output",
-                    target,
-                    "--settings",
-                    &config,
-                ]);
+                command.args(host_arguments(target, &config, with_editor));
                 let mut child = command
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
@@ -240,5 +249,35 @@ impl Controller {
     }
 }
 
+/// How one pattern surface is started, as a child of this editor.
+fn host_arguments(target: &str, settings: &str, with_editor: bool) -> Vec<String> {
+    let mut args = vec!["--test-pattern-host".to_owned(), "--owned".to_owned()];
+    if with_editor {
+        args.push("--with-editor".into());
+    }
+    args.extend([
+        "--output".into(),
+        target.into(),
+        "--settings".into(),
+        settings.into(),
+    ]);
+    args
+}
+
 #[cfg(target_os = "linux")]
 pub mod editor;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn without_a_kept_above_editor_the_patterns_take_the_keyboard() {
+        let with = super::host_arguments("DP-1", "{}", true);
+        assert!(with.iter().any(|a| a == "--with-editor"));
+        let without = super::host_arguments("DP-1", "{}", false);
+        assert!(!without.iter().any(|a| a == "--with-editor"));
+        assert_eq!(
+            &without[without.len() - 4..],
+            ["--output", "DP-1", "--settings", "{}"]
+        );
+    }
+}

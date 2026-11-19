@@ -55,7 +55,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y mesa-vulkan-drivers
 
+    # One test at a time. The test binaries that render through lavapipe die at random
+    # with a SIGSEGV when their tests run side by side on this runner: never at the same
+    # test, never with an assertion, and not on a newer Mesa. The cause is not established;
+    # this removes the concurrency they share, for a few seconds of test time.
     - name: Test
+      env:
+        RUST_TEST_THREADS: "1"
       run: cargo test
 
     # What the render actually produced, when it did not match. Without this a snapshot

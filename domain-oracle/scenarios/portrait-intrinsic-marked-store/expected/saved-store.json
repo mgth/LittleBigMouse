@@ -120,6 +120,7 @@
     "FocusKeepApps": "",
     "FocusRestoreApps": "",
     "HideTrayIcon": false,
+    "BoundToAgent": false,
     "ExcludedDefaultsVersion": 2
   }
 }

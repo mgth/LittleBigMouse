@@ -106,7 +106,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DP-0"
+      "PnpName": "DP-0",
+      "IntrinsicSize": true
     },
     "HDMI-0": {
       "Width": 0,
@@ -117,7 +118,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "HDMI-0"
+      "PnpName": "HDMI-0",
+      "IntrinsicSize": true
     }
   }
 }

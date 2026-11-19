@@ -80,7 +80,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "FALLBACK"
+      "PnpName": "FALLBACK",
+      "IntrinsicSize": true
     }
   }
 }

@@ -152,6 +152,7 @@ pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
             size.height(),
             dto.width,
             dto.height,
+            dto.intrinsic_size == Some(true),
         );
         if let Some(w) = width {
             size.set_width(w);
@@ -492,6 +493,9 @@ pub fn to_model_dto(model: &MonitorModel) -> ModelDto {
             ..Default::default()
         }),
         pnp_name: model.pnp_device_name.clone(),
+        // What this version writes is intrinsic: the orientation migration must not
+        // touch it again on the next load (#728, #730).
+        intrinsic_size: Some(true),
         ..Default::default()
     }
 }

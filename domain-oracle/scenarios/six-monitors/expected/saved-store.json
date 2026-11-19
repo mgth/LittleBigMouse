@@ -183,7 +183,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DELL_G2724D"
+      "PnpName": "DELL_G2724D",
+      "IntrinsicSize": true
     },
     "XEC0032": {
       "Width": 598,
@@ -194,7 +195,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "ES-G27F4Q"
+      "PnpName": "ES-G27F4Q",
+      "IntrinsicSize": true
     },
     "ACI27A3": {
       "Width": 597,
@@ -205,7 +207,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "ASUS PB278"
+      "PnpName": "ASUS PB278",
+      "IntrinsicSize": true
     },
     "AUS28B1": {
       "Width": 621,
@@ -216,7 +219,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "ASUS VP28U"
+      "PnpName": "ASUS VP28U",
+      "IntrinsicSize": true
     },
     "DELD0D9": {
       "Width": 527,
@@ -227,7 +231,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DELL P2419H"
+      "PnpName": "DELL P2419H",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

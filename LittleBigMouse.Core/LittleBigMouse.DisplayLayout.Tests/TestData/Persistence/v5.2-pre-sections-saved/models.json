@@ -8,6 +8,7 @@
       "Right": 8,
       "Bottom": 14
     },
-    "PnpName": "Test Monitor 24"
+    "PnpName": "Test Monitor 24",
+    "IntrinsicSize": true
   }
 }

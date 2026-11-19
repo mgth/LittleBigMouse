@@ -105,7 +105,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "eDP-1"
+      "PnpName": "eDP-1",
+      "IntrinsicSize": true
     },
     "DEL42E2": {
       "Width": 597,
@@ -116,7 +117,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "Dell U2724DE"
+      "PnpName": "Dell U2724DE",
+      "IntrinsicSize": true
     },
     "SAM7016": {
       "Width": 1110,
@@ -127,7 +129,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "SAMSUNG"
+      "PnpName": "SAMSUNG",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

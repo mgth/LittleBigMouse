@@ -307,6 +307,10 @@ impl Editor {
 /// The colour a section has on the map, as a small chip beside its text.
 fn swatch(ui: &mut egui::Ui, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(12., 12.), egui::Sense::hover());
+    paint_swatch(ui, rect, color);
+}
+
+fn paint_swatch(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32) {
     let fill = if ui.is_enabled() {
         color
     } else {
@@ -317,9 +321,10 @@ fn swatch(ui: &mut egui::Ui, color: egui::Color32) {
 }
 
 /// The band colours read as chips rather than as a sentence of colour names.
+/// Each chip and its name are one layout item, so they wrap to a new line together.
 fn legend(ui: &mut egui::Ui) {
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(4., 2.);
+        ui.spacing_mut().item_spacing = egui::vec2(10., 2.);
         for (name, color) in [
             ("Moves blocked", MOVES_BLOCKED),
             ("Drags blocked", DRAGS_BLOCKED),
@@ -327,9 +332,21 @@ fn legend(ui: &mut egui::Ui) {
             ("Resistance", RESISTING),
             ("Free", FREE),
         ] {
-            swatch(ui, color);
-            ui.small(name);
-            ui.add_space(6.);
+            let chip = ui.id().with(("legend-chip", name));
+            let shown = egui::AtomLayout::new((
+                egui::Atom::custom(chip, egui::vec2(12., 12.)),
+                egui::RichText::new(name).small(),
+            ))
+            .id(ui.id().with(("legend", name)))
+            .gap(4.)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .show(ui);
+            if let Some(rect) = shown.rect(chip) {
+                paint_swatch(ui, rect, color);
+            }
+            shown.response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), name)
+            });
         }
     });
 }

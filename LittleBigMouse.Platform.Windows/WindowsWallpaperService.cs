@@ -83,22 +83,11 @@ public class WindowsWallpaperService : IWallpaperService
             : null;
 
     /// <summary>
-    /// Writes the screens through the shell's per-monitor wallpaper slots, taking its two
-    /// orders into account.
-    /// <para>
-    /// The shell files an image under the slot of the device path it was written through (the
-    /// <c>TranscodedImageCache_00k</c> entries, in <c>GetMonitorDevicePathAt</c> order) but it
-    /// paints slot <c>k</c> on the k-th monitor of a different order — the primary first, then
-    /// the others. On a layout whose primary is not the first enumerated monitor the two
-    /// orders differ, every image lands one slot off and the desktop shows the screens
-    /// swapped. The editor preview never shows it: it renders the layout, it does not read the
-    /// assignment back.
-    /// </para>
-    /// <para>
-    /// So for slot <c>k</c>: file the image of the monitor the shell paints there, under the
-    /// path that files slot <c>k</c>. Screens left without a slot (no rectangle, a cloned or a
-    /// stale entry) are returned in <paramref name="unresolved"/> for the device-path pass.
-    /// </para>
+    /// Writes the screens through the shell's per-monitor wallpaper slots, using the pairing of
+    /// <see cref="WallpaperSlotOrder"/>: for slot <c>k</c>, file the image of the monitor the
+    /// shell paints there, under the path that files slot <c>k</c>. Screens left without a slot
+    /// (no rectangle, a cloned or a stale entry) are returned in
+    /// <paramref name="unresolved"/> for the device-path pass.
     /// </summary>
     [SupportedOSPlatform("windows")]
     static bool ApplyByMonitorSlots(IDesktopWallpaper desktop, IReadOnlyList<ScreenWallpaper> screens,
@@ -106,8 +95,7 @@ public class WindowsWallpaperService : IWallpaperService
     {
         unresolved = screens.ToList();
 
-        uint count = 0;
-        if (desktop.GetMonitorDevicePathCount(ref count) != HResult.Ok)
+        if (!WallpaperSlotOrder.TryRead(desktop, out var slots))
         {
             // Observed as RPC_X_NULL_REF_POINTER (0x800706F4) from a non-elevated caller.
             Console.Error.WriteLine(
@@ -116,39 +104,15 @@ public class WindowsWallpaperService : IWallpaperService
             return false;
         }
 
-        // Filling slots: device path + rect in the order the shell files the images.
-        var slots = new List<(string DevicePath, WinDef.Rect Rect)>();
-        for (uint i = 0; i < count; i++)
-        {
-            var devicePath = "";
-            WinDef.Rect rect = new();
-            if (desktop.GetMonitorDevicePathAt(i, ref devicePath) != HResult.Ok) continue;
-            if (desktop.GetMonitorRECT(devicePath, ref rect) != HResult.Ok) continue;
-            if (rect.Right <= rect.Left || rect.Bottom <= rect.Top) continue;
-            slots.Add((devicePath, rect));
-        }
-
-        if (slots.Count == 0) return false;
-
-        // Painting order: the primary (the monitor holding the virtual desktop origin, which
-        // is always (0,0) for it) comes first, the rest keep the shell's order.
-        var painted = slots
-            .OrderBy(s => s.Rect.X == 0 && s.Rect.Y == 0 ? 0 : 1)
-            .ToList();
-
         var applied = false;
 
-        for (var slot = 0; slot < slots.Count; slot++)
+        foreach (var (filed, painted) in WallpaperSlotOrder.Pair(slots))
         {
-            var paintedRect = painted[slot].Rect;
-
             // The screen that must appear on the monitor painted at this slot.
-            var match = unresolved.FirstOrDefault(s =>
-                Math.Abs(paintedRect.X - s.LogicalBounds.X) < 2 &&
-                Math.Abs(paintedRect.Y - s.LogicalBounds.Y) < 2);
+            var match = unresolved.FirstOrDefault(s => WallpaperSlotOrder.Covers(painted, s.LogicalBounds));
             if (match is null) continue;
 
-            if (desktop.SetWallpaper(slots[slot].DevicePath, match.ImagePath ?? "") != HResult.Ok) continue;
+            if (desktop.SetWallpaper(filed.DevicePath, match.ImagePath ?? "") != HResult.Ok) continue;
             unresolved.Remove(match);
             applied = true;
         }

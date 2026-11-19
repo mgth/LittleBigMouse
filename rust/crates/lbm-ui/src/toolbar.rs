@@ -71,52 +71,63 @@ pub(crate) fn button(
             } else {
                 ui.visuals().text_color()
             };
-            // Rasterise at the native display density; retain only the current density
-            // and theme per icon so moving between monitors cannot grow the cache.
-            let size = (22.0 * ui.ctx().pixels_per_point()).ceil().max(1.0) as u32;
-            let key = egui::Id::new(("original-toolbar", icon));
-            let cached = ui
-                .ctx()
-                .data_mut(|d| d.get_temp::<(u32, Color32, egui::TextureHandle)>(key));
-            let texture = match cached {
-                Some((old_size, old_color, texture))
-                    if old_size == size && old_color == foreground =>
-                {
-                    texture
-                }
-                _ => {
-                    let tree = lbm_icons::load(
-                        icon.svg(),
-                        lbm_icons::Rgba(foreground.r(), foreground.g(), foreground.b(), 255),
-                    )
-                    .expect("bundled toolbar SVG");
-                    let pixels = lbm_icons::render(&tree, size).expect("toolbar icon dimensions");
-                    let texture = ui.ctx().load_texture(
-                        format!("toolbar-{icon:?}"),
-                        egui::ColorImage::from_rgba_premultiplied([size as usize; 2], &pixels),
-                        egui::TextureOptions::LINEAR,
-                    );
-                    ui.ctx()
-                        .data_mut(|d| d.insert_temp(key, (size, foreground, texture.clone())));
-                    texture
-                }
-            };
             // The SVG's blue details stay coloured, just as in the C# IconView.
             let tint = if ui.is_enabled() {
                 Color32::WHITE
             } else {
                 Color32::from_white_alpha(64)
             };
-            ui.painter().image(
-                texture.id(),
+            paint(
+                ui,
+                icon,
                 Rect::from_center_size(rect.center(), vec2(22.0, 22.0)),
-                Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                foreground,
                 tint,
             );
         }
         response
     })
     .inner
+}
+
+/// Rasterise at the native display density; retain only the current density
+/// and theme per icon so moving between monitors cannot grow the cache.
+pub(crate) fn paint(ui: &Ui, icon: Icon, rect: Rect, foreground: Color32, tint: Color32) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let size = (rect.width() * ui.ctx().pixels_per_point()).ceil().max(1.0) as u32;
+    let key = egui::Id::new(("original-toolbar", icon, rect.width().to_bits()));
+    let cached = ui
+        .ctx()
+        .data_mut(|d| d.get_temp::<(u32, Color32, egui::TextureHandle)>(key));
+    let texture = match cached {
+        Some((old_size, old_color, texture)) if old_size == size && old_color == foreground => {
+            texture
+        }
+        _ => {
+            let tree = lbm_icons::load(
+                icon.svg(),
+                lbm_icons::Rgba(foreground.r(), foreground.g(), foreground.b(), 255),
+            )
+            .expect("bundled toolbar SVG");
+            let pixels = lbm_icons::render(&tree, size).expect("toolbar icon dimensions");
+            let texture = ui.ctx().load_texture(
+                format!("toolbar-{icon:?}-{size}"),
+                egui::ColorImage::from_rgba_premultiplied([size as usize; 2], &pixels),
+                egui::TextureOptions::LINEAR,
+            );
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(key, (size, foreground, texture.clone())));
+            texture
+        }
+    };
+    ui.painter().image(
+        texture.id(),
+        rect,
+        Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+        tint,
+    );
 }
 
 pub(crate) fn separator(ui: &mut Ui) {

@@ -1456,7 +1456,7 @@ impl App {
                 ui.disable();
             }
             egui::ScrollArea::vertical().show(ui,|ui|{
-            ui.heading("Wallpaper");
+            lbm_ui::mode::heading(ui, lbm_ui::mode::Mode::Wallpaper);
             self.screen_selector(ui);
             if !stable {
                 ui.label("The connection or displays changed. Your wallpaper edits are kept; reload before applying.");
@@ -1638,7 +1638,7 @@ impl App {
             if self.settings_open {
                 ui.disable();
             }
-            ui.heading(self.mode.label());
+            lbm_ui::mode::heading(ui, self.mode);
             if self.mode == lbm_ui::mode::Mode::Resistance {
                 if let Some(layout) = self.layout.as_mut() {
                     let mut defaults = layout.options.resistance_defaults;
@@ -1727,7 +1727,11 @@ impl App {
                     return;
                 }
                 if self.mode == lbm_ui::mode::Mode::Info {
-                    ui.heading("Detected · last display refresh");
+                    lbm_ui::icons::title(
+                        ui,
+                        lbm_ui::icons::Icon::Chip,
+                        "Detected · last display refresh",
+                    );
                     let report = layout
                         .monitors()
                         .iter()
@@ -1740,12 +1744,12 @@ impl App {
                         ui.label("No hardware report available for this monitor.");
                     }
                     ui.separator();
-                    ui.heading("Current layout");
+                    lbm_ui::icons::title(ui, lbm_ui::icons::Icon::Layout, "Current layout");
                     lbm_ui::properties::rows(ui, &lbm_app::properties::layout_info(layout, &id));
                     return;
                 }
                 if self.mode == lbm_ui::mode::Mode::Location {
-                    ui.strong("Physical position");
+                    lbm_ui::icons::title(ui, lbm_ui::icons::Icon::Move, "Physical position");
                     if let Some(location) = lbm_app::properties::location(layout, &id) {
                         edits = ui
                             .add_enabled_ui(!blocked && !layout.is_virtual(), |ui| {
@@ -1933,12 +1937,19 @@ impl App {
             && !(self.outputs.changing() || self.topology_pending.is_some())
             && !self.agent.suspended
             && self.layout.as_ref().is_some_and(|l| !l.is_virtual());
-        if ui
-            .add_enabled(
-                available && selected,
-                egui::Button::new(label).selected(self.screen_overlay_mode == mode),
-            )
-            .clicked()
+        let icon = if mode == Mode::Rulers {
+            lbm_ui::icons::Icon::Size
+        } else {
+            lbm_ui::icons::Icon::Border
+        };
+        if lbm_ui::icons::toggle(
+            ui,
+            icon,
+            label,
+            self.screen_overlay_mode == mode,
+            available && selected,
+        )
+        .clicked()
         {
             self.screen_overlay_mode = if self.screen_overlay_mode == mode {
                 Mode::Off
@@ -1965,8 +1976,13 @@ impl App {
     }
 
     fn crossing_controls(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.show_probe, "Show crossings")
-            .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            lbm_ui::icons::glyph(ui, lbm_ui::icons::Icon::Crossing);
+            ui.checkbox(&mut self.show_probe, "Show crossings")
+        })
+        .inner
+        .on_hover_text("Green: a passage. Red: a wall. Resistance is bypassed for this geometric report. Probing does not start or change the mouse engine.");
         if !self.show_probe {
             return;
         }
@@ -1976,7 +1992,9 @@ impl App {
                 ui.visuals().error_fg_color,
                 format!("Crossings unavailable: {error}"),
             );
-            if ui.button("Retry crossings").clicked() {
+            if lbm_ui::icons::action(ui, lbm_ui::icons::Icon::Refresh, "Retry crossings", true)
+                .clicked()
+            {
                 self.probe.retry(std::time::Instant::now());
                 ui.ctx().request_repaint();
             }

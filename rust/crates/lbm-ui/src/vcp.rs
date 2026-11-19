@@ -30,10 +30,7 @@ impl Panel {
             } else {
                 ui.weak("Monitor controls");
             }
-            if ui
-                .add_enabled(!busy, egui::Button::new("Refresh"))
-                .clicked()
-            {
+            if crate::icons::action(ui, crate::icons::Icon::Refresh, "Refresh", !busy).clicked() {
                 action = Some(Action::Refresh);
             }
         });
@@ -53,28 +50,46 @@ impl Panel {
         }
         let token = state.token;
         ui.add_enabled_ui(!busy, |ui| {
-            for (title, subtitle, codes) in [
-                ("Picture", "Light and contrast", &[0x10, 0x12][..]),
-                ("Colour", "Monitor colour preset", &[0x14][..]),
+            use crate::icons::Icon;
+            for (icon, title, subtitle, codes) in [
                 (
+                    Icon::Sun,
+                    "Picture",
+                    "Light and contrast",
+                    &[0x10, 0x12][..],
+                ),
+                (
+                    Icon::Palette,
+                    "Colour",
+                    "Monitor colour preset",
+                    &[0x14][..],
+                ),
+                (
+                    Icon::Rgb,
                     "RGB gain",
                     "White balance · highlights",
                     &[0x16, 0x18, 0x1a][..],
                 ),
                 (
+                    Icon::Contrast,
                     "RGB black level",
                     "Colour balance · shadows",
                     &[0x6c, 0x6e, 0x70][..],
                 ),
-                ("Audio", "Monitor speakers", &[0x62, 0x8d][..]),
-                ("Monitor", "Input and power", &[0x60, 0xd6][..]),
+                (
+                    Icon::Speaker,
+                    "Audio",
+                    "Monitor speakers",
+                    &[0x62, 0x8d][..],
+                ),
+                (Icon::Power, "Monitor", "Input and power", &[0x60, 0xd6][..]),
             ] {
                 if !state.features.iter().any(|f| codes.contains(&f.code)) {
                     continue;
                 }
                 theme::card().show(ui, |ui| {
                     ui.set_min_width((ui.available_width()).max(0.));
-                    ui.strong(title);
+                    crate::icons::title(ui, icon, title);
                     ui.label(RichText::new(subtitle).small().color(theme::MUTED));
                     for code in codes {
                         let Some(feature) = state.features.iter_mut().find(|f| f.code == *code)
@@ -107,7 +122,7 @@ impl Panel {
                         .and_then(|f| f.choices.iter().find(|c| c.value == value))
                         .map(|c| c.label.as_str())
                         .unwrap_or("Selected value");
-                    ui.strong(format!("{} → {}", vcp::name(code), label));
+                    ui.strong(format!("{}: {}", vcp::name(code), label));
                     ui.label("This may interrupt the picture or the connection to the monitor.");
                     ui.horizontal(|ui| {
                         if ui.button("Apply to monitor").clicked() {

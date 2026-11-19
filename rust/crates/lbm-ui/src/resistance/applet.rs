@@ -144,8 +144,10 @@ impl Editor {
                                     },
                                 );
                             });
-                            changed |= channel(popup, "Move", &mut edited, self.defaults, false);
-                            changed |= channel(popup, "Drag", &mut edited, self.defaults, true);
+                            changed |=
+                                channel(popup, "Move", &mut edited, self.defaults, false, false);
+                            changed |=
+                                channel(popup, "Drag", &mut edited, self.defaults, true, false);
                         }
                     });
             });
@@ -212,6 +214,8 @@ pub(super) fn channel(
     section: &mut BorderSection,
     defaults: ResistanceDefaults,
     drag: bool,
+    // The properties panel has room for the pictogram; the on-map applet has not.
+    pictogram: bool,
 ) -> bool {
     ui.push_id(name, |ui| {
         let previous = if drag {
@@ -228,6 +232,17 @@ pub(super) fn channel(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.;
             ui.spacing_mut().button_padding = vec2(4., 3.);
+            if pictogram {
+                icons::glyph(
+                    ui,
+                    if drag {
+                        icons::Icon::Drag
+                    } else {
+                        icons::Icon::Pointer
+                    },
+                );
+                ui.add_space(4.);
+            }
             ui.add_sized(vec2(34., 20.), egui::Label::new(name))
                 .on_hover_text(if drag {
                     "Crossing with a mouse button held"

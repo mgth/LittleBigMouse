@@ -195,22 +195,41 @@ pub fn toolbar(
     chosen
 }
 
+fn icon(mode: Mode) -> crate::toolbar::Icon {
+    use crate::toolbar::Icon;
+    match mode {
+        Mode::Default => Icon::About,
+        Mode::Info => Icon::Info,
+        Mode::Location => Icon::Location,
+        Mode::Resistance => Icon::Resistance,
+        Mode::Size => Icon::Size,
+        Mode::Vcp => Icon::Vcp,
+        Mode::Wallpaper => Icon::Wallpaper,
+    }
+}
+
+/// The properties panel opens with the same picture as the mode's toolbar button.
+pub fn heading(ui: &mut egui::Ui, mode: Mode) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), egui::Sense::hover());
+        let tint = if ui.is_enabled() {
+            egui::Color32::WHITE
+        } else {
+            egui::Color32::from_white_alpha(64)
+        };
+        crate::toolbar::paint(ui, icon(mode), rect, ui.visuals().text_color(), tint);
+        ui.heading(mode.label());
+    });
+}
+
 fn buttons(ui: &mut egui::Ui, current: Mode, offered: &Offered) -> Option<Mode> {
     let mut chosen = why_not(current, offered).map(|_| Mode::Default);
     for mode in Mode::ALL {
         let unavailable = why_not(mode, offered);
         let on = current == mode;
-        use crate::toolbar::{self, Icon};
-        let icon = match mode {
-            Mode::Default => Icon::About,
-            Mode::Info => Icon::Info,
-            Mode::Location => Icon::Location,
-            Mode::Resistance => Icon::Resistance,
-            Mode::Size => Icon::Size,
-            Mode::Vcp => Icon::Vcp,
-            Mode::Wallpaper => Icon::Wallpaper,
-        };
-        let button = toolbar::button(ui, icon, mode.label(), on, unavailable.is_none());
+        let button =
+            crate::toolbar::button(ui, icon(mode), mode.label(), on, unavailable.is_none());
         let tooltip = format!("{}\n{}", mode.label(), unavailable.unwrap_or(mode.about()));
         let button = button
             .on_hover_text(&tooltip)

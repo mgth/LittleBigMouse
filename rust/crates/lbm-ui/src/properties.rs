@@ -1,4 +1,5 @@
 //! Selected-monitor properties use window-sized text, independently of the map zoom.
+use crate::icons::{self, Icon};
 use lbm_layout::model::DisplaySize;
 
 pub fn panel(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
@@ -100,8 +101,14 @@ pub fn size(ui: &mut egui::Ui, monitor: &str, value: &Size) -> Vec<Edit> {
     ui.label("Dimensions in mm, in the screen's current orientation.");
     ui.label(format!("Panel size is shared by model {}.", value.model));
     let mut locked = value.locked;
-    if ui
-        .checkbox(&mut locked, "Keep aspect ratio")
+    let lock = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            icons::glyph(ui, if locked { Icon::Lock } else { Icon::Unlock });
+            ui.checkbox(&mut locked, "Keep aspect ratio")
+        })
+        .inner;
+    if lock
         .on_hover_text("Editing aid for this session; the dimensions are saved.")
         .changed()
     {
@@ -111,9 +118,8 @@ pub fn size(ui: &mut egui::Ui, monitor: &str, value: &Size) -> Vec<Edit> {
     egui::Grid::new("size-fields")
         .num_columns(2)
         .show(ui, |ui| {
-            for (label, current, min, edit) in value.fields() {
-                let name = label;
-                let label = ui.label(name);
+            for ((name, current, min, edit), icon) in value.fields().into_iter().zip(SIZE_ICONS) {
+                let label = icons::label(ui, icon, name);
                 let mut number = current;
                 let response = measurement(ui, &mut number, min, false).labelled_by(label.id);
                 measurement_highlight(ui, monitor, name, &response);
@@ -131,10 +137,11 @@ pub fn size(ui: &mut egui::Ui, monitor: &str, value: &Size) -> Vec<Edit> {
     ui.small(
         "Outside width adjusts both side bezels equally; outside height adjusts the bottom bezel.",
     );
-    ui.label(format!(
-        "Diagonal: {:.2} in",
-        p.width.hypot(p.height) / 25.4
-    ));
+    icons::label(
+        ui,
+        Icon::Diagonal,
+        format!("Diagonal: {:.2} in", p.width.hypot(p.height) / 25.4),
+    );
     edits
 }
 
@@ -213,6 +220,21 @@ pub fn rows(ui: &mut egui::Ui, rows: &[(String, String)]) {
 
 /// Shared field definitions keep the panel and the on-screen controls in agreement.
 pub type Field = (&'static str, f64, f64, fn(f64) -> Edit);
+
+/// Pictograms of [`Size::fields`], in the same order.
+const SIZE_ICONS: [Icon; 8] = [
+    Icon::Width,
+    Icon::Height,
+    Icon::EdgeLeft,
+    Icon::EdgeTop,
+    Icon::EdgeRight,
+    Icon::EdgeBottom,
+    Icon::OuterWidth,
+    Icon::OuterHeight,
+];
+
+/// Pictograms of [`Location::fields`], in the same order.
+const LOCATION_ICONS: [Icon; 4] = [Icon::PositionX, Icon::PositionY, Icon::ScaleX, Icon::ScaleY];
 impl Size {
     pub fn fields(&self) -> [Field; 8] {
         let p = self.physical;
@@ -261,8 +283,10 @@ pub fn location(ui: &mut egui::Ui, monitor: &str, value: &Location) -> Vec<Edit>
     egui::Grid::new("location-fields")
         .num_columns(2)
         .show(ui, |ui| {
-            for (index, (name, current, min, edit)) in value.fields().into_iter().enumerate() {
-                let label = ui.label(name);
+            for (index, ((name, current, min, edit), icon)) in
+                value.fields().into_iter().zip(LOCATION_ICONS).enumerate()
+            {
+                let label = icons::label(ui, icon, name);
                 let mut number = current;
                 let scale = index >= 2;
                 let response = measurement(ui, &mut number, min, scale).labelled_by(label.id);

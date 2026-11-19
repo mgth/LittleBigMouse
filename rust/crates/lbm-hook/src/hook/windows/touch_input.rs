@@ -105,12 +105,13 @@ pub fn on_native_contact(contact: bool, time: u32) -> bool {
         state.observe_contact(MOUSE_POSITION.with(Cell::get), allowed, contact, time);
         cell.set(state);
     });
-    if !NATIVE.with(|v| v.get().pending()) {
+    // A held move has consumed the return, but its capture still waits for this report.
+    if !NATIVE.with(|v| v.get().pending()) && !super::focus_restore::native_move_held() {
         super::focus_restore::cancel_native();
         return false;
     }
     shared.restore_keyboard_focus.load(Ordering::SeqCst)
-        && super::focus_restore::native_contact(shared, contact)
+        && super::focus_restore::native_contact(shared, contact, time)
 }
 
 pub fn finish_native_focus() {
@@ -118,21 +119,42 @@ pub fn finish_native_focus() {
         return;
     };
     sync_generation(shared);
-    let point = cursor_position();
-    let allowed = shared.touch_active()
+    match native_focus_point(shared) {
+        Some(point) => super::focus_restore::finish_native(shared, point, false),
+        None => super::focus_restore::cancel_native(),
+    }
+}
+
+/// Where the touch ended, when it is one focus should come back from.
+fn native_focus_point(shared: &crate::shared::Shared) -> Option<POINT> {
+    let (x, y) = cursor_position()?;
+    let selected = shared.touch_active()
         && NATIVE.with(|v| v.get().pending())
-        && point.is_some_and(|(x, y)| {
-            shared
-                .touch_policy
-                .try_lock()
-                .ok()
-                .is_some_and(|policy| policy.includes(x, y))
-        });
-    if allowed {
-        let (x, y) = point.unwrap();
-        super::focus_restore::finish_native(shared, POINT { x, y });
-    } else {
-        super::focus_restore::cancel_native();
+        && shared
+            .touch_policy
+            .try_lock()
+            .ok()
+            .is_some_and(|policy| policy.includes(x, y));
+    selected.then_some(POINT { x, y })
+}
+
+/// A physical move during an unsettled native touch. Read here, before this move sends
+/// the cursor back: the cursor is still on what was touched.
+fn hold_native_for_move(shared: &crate::shared::Shared, time: u32) -> bool {
+    if !super::focus_restore::native_capture_open(shared) {
+        return false;
+    }
+    if super::focus_restore::native_move_held() {
+        super::focus_restore::hold_native_capture(shared, POINT::default(), time);
+        return true;
+    }
+    sync_generation(shared);
+    match native_focus_point(shared) {
+        Some(point) => {
+            super::focus_restore::hold_native_capture(shared, point, time);
+            true
+        }
+        None => false,
     }
 }
 
@@ -204,11 +226,13 @@ fn process_with_shared(
         MOUSE_POSITION.with(|position| position.set(Some((ms.pt.x, ms.pt.y))));
         return Some(false);
     }
-    if ms.flags & LLMHF_INJECTED == 0 {
+    let physical = ms.flags & LLMHF_INJECTED == 0;
+    let held = physical && message == WM_MOUSEMOVE && hold_native_for_move(shared, ms.time);
+    if physical && !held {
         super::focus_restore::cancel_native();
     }
     // Programmatic cursor motion must not consume the pending restore.
-    if ms.flags & LLMHF_INJECTED == 0 && shared.restore_keyboard_focus.load(Ordering::SeqCst) {
+    if physical && !held && shared.restore_keyboard_focus.load(Ordering::SeqCst) {
         super::focus_restore::on_physical_input(
             shared,
             message == WM_MOUSEMOVE,

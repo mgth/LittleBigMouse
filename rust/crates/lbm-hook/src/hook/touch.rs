@@ -12,7 +12,7 @@ pub fn is_pen(extra: usize) -> bool {
 }
 
 /// Whether wrapping millisecond tick `a` is later than `b`.
-fn tick_after(a: u32, b: u32) -> bool {
+pub(crate) fn tick_after(a: u32, b: u32) -> bool {
     (a.wrapping_sub(b) as i32) > 0
 }
 

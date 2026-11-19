@@ -759,3 +759,41 @@ fn real_screen_gesture_survives_map_focus_loss_and_uses_the_same_snap_guide() {
     };
     assert_eq!((s.from(), s.to()), (50., 150.));
 }
+
+#[test]
+fn each_legend_chip_wraps_with_its_name() {
+    let monitors = vec![monitor("a", 0.0, 0.0)];
+    // 345 points put the blue chip alone at the end of a line when chips and names
+    // were separate items; sweep around it so every break position is crossed.
+    for width in (240..=460).step_by(5) {
+        let mut editor = Editor::default();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(width as f32, 900.0))
+            .build_ui(|ui| {
+                editor.panel(ui, &monitors, "a", 200.0);
+            });
+        h.run();
+        let small = egui::TextStyle::Small.resolve(&h.ctx.global_style());
+        for name in [
+            "Moves blocked",
+            "Drags blocked",
+            "Both blocked",
+            "Resistance",
+            "Free",
+        ] {
+            let text = h.ctx.fonts_mut(|f| {
+                f.layout_no_wrap(name.into(), small.clone(), egui::Color32::WHITE)
+                    .size()
+            });
+            let item = h
+                .get_all_by_label(name)
+                .find(|n| n.rect().width() >= text.x + 12.0)
+                .unwrap_or_else(|| panic!("{name}: no item holds both chip and name at {width}"));
+            assert!(
+                item.rect().height() < 2.0 * text.y,
+                "{name} spans two lines at {width}: {:?}",
+                item.rect()
+            );
+        }
+    }
+}

@@ -2569,7 +2569,9 @@ dependencies = [
  "lbm-layout",
  "lbm-store",
  "lbm-wallpaper",
+ "proc-macro2",
  "serde_json",
+ "syn 2.0.118",
 ]
 
 [[package]]

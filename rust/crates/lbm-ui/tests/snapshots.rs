@@ -24,6 +24,7 @@ use egui_kittest::Harness;
 use lbm_layout::geo::Rect;
 use lbm_ui::frame::{self, Ratio};
 use lbm_ui::map::{self, MapMonitor};
+use lbm_ui::mode::Mode;
 
 /// A window of a stated size, with a background — both on purpose.
 ///
@@ -390,11 +391,15 @@ fn size_and_info_properties_stay_readable_beside_or_below_the_map() {
             .build_ui(|ui| {
                 lbm_ui::theme::install(ui.ctx());
                 properties::panel(ui, |ui| {
-                    ui.heading(if info { "Info" } else { "Size" });
+                    lbm_ui::mode::heading(ui, if info { Mode::Info } else { Mode::Size });
                     ui.label("Left screen");
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         if info {
-                            ui.heading("Detected · last display refresh");
+                            lbm_ui::icons::title(
+                                ui,
+                                lbm_ui::icons::Icon::Chip,
+                                "Detected · last display refresh",
+                            );
                             properties::rows(ui, &rows);
                         } else {
                             properties::size(ui, "left", &size);
@@ -446,10 +451,10 @@ fn system_displays_include_a_detached_screen_and_a_concrete_confirmation() {
             .build_ui(|ui| {
                 lbm_ui::theme::install(ui.ctx());
                 lbm_ui::properties::panel(ui, |ui| {
-                    ui.heading("Location");
+                    lbm_ui::mode::heading(ui, Mode::Location);
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.label("Side screen · HDMI-1");
-                        ui.strong("Physical position");
+                        lbm_ui::icons::title(ui, lbm_ui::icons::Icon::Move, "Physical position");
                         lbm_ui::properties::location(
                             ui,
                             "right",
@@ -549,7 +554,7 @@ fn resistance_values_and_bands_stay_readable_in_map_and_list() {
             .build_ui(|ui| {
                 lbm_ui::theme::install(ui.ctx());
                 lbm_ui::properties::panel(ui, |ui| {
-                    ui.heading("Border resistance");
+                    lbm_ui::mode::heading(ui, Mode::Resistance);
                     lbm_ui::resistance::defaults(ui, &mut editor.defaults);
                     ui.label("Left screen");
                     egui::ScrollArea::vertical().show(ui, |ui| {

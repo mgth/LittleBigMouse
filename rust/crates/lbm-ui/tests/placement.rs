@@ -32,10 +32,10 @@ fn harness() -> Harness<'static, State> {
 fn import_is_direct_and_export_has_preview_scale_and_cancel() {
     let mut h = harness();
     h.run();
-    h.get_by_label("System → LBM").click();
+    h.get_by_label("System » LBM").click();
     h.run();
     assert_eq!(h.state().actions, [Action::FromSystem]);
-    h.get_by_label("LBM → System").click();
+    h.get_by_label("LBM » System").click();
     h.run();
     assert_eq!(h.state().actions.len(), 1);
     h.get_by_label("Also adjust display scales").click();
@@ -46,7 +46,7 @@ fn import_is_direct_and_export_has_preview_scale_and_cancel() {
     h.get_by_label("Cancel").click();
     h.run();
     assert_eq!(h.state().actions.len(), 2);
-    h.get_by_label("LBM → System").click();
+    h.get_by_label("LBM » System").click();
     h.run();
     h.get_by_label("Apply to system").click();
     h.run();
@@ -57,7 +57,7 @@ fn import_is_direct_and_export_has_preview_scale_and_cancel() {
 fn stale_confirmation_is_cleared_when_displays_change() {
     let mut h = harness();
     h.run();
-    h.get_by_label("LBM → System").click();
+    h.get_by_label("LBM » System").click();
     h.run();
     h.state_mut().blocked = true;
     h.run();
@@ -65,7 +65,7 @@ fn stale_confirmation_is_cleared_when_displays_change() {
     h.state_mut().blocked = false;
     h.state_mut().needs_stop = true;
     h.run();
-    h.get_by_label("System → LBM").click();
+    h.get_by_label("System » LBM").click();
     h.run();
     assert_eq!(h.state().actions, [Action::FromSystem]);
 }

@@ -33,14 +33,14 @@ impl Panel {
             .show(ui, |ui| {
                 ui.small("All screens · synchronize their positions");
                 ui.add_enabled_ui(blocked.is_none(), |ui| {
-                    if ui.button("System → LBM").on_hover_text(
+                    if crate::icons::action(ui, crate::icons::Icon::Import, "System » LBM", true).on_hover_text(
                         "Place all monitors from the system configuration, keeping their physical dimensions and bezels. Save to keep the result; Undo to restore the previous layout."
                     ).clicked() {
                         self.confirm = false;
                         action = Some(Action::FromSystem);
                     }
                     ui.add_enabled_ui(!needs_stop, |ui| {
-                        if ui.button("LBM → System").on_hover_text(
+                        if crate::icons::action(ui, crate::icons::Icon::Export, "LBM » System", true).on_hover_text(
                             "Apply the physical arrangement to the system display settings."
                         ).clicked() {
                             self.confirm = !self.confirm;
@@ -51,10 +51,10 @@ impl Panel {
                                 ui.checkbox(&mut self.adjust_scale, "Also adjust display scales");
                             }
                             ui.horizontal_wrapped(|ui| {
-                                if ui.button("Preview changes").clicked() {
+                                if crate::icons::action(ui, crate::icons::Icon::Eye, "Preview changes", true).clicked() {
                                     action = Some(Action::Preview);
                                 }
-                                if ui.button("Apply to system").clicked() {
+                                if crate::icons::action(ui, crate::icons::Icon::Display, "Apply to system", true).clicked() {
                                     self.confirm = false;
                                     action = Some(Action::Apply);
                                 }

@@ -1,5 +1,6 @@
 //! System commands for the selected monitor and for every detached output, which no
 //! map or selector can reach. Guards use the entire output inventory.
+use crate::icons::{self, Icon};
 use lbm_ipc::displays::{Change, Outputs};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,6 +14,14 @@ pub enum Did {
 pub struct Panel {
     pub selected: Option<String>,
     pub confirm: Option<(String, Change)>,
+}
+
+fn icon(change: Change) -> Icon {
+    match change {
+        Change::Primary => Icon::Star,
+        Change::Attach => Icon::Attach,
+        Change::Detach => Icon::Detach,
+    }
 }
 
 pub fn caption(change: Change) -> &'static str {
@@ -58,20 +67,18 @@ impl Panel {
             return None;
         }
         let mut did = None;
-        ui.heading("System display");
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+            icons::paint(ui.painter(), rect, Icon::Display, ui.visuals().text_color());
+            ui.heading("System display");
+        });
         ui.label("These actions change the desktop configuration immediately.");
         ui.horizontal_wrapped(|ui| {
-            if ui
-                .add_enabled(!busy, egui::Button::new("Refresh outputs"))
-                .clicked()
-            {
+            if icons::action(ui, Icon::Refresh, "Refresh outputs", !busy).clicked() {
                 did = Some(Did::Refresh);
             }
-            if can_stop
-                && ui
-                    .add_enabled(!busy, egui::Button::new("Stop engine"))
-                    .clicked()
-            {
+            if can_stop && icons::action(ui, Icon::Stop, "Stop engine", !busy).clicked() {
                 did = Some(Did::Stop);
             }
             if busy {
@@ -92,26 +99,32 @@ impl Panel {
             for output in shown {
                 ui.push_id(&output.connector, |ui| {
                     ui.group(|ui| {
-                        ui.label(format!("{} · {}", output.name, output.connector));
-                        ui.label(if !output.enabled {
-                            "Detached"
+                        icons::title(
+                            ui,
+                            Icon::Display,
+                            &format!("{} · {}", output.name, output.connector),
+                        );
+                        let (state, color) = if !output.enabled {
+                            ("Detached", crate::theme::MUTED)
                         } else if output.primary {
-                            "Primary"
+                            ("Primary", crate::theme::ACCENT)
                         } else {
-                            "Attached"
-                        });
+                            ("Attached", crate::theme::ACCENT)
+                        };
+                        crate::theme::status(ui, state, color);
                         ui.horizontal_wrapped(|ui| {
                             for (change, available) in [
                                 (Change::Primary, output.enabled && !output.primary),
                                 (Change::Attach, !output.enabled),
                                 (Change::Detach, output.enabled && enabled > 1),
                             ] {
-                                if ui
-                                    .add_enabled(
-                                        available && blocked.is_none() && !busy,
-                                        egui::Button::new(caption(change)),
-                                    )
-                                    .clicked()
+                                if icons::action(
+                                    ui,
+                                    icon(change),
+                                    caption(change),
+                                    available && blocked.is_none() && !busy,
+                                )
+                                .clicked()
                                 {
                                     if warn {
                                         self.confirm = Some((output.connector.clone(), change));

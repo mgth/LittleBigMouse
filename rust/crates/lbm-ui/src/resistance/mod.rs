@@ -164,7 +164,16 @@ impl Editor {
         let previous = self.side;
         ui.horizontal(|ui| {
             for side in Side::ALL {
-                ui.selectable_value(&mut self.side, side, side.label());
+                if crate::icons::choice(
+                    ui,
+                    crate::icons::edge(side),
+                    side.label(),
+                    self.side == side,
+                )
+                .clicked()
+                {
+                    self.side = side;
+                }
             }
         });
         if previous != self.side {
@@ -195,13 +204,19 @@ impl Editor {
         let mut action = None;
         for (i, s) in sections.iter().enumerate() {
             let selected = self.selected.as_ref().is_some_and(|s| s.index == i);
-            if ui
-                .selectable_label(
-                    selected,
-                    format!("Section {} · {:.1}–{:.1} mm", i + 1, s.from(), s.to()),
-                )
-                .clicked()
-            {
+            let clicked = ui
+                .horizontal(|ui| {
+                    let shown = s.resolved(self.defaults);
+                    swatch(ui, color(&shown));
+                    ui.selectable_label(
+                        selected,
+                        format!("Section {} · {:.1}–{:.1} mm", i + 1, s.from(), s.to()),
+                    )
+                    .on_hover_text(description(&shown))
+                    .clicked()
+                })
+                .inner;
+            if clicked {
                 self.selected = Some(Selection {
                     monitor: id.into(),
                     side,
@@ -216,12 +231,13 @@ impl Editor {
                 to: length,
             },
         );
-        if ui
-            .add_enabled(
-                sections.len() < MAX_SECTIONS && free.is_some(),
-                egui::Button::new("Add section"),
-            )
-            .clicked()
+        if crate::icons::action(
+            ui,
+            crate::icons::Icon::Plus,
+            "Add section",
+            sections.len() < MAX_SECTIONS && free.is_some(),
+        )
+        .clicked()
         {
             let section = free.unwrap().section(new_section());
             action = Some(Edit::Insert(section));
@@ -241,8 +257,8 @@ impl Editor {
                         span_changed |= number(ui, "From", &mut from, length, true);
                         span_changed |= number(ui, "To", &mut to, length, true);
                     });
-                    values_changed |= applet::channel(ui, "Move", &mut s, self.defaults, false);
-                    values_changed |= applet::channel(ui, "Drag", &mut s, self.defaults, true);
+                    values_changed |= applet::channel(ui, "Move", &mut s, self.defaults, false, true);
+                    values_changed |= applet::channel(ui, "Drag", &mut s, self.defaults, true, true);
                     if span_changed {
                         if let Some(span) = geometry::clamp(
                             Span::new(from, to),
@@ -255,19 +271,26 @@ impl Editor {
                         action = Some(Edit::Replace { index: i, section: s });
                     }
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button("Expand").clicked() {
+                        if crate::icons::action(ui, crate::icons::Icon::Expand, "Expand", true)
+                            .on_hover_text("Fill the free space around this section.")
+                            .clicked()
+                        {
                             let span = geometry::gap(sections, Some(i), (s.from() + s.to()) / 2.0, length);
                             action = Some(Edit::Replace { index: i, section: span.section(s) });
                         }
-                        if ui.add_enabled(
+                        if crate::icons::action(
+                            ui,
+                            crate::icons::Icon::Mirror,
+                            "Mirror",
                             geometry::mirror(monitors, selected, travel).is_some(),
-                            egui::Button::new("Mirror"),
                         )
                         .on_hover_text("Copy onto the nearest facing edge, retaining its largest free interval.")
                         .clicked() {
                             action = Some(Edit::Mirror(i));
                         }
-                        if ui.button("Delete section").clicked() {
+                        if crate::icons::action(ui, crate::icons::Icon::Trash, "Delete section", true)
+                            .clicked()
+                        {
                             action = Some(Edit::Delete(i));
                         }
                     });
@@ -277,10 +300,57 @@ impl Editor {
         if geometry::fully_blocked(sections, length) {
             ui.colored_label(egui::Color32::YELLOW,"This edge blocks moves and drags over its whole length. Ctrl bypass is unavailable on Wayland.");
         }
-        ui.small("Amber: moves blocked · Purple: drags blocked · Red: both blocked · Blue: resistance · Grey: free");
+        legend(ui);
         action.map(|edit| Action::new(monitor, side, edit))
     }
 }
+/// The colour a section has on the map, as a small chip beside its text.
+fn swatch(ui: &mut egui::Ui, color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(12., 12.), egui::Sense::hover());
+    paint_swatch(ui, rect, color);
+}
+
+fn paint_swatch(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32) {
+    let fill = if ui.is_enabled() {
+        color
+    } else {
+        color.gamma_multiply(0.4)
+    };
+    ui.painter()
+        .rect_filled(rect.shrink2(egui::vec2(0., 1.)), 3., fill);
+}
+
+/// The band colours read as chips rather than as a sentence of colour names.
+/// Each chip and its name are one layout item, so they wrap to a new line together.
+fn legend(ui: &mut egui::Ui) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(10., 2.);
+        for (name, color) in [
+            ("Moves blocked", MOVES_BLOCKED),
+            ("Drags blocked", DRAGS_BLOCKED),
+            ("Both blocked", BOTH_BLOCKED),
+            ("Resistance", RESISTING),
+            ("Free", FREE),
+        ] {
+            let chip = ui.id().with(("legend-chip", name));
+            let shown = egui::AtomLayout::new((
+                egui::Atom::custom(chip, egui::vec2(12., 12.)),
+                egui::RichText::new(name).small(),
+            ))
+            .id(ui.id().with(("legend", name)))
+            .gap(4.)
+            .wrap_mode(egui::TextWrapMode::Extend)
+            .show(ui);
+            if let Some(rect) = shown.rect(chip) {
+                paint_swatch(ui, rect, color);
+            }
+            shown.response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), name)
+            });
+        }
+    });
+}
+
 fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64, enabled: bool) -> bool {
     let label = ui.label(name);
     let changed = ui
@@ -297,15 +367,19 @@ fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64, enabled: boo
     ui.end_row();
     changed
 }
+const BOTH_BLOCKED: egui::Color32 = egui::Color32::from_rgb(192, 57, 43);
+const MOVES_BLOCKED: egui::Color32 = egui::Color32::from_rgb(224, 142, 43);
+const DRAGS_BLOCKED: egui::Color32 = egui::Color32::from_rgb(155, 89, 182);
+const RESISTING: egui::Color32 = egui::Color32::from_rgb(43, 132, 192);
+const FREE: egui::Color32 = egui::Color32::from_gray(112);
+
 pub fn color(section: &BorderSection) -> egui::Color32 {
     match (section.move_block(), section.drag_block()) {
-        (true, true) => egui::Color32::from_rgb(192, 57, 43),
-        (true, false) => egui::Color32::from_rgb(224, 142, 43),
-        (false, true) => egui::Color32::from_rgb(155, 89, 182),
-        _ if section.move_resistance() > 0.0 || section.drag() > 0.0 => {
-            egui::Color32::from_rgb(43, 132, 192)
-        }
-        _ => egui::Color32::from_gray(112),
+        (true, true) => BOTH_BLOCKED,
+        (true, false) => MOVES_BLOCKED,
+        (false, true) => DRAGS_BLOCKED,
+        _ if section.move_resistance() > 0.0 || section.drag() > 0.0 => RESISTING,
+        _ => FREE,
     }
 }
 pub fn description(s: &BorderSection) -> String {
@@ -352,7 +426,7 @@ pub fn defaults(ui: &mut egui::Ui, values: &mut ResistanceDefaults) -> bool {
     let mut changed = false;
     crate::theme::card().show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.strong("Default resistance")
+        crate::icons::title(ui, crate::icons::Icon::Border, "Default resistance")
             .on_hover_text("Shared by sections set to Resist. Saved with this layout.");
         for (name, value, outside) in [
             ("Move", &mut values.movement, &mut values.move_without_section),
@@ -360,6 +434,14 @@ pub fn defaults(ui: &mut egui::Ui, values: &mut ResistanceDefaults) -> bool {
         ] {
             ui.push_id(name, |ui| {
                 ui.horizontal(|ui| {
+                    crate::icons::glyph(
+                        ui,
+                        if name == "Drag" {
+                            crate::icons::Icon::Drag
+                        } else {
+                            crate::icons::Icon::Pointer
+                        },
+                    );
                     let label = ui.add_sized(egui::vec2(34., 20.), egui::Label::new(name));
                     changed |= ui.add(egui::DragValue::new(value)
                         .range(0.0..=f64::MAX).clamp_existing_to_range(false)

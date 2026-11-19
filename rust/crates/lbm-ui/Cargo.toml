@@ -24,6 +24,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 
 [dev-dependencies]
 egui_kittest = "0.36"
+# `font_coverage` reads the decoded value of every string literal in the UI sources:
+# comments drop out, escapes such as "\u{2192}" count. Already in the lockfile.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+syn = { version = "2", default-features = false, features = ["parsing"] }
 # The oracle's scenario inputs, so the map is exercised on real desktops and not only
 # on rectangles chosen by whoever wrote the test.
 serde_json.workspace = true

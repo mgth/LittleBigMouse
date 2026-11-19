@@ -85,7 +85,7 @@ impl Mode {
                 "The parts of each border the mouse may cross, and the parts it may not."
             }
             Mode::Size => "The physical size of a screen and of its bezel.",
-            Mode::Vcp => "Monitor controls.",
+            Mode::Vcp => "Monitor controls and network remotes.",
             Mode::Wallpaper => "The desktop picture, per screen or spanned across them.",
         }
     }

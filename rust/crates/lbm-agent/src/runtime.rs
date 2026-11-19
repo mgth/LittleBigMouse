@@ -84,6 +84,7 @@ pub struct Agent<W> {
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
     vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
+    remote: std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -117,6 +118,7 @@ impl<W: AgentWorld> Agent<W> {
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
             vcp: Default::default(),
+            remote: Default::default(),
         }
     }
 
@@ -137,6 +139,12 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     /// Serves the frontends' requests coming out of `calls` (see [`api`]).
+    pub fn with_remote_config(mut self, path: std::path::PathBuf) -> Self {
+        self.remote =
+            std::sync::Arc::new(tokio::sync::Mutex::new(crate::remote::Service::new(path)));
+        self
+    }
+
     pub fn with_api(mut self, calls: UnboundedReceiver<Call>) -> Self {
         self.calls = Some(calls);
         self
@@ -290,6 +298,38 @@ impl<W: AgentWorld> Agent<W> {
                                 if applied_successfully {
                                     crate::wallpaper_cache::cleanup(cache, store).await;
                                 }
+                            });
+                            return;
+                        }
+                    }
+                }
+            }
+            Request::Remote {
+                layout_id,
+                layout_revision,
+                monitor,
+                command,
+            } => {
+                let state = self.snapshot();
+                if state.layout_id.as_deref() != Some(&layout_id)
+                    || state.layout_revision != layout_revision
+                    || state.suspended
+                {
+                    Err("The display layout changed; reload before using the remote.".into())
+                } else if let Err(error) = self.world.vcp_target(&monitor) {
+                    Err(error)
+                } else {
+                    match self.remote.clone().try_lock_owned() {
+                        Err(_) => Err(
+                            "A remote command is already running. Try again when it finishes."
+                                .into(),
+                        ),
+                        Ok(mut remote) => {
+                            tokio::spawn(async move {
+                                let result = remote.execute(monitor, command).await.and_then(|s| {
+                                    serde_json::to_value(s).map_err(|e| e.to_string())
+                                });
+                                client.send(api::answer(id, result));
                             });
                             return;
                         }

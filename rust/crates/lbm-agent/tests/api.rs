@@ -1444,3 +1444,47 @@ async fn vcp_checks_the_current_layout_setting_and_monitor_before_hardware_acces
         "{answer}"
     );
 }
+
+#[tokio::test]
+async fn network_remotes_load_associations_without_a_ddc_bus_and_reject_stale_commands() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    let config_dir = dir.path().to_owned();
+    let local = frontend_layout(dir.path());
+    let monitor = local.monitors()[0].id.clone();
+    std::fs::write(dir.path().join("samsung-tizen.json"), json!({monitor.clone():{"IpAddress":"192.168.1.20","Token":"private-token","Name":"Samsung"}}).to_string()).unwrap();
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_remote_config(config_dir)
+            .with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({"Method":"Snapshot"})).await["Result"].clone();
+    let id = state["LayoutId"].as_str().unwrap();
+    let revision = state["LayoutRevision"].as_u64().unwrap();
+    let request = json!({"Method":"Remote","LayoutId":id,"LayoutRevision":revision,"Monitor":monitor,"Command":{"Brand":"Samsung","Action":"Info"}});
+    let answer = frontend.ask(request.clone()).await;
+    assert!(answer["Error"].as_str().unwrap().contains("Enable VCP"));
+    frontend
+        .ask(json!({"Method":"SaveOptions","Options":{"VcpControl":true}}))
+        .await;
+    let answer = frontend.ask(request.clone()).await;
+    assert_eq!(answer["Result"]["Samsung"]["Paired"], true, "{answer}");
+    assert_eq!(answer["Result"]["Samsung"]["IpAddress"], "192.168.1.20");
+    assert!(!answer.to_string().contains("private-token"));
+    let mut stale = request;
+    stale["LayoutRevision"] = json!(revision + 1);
+    stale["Command"] = json!({"Brand":"Samsung","Action":"Key","Key":"KEY_HOME"});
+    let answer = frontend.ask(stale).await;
+    assert!(answer["Error"].as_str().unwrap().contains("layout changed"));
+    assert!(
+        !dir.path().join("network-remotes.json").exists(),
+        "reading does not rewrite associations"
+    );
+}

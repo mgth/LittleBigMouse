@@ -13,6 +13,9 @@ namespace LittleBigMouse.Ui.Avalonia.Remote;
 /// enumeration, so a different id means the two are not looking at the same desktop.
 /// </param>
 /// <param name="Previewing">A frontend's live preview is what the hook runs.</param>
+/// <param name="ShortcutUnavailable">
+/// The current rescue shortcut, when the hook said it could not arm it.
+/// </param>
 public sealed record AgentState(
     string AgentVersion,
     bool HookConnected,
@@ -23,7 +26,8 @@ public sealed record AgentState(
     bool? Saved,
     bool? LoadAtStartup,
     bool? HideTrayIcon,
-    bool Previewing)
+    bool Previewing,
+    string? ShortcutUnavailable = null)
 {
     /// <summary>The engine's state as the UI's events name it.</summary>
     [JsonIgnore]

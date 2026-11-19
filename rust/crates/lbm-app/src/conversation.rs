@@ -216,6 +216,8 @@ impl Conversation {
         self.enabled = snapshot["Enabled"].as_bool();
         self.previewing = snapshot["Previewing"].as_bool().unwrap_or(false);
         self.suspended = snapshot["Suspended"].as_bool().unwrap_or(false);
+        // The agent keeps it: the hook may have said it before this window existed.
+        self.shortcut_unavailable = snapshot["ShortcutUnavailable"].as_str().map(str::to_owned);
         // Through `update`, not written straight onto the state: the rule that ends a
         // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {
@@ -396,6 +398,29 @@ mod tests {
 
         agent.shortcut_changed();
         assert_eq!(agent.shortcut_unavailable, None);
+    }
+
+    #[test]
+    fn a_window_opened_after_the_refusal_learns_it_from_the_state() {
+        let mut agent = Conversation::after([(2, "Subscribe")]);
+        let mut state = lbm_ui::State::default();
+        let mut known = snapshot("Stopped", true);
+        known["ShortcutUnavailable"] = json!("Ctrl+Alt+F9");
+
+        agent.said(
+            Message::Answer {
+                id: 2,
+                result: Ok(known),
+            },
+            &mut state,
+        );
+        assert_eq!(agent.shortcut_unavailable.as_deref(), Some("Ctrl+Alt+F9"));
+
+        agent.said(Message::State(snapshot("Stopped", true)), &mut state);
+        assert_eq!(
+            agent.shortcut_unavailable, None,
+            "the agent no longer says it"
+        );
     }
 
     /// The rule that matters most about the engine, reached through a real message: the

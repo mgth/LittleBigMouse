@@ -270,6 +270,10 @@ pub struct Snapshot {
     pub hide_tray_icon: Option<bool>,
     /// A frontend's live preview is what the hook runs.
     pub previewing: bool,
+    /// The current rescue shortcut, when the hook said it could not arm it. In the state
+    /// because the hook says it once, often before any window is open. Additive.
+    #[serde(default)]
+    pub shortcut_unavailable: Option<String>,
 }
 
 /// An answer to request `id`.

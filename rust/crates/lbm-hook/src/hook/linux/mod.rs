@@ -20,14 +20,15 @@ pub mod evdev;
 pub mod focus;
 pub mod portal;
 pub mod rescue;
+pub mod wake;
 pub mod x11;
 
 use std::sync::atomic::Ordering;
 
 use crate::shared::Shared;
 
-/// Nothing to record on Linux (no message pump to post to): the backends poll
-/// the shared flags.
+/// Nothing to record on Linux (no message pump to post to): the requests below
+/// signal [`Shared::wake`] instead.
 pub fn register_main_thread(_shared: &Shared) {}
 
 /// The Windows watchdog heals a silently-dropped WH_MOUSE_LL; no Linux backend
@@ -64,22 +65,110 @@ pub fn run(shared: &'static Shared) {
     }
 
     eprintln!("[LittleBigMouse.Hook] no usable input backend (no evdev, no Wayland portal, no X11 display)");
+    wait_for_quit(shared);
+}
+
+/// With no backend, all that is left to do is to leave when asked.
+fn wait_for_quit(shared: &Shared) {
     while !shared.want_quit.load(Ordering::SeqCst) {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        shared.wake.wait();
     }
 }
 
 /// Ask the loop to install the input capture.
 pub fn request_hook(shared: &Shared) {
     shared.want_hook.store(true, Ordering::SeqCst);
+    shared.wake.notify();
 }
 
 /// Ask the loop to remove the input capture.
 pub fn request_unhook(shared: &Shared) {
     shared.want_hook.store(false, Ordering::SeqCst);
+    shared.wake.notify();
 }
 
 /// Ask the loop to exit.
 pub fn request_quit(shared: &Shared) {
     shared.want_quit.store(true, Ordering::SeqCst);
+    shared.wake.notify();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    const PATIENCE: Duration = Duration::from_secs(5);
+
+    /// How many times thread `tid` of this process has gone to sleep of its own accord.
+    fn voluntary_switches(tid: libc::pid_t) -> u64 {
+        std::fs::read_to_string(format!("/proc/self/task/{tid}/status"))
+            .unwrap()
+            .lines()
+            .find_map(|line| line.strip_prefix("voluntary_ctxt_switches:"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap()
+    }
+
+    /// `backend` stays asleep while nothing is asked of it, and leaves on `request_quit`.
+    ///
+    /// A thread that wakes on a timer goes back to sleep every time, and the kernel
+    /// counts that: this measures the absence of a poll rather than inferring it.
+    fn sleeps_until_quit(backend: impl FnOnce(&'static Shared) + Send + 'static) {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let (tid_sender, tid) = mpsc::channel();
+        let (left, has_left) = mpsc::channel();
+        std::thread::spawn(move || {
+            // SAFETY: no arguments, cannot fail.
+            let _ = tid_sender.send(unsafe { libc::gettid() });
+            backend(shared);
+            let _ = left.send(());
+        });
+        let tid = tid.recv_timeout(PATIENCE).unwrap();
+
+        std::thread::sleep(Duration::from_millis(200));
+        let before = voluntary_switches(tid);
+        std::thread::sleep(Duration::from_millis(400));
+        let woken = voluntary_switches(tid) - before;
+        assert!(woken <= 1, "woke {woken} times with nothing to do");
+
+        request_quit(shared);
+        has_left
+            .recv_timeout(PATIENCE)
+            .expect("the quit reached it");
+    }
+
+    /// `want_hook` is never set here, so nothing is armed and no device is opened.
+    #[test]
+    fn the_evdev_backend_sleeps_while_the_engine_is_off() {
+        sleeps_until_quit(|shared| {
+            assert!(evdev::run(shared));
+        });
+    }
+
+    #[test]
+    fn no_backend_at_all_sleeps_too() {
+        sleeps_until_quit(wait_for_quit);
+    }
+
+    /// A backend blocked in `wait` has only these to bring it back.
+    #[test]
+    fn every_request_signals_the_backend() {
+        for request in [request_hook, request_unhook, request_quit] {
+            let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+            request(shared);
+
+            let (returned, has_returned) = mpsc::channel();
+            std::thread::spawn(move || {
+                shared.wake.wait();
+                let _ = returned.send(());
+            });
+            has_returned
+                .recv_timeout(PATIENCE)
+                .expect("it was signalled");
+        }
+    }
 }

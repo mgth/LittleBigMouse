@@ -113,6 +113,7 @@ with invented ones.
 | `nine-monitors-long-id-saved` | The same wall with a layout stored under the hashed key. |
 | `portrait-rotated` | A rotated QHD next to a landscape primary: intrinsic model size, rotation applied downstream (#511), orientation in the layout id. |
 | `portrait-pre-541-store` | The same with a pre-5.4.1 store holding the rotated size: the #507 transposition back. |
+| `portrait-intrinsic-marked-store` | The same store with the model marked `IntrinsicSize`: applied as stored, never transposed (#728, #730). |
 | `no-edid` | Outputs with no matched EDID, one with no size at all: connector identity, the infinities of a surface-less monitor, the stored 0×0 of #419 ignored. |
 | `no-outputs-fallback` | No output at all: the invented 1920×1080 `FALLBACK` monitor. |
 | `disabled-output` | A monitor switched off in the display settings: no zone, stored pixel geometry restored. |

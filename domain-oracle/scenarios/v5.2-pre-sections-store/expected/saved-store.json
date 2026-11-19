@@ -75,7 +75,8 @@
         "Right": 8,
         "Bottom": 14
       },
-      "PnpName": "DELL P2419H"
+      "PnpName": "DELL P2419H",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

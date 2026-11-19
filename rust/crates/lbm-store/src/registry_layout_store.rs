@@ -316,6 +316,7 @@ pub fn read_model<K: RegistryKey>(key: &K) -> ModelDto {
         height: try_get(key, r"Size\Height"),
         borders: read_borders(key, "Borders"),
         pnp_name: try_get_string(key, "PnpName"),
+        intrinsic_size: try_get_bool(key, r"Size\Intrinsic"),
         ..Default::default()
     }
 }

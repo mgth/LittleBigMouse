@@ -189,4 +189,14 @@ public class ModelDto
     public double? Height { get; set; }
     public BordersDto? Borders { get; set; }
     public string? PnpName { get; set; }
+
+    /// <summary>
+    /// True when <see cref="Width"/>/<see cref="Height"/> are the panel's intrinsic size as
+    /// this version saves it: they are then applied as stored, whatever the detected panel
+    /// looks like. Absent on every size written before this flag existed, which still goes
+    /// through the pre-5.4.1 orientation migration (<c>LayoutMigrations.NormalizeStoredSize</c>).
+    /// Without it that migration ran on every load and undid any size whose shape contradicts
+    /// the detected one — a PBP half under a full-panel EDID, or a user's swap (#728, #730).
+    /// </summary>
+    public bool? IntrinsicSize { get; set; }
 }

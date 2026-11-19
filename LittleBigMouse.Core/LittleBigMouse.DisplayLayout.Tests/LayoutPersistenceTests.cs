@@ -579,6 +579,102 @@ public class LayoutPersistenceTests
         Assert.Equal(338, monitor.Model.PhysicalSize.Height);
     }
 
+    [Fact]
+    public void Load_IntrinsicMarkedSize_IsAppliedEvenWhenItContradictsTheDetectedShape()
+    {
+        // A picture-by-picture half: the EDID describes the whole 16:9 panel (detected
+        // 600x340), the half the user measured is taller than wide. Saved by a version that
+        // marks its sizes intrinsic, it is not an old oriented size and must not be swapped
+        // (#730).
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 300, Height = 340, IntrinsicSize = true };
+
+        var layout = NewLayout(out var monitor, out _); // fresh intrinsic model: 600x340
+        NewPersistence(store).Load(layout);
+
+        Assert.Equal(300, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(340, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void Save_MarksTheModelSizeIntrinsic()
+    {
+        var store = new FakeStore();
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out _, out _);
+        persistence.Load(layout);
+        persistence.Save(layout);
+
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+    }
+
+    [Fact]
+    public void SizeEditedAcrossTheDetectedShape_SurvivesSaveAndReload()
+    {
+        // #728 / #730 end to end: the user corrects a size so that its shape contradicts the
+        // detected one, saves; every later load (start, wake, display change) used to swap
+        // it back through the pre-5.4.1 migration.
+        var store = new FakeStore();
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _); // detected 600x340
+        persistence.Load(layout);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 340;
+        monitor.Model.PhysicalSize.Height = 600;
+        persistence.Save(layout);
+
+        var reloaded = NewLayout(out var again, out _); // detected 600x340 again
+        persistence.Load(reloaded);
+
+        Assert.Equal(340, again.Model.PhysicalSize.Width);
+        Assert.Equal(600, again.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void Load_UnmarkedContradictingSize_IsStillMigratedOnce()
+    {
+        // A store written before the mark: the pre-5.4.1 migration still applies, and the
+        // next save writes the migrated size with the mark, so it is never re-examined.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _);
+        persistence.Load(layout);
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+
+        persistence.Save(layout);
+        Assert.Equal(598, store.Models[Pnp].Width);
+        Assert.Equal(338, store.Models[Pnp].Height);
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+    }
+
+    [Theory]
+    // Unmarked: the orientation migration decides.
+    [InlineData(600, 340, 340, 600, false, 600, 340)]
+    // Marked intrinsic: applied as stored, whatever the detected shape.
+    [InlineData(600, 340, 340, 600, true, 340, 600)]
+    [InlineData(340, 600, 600, 340, true, 600, 340)]
+    public void StoredModelSize_MarkedIntrinsicSkipsTheOrientationMigration(
+        double intrinsicW, double intrinsicH, double storedW, double storedH, bool marked,
+        double expectedW, double expectedH)
+    {
+        var (w, h) = LayoutMigrations.StoredModelSize(intrinsicW, intrinsicH, storedW, storedH, marked);
+        Assert.Equal(expectedW, w);
+        Assert.Equal(expectedH, h);
+    }
+
+    [Fact]
+    public void StoredModelSize_MarkedPlaceholderStillDoesNotOverride()
+    {
+        // The #419 guard is about the value, not its provenance.
+        var (w, h) = LayoutMigrations.StoredModelSize(600, 340, 0, 0, storedIntrinsic: true);
+        Assert.Null(w);
+        Assert.Null(h);
+    }
+
     [Theory]
     // Square intrinsic or stored size: orientation is undecidable, keep as stored.
     [InlineData(500, 500, 340, 600, 340, 600)]

@@ -89,7 +89,8 @@ public static class LayoutDtoMapper
 
         // Placeholder sizes (#419) and pre-5.4.1 oriented sizes (#507) — see LayoutMigrations.
         var (width, height) = LayoutMigrations.StoredModelSize(
-            model.PhysicalSize.Width, model.PhysicalSize.Height, dto.Width, dto.Height);
+            model.PhysicalSize.Width, model.PhysicalSize.Height, dto.Width, dto.Height,
+            storedIntrinsic: dto.IntrinsicSize == true);
 
         if (width is { } w) model.PhysicalSize.Width = w;
         if (height is { } h) model.PhysicalSize.Height = h;
@@ -312,6 +313,9 @@ public static class LayoutDtoMapper
             Right = model.PhysicalSize.RightBorder,
             Bottom = model.PhysicalSize.BottomBorder
         },
-        PnpName = model.PnpDeviceName
+        PnpName = model.PnpDeviceName,
+        // What this version writes is intrinsic: the orientation migration must not
+        // touch it again on the next load (#728, #730).
+        IntrinsicSize = true
     };
 }

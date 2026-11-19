@@ -395,6 +395,14 @@ pub struct ModelDto {
     /// C# `ModelDto.PnpName`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pnp_name: Option<String>,
+    /// C# `ModelDto.IntrinsicSize`: the size was saved intrinsic by a version that marks
+    /// it, and is applied as stored. Absent on older sizes, which still go through the
+    /// pre-5.4.1 orientation migration ([`normalize_stored_size`]); run on every load, that
+    /// migration undid any size whose shape contradicts the detected panel (#728, #730).
+    ///
+    /// [`normalize_stored_size`]: crate::layout_migrations::normalize_stored_size
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intrinsic_size: Option<bool>,
     /// Members this version does not know (not in C#).
     #[serde(flatten)]
     pub extra: UnknownMembers,

@@ -22,7 +22,9 @@ namespace LittleBigMouse.Plugins.Persistence;
 /// <item><see cref="StoredModelSize"/>, 0x0 case — pre-EDID-fallback placeholder size
 /// (#419) must not override the freshly computed one.</item>
 /// <item><see cref="NormalizeStoredSize"/> — pre-5.4.1 model sizes were stored ORIENTED
-/// to the rotation at save time; they are transposed back to intrinsic (#507).</item>
+/// to the rotation at save time; they are transposed back to intrinsic (#507). Only sizes
+/// without the <see cref="ModelDto.IntrinsicSize"/> mark go through it: re-reading a
+/// marked size could not be told from re-migrating it (#728, #730).</item>
 /// </list>
 /// <para>
 /// The one-time top-up of the default exclusion list is a migration too, but it is
@@ -94,16 +96,20 @@ public static class LayoutMigrations
     /// Versions predating the EDID-less size fallback persisted the bogus 0x0 GDI
     /// placeholder for virtual displays (#419): a stored non-positive size must not
     /// override the computed one. A complete stored size then goes through
-    /// <see cref="NormalizeStoredSize"/>; a half-valid one (one dimension only) is applied
-    /// as-is, since a single dimension says nothing about orientation.
+    /// <see cref="NormalizeStoredSize"/>, unless <paramref name="storedIntrinsic"/> says it
+    /// was saved intrinsic already; a half-valid one (one dimension only) is applied as-is,
+    /// since a single dimension says nothing about orientation.
     /// </para>
     /// </summary>
     public static (double? Width, double? Height) StoredModelSize(
         double intrinsicWidth, double intrinsicHeight,
-        double? storedWidth, double? storedHeight)
+        double? storedWidth, double? storedHeight,
+        bool storedIntrinsic = false)
     {
         if (storedWidth is > 0 && storedHeight is > 0)
         {
+            if (storedIntrinsic) return (storedWidth, storedHeight);
+
             var (w, h) = NormalizeStoredSize(
                 intrinsicWidth, intrinsicHeight, storedWidth.Value, storedHeight.Value);
             return (w, h);
@@ -123,8 +129,14 @@ public static class LayoutMigrations
     /// orientation contradicts it, transpose the stored value — the portrait/landscape
     /// signal is robust to user-customized magnitudes (edits keep the panel aspect via
     /// FixedAspectRatio), which are preserved. Square or invalid sizes decide nothing.
-    /// Once the layout is saved again the store holds the intrinsic size and this is a
-    /// permanent no-op.
+    /// <para>
+    /// The test cannot tell an old oriented size from a deliberate one: a picture-by-picture
+    /// half whose EDID describes the whole panel, or a size the user swapped by hand, is
+    /// intrinsic AND contradicts the detected shape. Run on every load, it swapped those back
+    /// at each start and each wake (#728, #730). It is therefore a ONE-TIME migration: a save
+    /// marks the model <see cref="ModelDto.IntrinsicSize"/>, and a marked size never comes
+    /// here (see <see cref="StoredModelSize"/>).
+    /// </para>
     /// </summary>
     public static (double Width, double Height) NormalizeStoredSize(
         double intrinsicWidth, double intrinsicHeight,

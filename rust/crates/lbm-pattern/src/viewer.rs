@@ -11,6 +11,7 @@ use wayland_client::{
     globals::{registry_queue_init, GlobalListContents},
     protocol::{
         wl_buffer::WlBuffer,
+        wl_callback::{self, WlCallback},
         wl_compositor::WlCompositor,
         wl_keyboard::{self, WlKeyboard},
         wl_output::{self, WlOutput},
@@ -77,7 +78,7 @@ impl State {
     }
 
     /// Attach the buffer once we know the logical size from configure.
-    fn commit_content(&mut self) {
+    fn commit_content(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
         if self.drawn {
             // still re-assert the destination on later configures
             if let (Some(viewport), Some((w, h))) = (&self.viewport, self.logical) {
@@ -110,8 +111,7 @@ impl State {
         surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
         surface.commit();
         self.drawn = true;
-        println!("READY {}", self.first_revision());
-        let _ = std::io::stdout().flush();
+        confirm(conn, qh, self.first_revision());
     }
 
     /// What the first frame acknowledges: the settings it was drawn with.
@@ -345,8 +345,7 @@ fn main_inner(mut args: impl Iterator<Item = String>) -> Result<i32, Box<dyn std
             state.phase = settings.alternates() && blink_phase();
             present(&state);
             if let Some(revision) = state.acknowledge(update.revision) {
-                println!("READY {revision}");
-                let _ = std::io::stdout().flush();
+                confirm(&conn, &qh, revision);
             }
         }
         let phase = settings.alternates() && blink_phase();
@@ -378,6 +377,12 @@ fn main_inner(mut args: impl Iterator<Item = String>) -> Result<i32, Box<dyn std
     }
 
     Ok(0)
+}
+
+/// Tells the owner that `revision` is on screen, once the compositor has processed the
+/// commit that carries it: `wl_display.sync` answers only after every earlier request.
+fn confirm(conn: &Connection, qh: &QueueHandle<State>, revision: u64) {
+    conn.display().sync(qh, revision);
 }
 
 fn blink_phase() -> bool {
@@ -643,8 +648,8 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
         layer: &ZwlrLayerSurfaceV1,
         event: zwlr_layer_surface_v1::Event,
         _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
     ) {
         match event {
             zwlr_layer_surface_v1::Event::Configure {
@@ -656,7 +661,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
                 if width > 0 && height > 0 {
                     state.logical = Some((width as i32, height as i32));
                 }
-                state.commit_content();
+                state.commit_content(conn, qh);
             }
             zwlr_layer_surface_v1::Event::Closed => state.exit = true,
             _ => {}
@@ -686,12 +691,12 @@ impl Dispatch<XdgSurface, ()> for State {
         xdg_surface: &XdgSurface,
         event: xdg_surface::Event,
         _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
     ) {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg_surface.ack_configure(serial);
-            state.commit_content();
+            state.commit_content(conn, qh);
         }
     }
 }
@@ -713,6 +718,22 @@ impl Dispatch<XdgToplevel, ()> for State {
             }
             xdg_toplevel::Event::Close => state.exit = true,
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<WlCallback, u64> for State {
+    fn event(
+        _: &mut Self,
+        _: &WlCallback,
+        event: wl_callback::Event,
+        revision: &u64,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            println!("READY {revision}");
+            let _ = std::io::stdout().flush();
         }
     }
 }

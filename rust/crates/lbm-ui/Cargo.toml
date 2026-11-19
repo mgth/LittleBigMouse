@@ -7,6 +7,7 @@ publish = false
 description = "The LittleBigMouse frontend (v7): state, actions and views, with no window of its own yet"
 
 [dependencies]
+lbm-pattern = { path = "../lbm-pattern" }
 lbm-icons = { path = "../lbm-icons" }
 lbm-wallpaper = { path = "../lbm-wallpaper" }
 lbm-store = { path = "../lbm-store" }

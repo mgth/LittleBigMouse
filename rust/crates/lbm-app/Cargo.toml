@@ -7,6 +7,7 @@ publish = false
 description = "The LittleBigMouse frontend's window: what lbm-ui draws, on screen"
 
 [dependencies]
+lbm-pattern = { path = "../lbm-pattern" }
 lbm-wallpaper = { path = "../lbm-wallpaper" }
 # The window. `lbm-ui` deliberately has none — it is driven headlessly through the
 # accessibility tree — so everything that needs winit and a GL context lives here and
@@ -56,6 +57,7 @@ tempfile.workspace = true
 # panic in accesskit's thread). The picker still drives it from a tokio block_on.
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser", "wayland"] }
 wayland-client = "0.31"
+zbus = { version = "5", default-features = false, features = ["async-io"] }
 tempfile.workspace = true
 wayland-backend = { version = "0.3", features = ["client_system"] }
 url = "2"

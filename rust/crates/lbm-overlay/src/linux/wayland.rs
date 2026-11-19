@@ -67,6 +67,23 @@ struct SurfaceState {
     size: Option<(u32, u32)>,
     scale: Option<u32>,
 }
+impl SurfaceState {
+    /// Whether a preferred scale says the displays changed under this surface.
+    ///
+    /// Until its first configure KWin has not placed the surface on its output yet, and
+    /// reports provisional scales: on a 2× screen at 0,0 beside a 1.25× one, every
+    /// surface of the 1.25× screen hears 150, then 240, then 150 before its configure.
+    /// Only a configured surface's scale counts; the provisional ones are just recorded,
+    /// and the last of them is what the first buffer is drawn at.
+    fn rescaled(&self, scale: u32) -> bool {
+        self.size.is_some()
+            && (self.scale.is_some_and(|old| old != scale)
+                || self
+                    .band
+                    .as_ref()
+                    .is_some_and(|b| (b.scale * 120. - f64::from(scale)).abs() > 1.))
+    }
+}
 #[derive(Default)]
 struct State {
     outputs: HashMap<u32, Output>,
@@ -580,11 +597,7 @@ impl Dispatch<WpFractionalScaleV1, Tag> for State {
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = e {
             if let Some(surface) = s.surfaces.get_mut(tag.index) {
-                s.changed |= surface.scale.is_some_and(|old| old != scale)
-                    || surface
-                        .band
-                        .as_ref()
-                        .is_some_and(|b| (b.scale * 120. - f64::from(scale)).abs() > 1.);
+                s.changed |= surface.rescaled(scale);
                 surface.scale = Some(scale);
             }
         }
@@ -835,5 +848,69 @@ impl Dispatch<WlKeyboard, ()> for State {
             },
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SurfaceState;
+    use crate::scene::{Band, Content, Pixels, Side};
+
+    /// A ruler surface laid out for a 1.25× output (150/120).
+    fn ruler_at_125() -> SurfaceState {
+        let screen = Pixels {
+            x: 1920,
+            y: 0,
+            width: 3072,
+            height: 1728,
+        };
+        SurfaceState {
+            band: Some(Band {
+                monitor: "philips".into(),
+                connector: "DP-3".into(),
+                screen,
+                rect: Pixels {
+                    height: 100,
+                    ..screen
+                },
+                side: Side::Top,
+                scale: 1.25,
+                axis_mm: 698.,
+                cross_pixels_per_mm: 4.4,
+                content: Content::Ruler {
+                    zero_mm: 0.,
+                    measured_mm: 698.,
+                },
+                selected: None,
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// The sequence KWin sent for each 1.25× ruler beside a 2× screen at 0,0.
+    #[test]
+    fn provisional_scales_before_the_first_configure_change_nothing() {
+        let mut surface = ruler_at_125();
+        for scale in [150, 240, 150] {
+            assert!(!surface.rescaled(scale), "{scale} before configure");
+            surface.scale = Some(scale);
+        }
+        surface.size = Some((3072, 100));
+        assert!(!surface.rescaled(150));
+    }
+
+    #[test]
+    fn a_configured_surface_whose_scale_moves_means_the_displays_changed() {
+        let mut surface = ruler_at_125();
+        surface.scale = Some(150);
+        surface.size = Some((3072, 100));
+        assert!(surface.rescaled(240));
+    }
+
+    #[test]
+    fn a_configured_surface_at_another_scale_than_its_layout_is_refused() {
+        let mut surface = ruler_at_125();
+        surface.size = Some((3072, 100));
+        assert!(surface.rescaled(240));
     }
 }

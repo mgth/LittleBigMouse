@@ -6,15 +6,18 @@
 //! them. The window is created but never shown.
 
 use windows::core::{w, GUID, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{BOOL, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::{RegisterPowerSettingNotification, POWERBROADCAST_SETTING};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW, CW_USEDEFAULT,
     DEVICE_NOTIFY_WINDOW_HANDLE, PBT_POWERSETTINGCHANGE, SPI_SETWORKAREA, WINDOW_EX_STYLE,
-    WM_DISPLAYCHANGE, WM_POWERBROADCAST, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    WM_DISPLAYCHANGE, WM_INPUT, WM_INPUT_DEVICE_CHANGE, WM_POWERBROADCAST, WM_SETTINGCHANGE,
+    WM_TIMER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
 };
 
+use crate::geometry::Rect;
 use crate::shared::SHARED;
 
 const CLASS_NAME: PCWSTR = w!("HookerDisplayChange");
@@ -69,6 +72,7 @@ pub fn create_window() -> HWND {
         // window itself. On (re)registration Windows immediately re-pushes the current state; the
         // `suspended` dedup in `on_suspend`/`on_resume` absorbs that.
         if hwnd != HWND::default() {
+            super::native_touch::attach(hwnd);
             let _ = RegisterPowerSettingNotification(
                 HANDLE(hwnd.0),
                 &GUID_CONSOLE_DISPLAY_STATE,
@@ -82,10 +86,44 @@ pub fn create_window() -> HWND {
 
 pub fn destroy_window(hwnd: HWND) {
     if hwnd != HWND::default() {
+        super::native_touch::detach();
         unsafe {
             let _ = DestroyWindow(hwnd);
         }
     }
+}
+
+/// The rectangle of every attached monitor, or `None` when Windows reports none.
+pub fn monitors_now() -> Option<Vec<Rect<i32>>> {
+    let mut monitors: Vec<Rect<i32>> = Vec::new();
+
+    unsafe extern "system" fn collect(
+        _monitor: HMONITOR,
+        _hdc: HDC,
+        rect: *mut RECT,
+        data: LPARAM,
+    ) -> BOOL {
+        // SAFETY: `data` is the `&mut Vec` passed below, alive for the whole enumeration,
+        // and `rect` is the monitor rectangle Windows hands to every callback.
+        let monitors = unsafe { &mut *(data.0 as *mut Vec<Rect<i32>>) };
+        let r = unsafe { *rect };
+        monitors.push(Rect::new(r.left, r.top, r.right - r.left, r.bottom - r.top));
+        BOOL(1)
+    }
+
+    let ok = unsafe {
+        EnumDisplayMonitors(
+            HDC::default(),
+            None,
+            Some(collect),
+            LPARAM(&mut monitors as *mut Vec<Rect<i32>> as isize),
+        )
+    };
+
+    if !ok.as_bool() || monitors.is_empty() {
+        return None;
+    }
+    Some(monitors)
 }
 
 unsafe extern "system" fn wnd_proc(
@@ -95,6 +133,19 @@ unsafe extern "system" fn wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match msg {
+        WM_INPUT => {
+            crate::hook::guard(|| super::native_touch::on_input(hwnd, lparam));
+            // Required for foreground raw-input cleanup, also safe for INPUTSINK.
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
+        WM_TIMER if wparam.0 == super::native_touch::RELEASE_TIMER => {
+            crate::hook::guard(|| super::native_touch::on_timer(hwnd));
+            LRESULT(0)
+        }
+        WM_INPUT_DEVICE_CHANGE => {
+            crate::hook::guard(super::native_touch::devices_changed);
+            LRESULT(0)
+        }
         WM_DISPLAYCHANGE => {
             crate::hook::guard(|| {
                 if let Some(shared) = SHARED.get() {
@@ -105,6 +156,9 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => {
             crate::hook::guard(|| {
+                if super::touch_input::preserve_on_work_area_change() {
+                    return;
+                }
                 if let Some(shared) = SHARED.get() {
                     crate::hook::on_setting_changed(shared);
                 }

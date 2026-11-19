@@ -48,7 +48,7 @@ fn save_options(world: &mut impl AgentWorld, before: &LayoutOptions, after: &Lay
         unreachable!()
     };
     world
-        .save_options(options.as_ref(), excluded.as_deref(), load_at_startup)
+        .save_options(options.as_deref(), excluded.as_deref(), load_at_startup)
         .unwrap();
 }
 fn enabled(dir: &std::path::Path, id: &str) -> bool {

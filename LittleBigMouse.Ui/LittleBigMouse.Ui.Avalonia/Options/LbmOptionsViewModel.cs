@@ -66,6 +66,15 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             LocalizedItem("Realtime", "Options.Priority.Realtime")
         ];
 
+        TouchModifierList =
+        [
+            LocalizedItem("None", "Options.Touch.Override.None"),
+            new ListItem("Ctrl", "Ctrl", ""),
+            new ListItem("Alt", "Alt", ""),
+            new ListItem("Shift", "Shift", ""),
+            new ListItem("Win", "Win", "")
+        ];
+
         _selectedLanguage = LanguageList.Find(e => e.Id == LbmLocalizer.Current.Preference) ?? LanguageList[0];
 
         // A computed caption: re-read when the language changes.
@@ -73,6 +82,31 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
             .Observe("Options.RescueShortcut.Ownership")
             .Subscribe(_ => this.RaisePropertyChanged(nameof(ShortcutOwnership)))
             .DisposeWith(this);
+
+        mainService.WhenAnyValue(e => e.MonitorsLayout)
+            .Select(layout => layout == null
+                ? Observable.Return<IReadOnlyCollection<PhysicalSource>>(Array.Empty<PhysicalSource>())
+                : layout.PhysicalSources.ToObservableChangeSet().ToCollection())
+            .Switch()
+            .CombineLatest(this.WhenAnyValue(e => e.Model.TouchDisplayIds),
+                LbmLocalizer.Current.Observe("Options.Touch.DisplayLabel"),
+                (sources, ids, _) => (sources, ids))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(value =>
+            {
+                var selected = (value.ids ?? "").Split(';').ToHashSet(StringComparer.Ordinal);
+                TouchDisplays.Clear();
+                foreach (var source in value.sources.Where(s =>
+                    s.Source.AttachedToDesktop && s == s.Monitor.ActiveSource))
+                {
+                    var display = source.Source;
+                    TouchDisplays.Add(new TouchDisplayChoice(display.Id,
+                        LbmLocalizer.Current.Format("Options.Touch.DisplayLabel", display.SourceNumber,
+                            display.DisplayName ?? source.Monitor.Model.PnpDeviceName,
+                            display.InPixel.Width, display.InPixel.Height),
+                        selected.Contains(display.Id), SetTouchDisplay));
+                }
+            }).DisposeWith(this);
 
         // Turning a permission OFF must fix the current layout right away, not
         // wait for the next monitor move: compact resolves the existing overlaps
@@ -139,6 +173,9 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
 
         _selectedPriority = this.WhenAnyValue(e => e.Model.Priority)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriority));
+
+        _selectedTouchModifier = this.WhenAnyValue(e => e.Model.TouchOverrideModifier)
+            .Select(a => TouchModifierList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedTouchModifier));
 
         _selectedPriorityUnhooked = this.WhenAnyValue(e => e.Model.PriorityUnhooked)
             .Select(a => PriorityList.Find(e => e.Id == a)).ToProperty(this, nameof(SelectedPriorityUnhooked));
@@ -231,6 +268,33 @@ public class LbmOptionsViewModel : ViewModel<ILayoutOptions>
     public string? ShortcutOwnership => OperatingSystem.IsWindows()
         ? null
         : LbmLocalizer.Current.Get("Options.RescueShortcut.Ownership");
+
+
+    public bool TouchMouseIndependentSupported => OperatingSystem.IsWindows();
+    public List<ListItem> TouchModifierList { get; }
+
+    public ListItem? SelectedTouchModifier
+    {
+        get => _selectedTouchModifier.Value;
+        set
+        {
+            if (Model == null) return;
+            Model.TouchOverrideModifier = value?.Id ?? "None";
+        }
+    }
+    readonly ObservableAsPropertyHelper<ListItem?> _selectedTouchModifier;
+
+    public ObservableCollection<TouchDisplayChoice> TouchDisplays { get; } = new();
+
+    void SetTouchDisplay(string id, bool enabled)
+    {
+        if (Model == null) return;
+        var ids = Model.TouchDisplayIds.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        if (enabled) ids.Add(id); else ids.Remove(id);
+        Model.TouchDisplayIds = string.Join(";", ids.OrderBy(value => value, StringComparer.Ordinal));
+    }
+
 
     /// <summary>Empty while the rescue shortcut is registered and working.</summary>
     public string ShortcutWarning

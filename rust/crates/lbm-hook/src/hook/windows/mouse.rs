@@ -27,6 +27,14 @@ thread_local! {
     static PREV: Cell<MoveDedup> = const { Cell::new(MoveDedup::new()) };
 }
 
+pub fn reset() {
+    super::touch_input::reset();
+}
+
+pub(super) fn reset_movement() {
+    PREV.with(|prev| prev.set(MoveDedup::new()));
+}
+
 /// # Safety
 /// Invoked by Windows as a `WH_MOUSE_LL` hook procedure; never call it directly.
 /// When `code >= 0`, `lparam` points to a valid `MSLLHOOKSTRUCT`, as guaranteed
@@ -35,18 +43,24 @@ pub unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPAR
     let handled = catch_unwind(AssertUnwindSafe(|| process(code, wparam, lparam))).unwrap_or(false);
 
     if handled {
-        LRESULT(1) // block the event so the cursor sticks to the border
+        LRESULT(1) // the engine or touch-resume code has positioned the cursor
     } else {
         unsafe { CallNextHookEx(HHOOK::default(), code, wparam, lparam) }
     }
 }
 
 fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
+    if code < 0 || lparam.0 == 0 {
+        return false;
+    }
+    let ms = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+    if let Some(handled) = super::touch_input::process(wparam.0 as u32, ms) {
+        return handled;
+    }
     if !is_mouse_move_message(code, wparam, lparam) {
         return false;
     }
 
-    let ms = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
     let loc = (ms.pt.x, ms.pt.y);
 
     let changed = PREV.with(|prev| {
@@ -68,7 +82,9 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     // is recovered, crossing counted — lives in the neutral `hot_path` core, so
     // the Windows callback and the benchmark exercise the same decision.
     let mut env = Win32Cursor;
-    route_move(&shared.engine, &mut env, Point::new(loc.0, loc.1)).handled()
+    let handled = route_move(&shared.engine, &mut env, Point::new(loc.0, loc.1)).handled();
+    super::touch_input::record_mouse_position(loc, handled);
+    handled
 }
 
 // The C++ hook filtered with `(wParam & WM_MOUSEMOVE) != 0`, but every mouse

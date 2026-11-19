@@ -36,6 +36,18 @@ pub struct ZonesLayout {
     pub algorithm: Algorithm,
     pub priority: Priority,
     pub priority_unhooked: Priority,
+    /// Windows mouse resumes from its saved position after touchscreen input.
+    pub touch_mouse_independent: bool,
+    pub stylus_mouse_independent: bool,
+    pub restore_keyboard_focus: bool,
+    pub focus_restore_delay: i32,
+    pub focus_restore_on_mouse_move: bool,
+    pub touch_all_displays: bool,
+    pub touch_display_ids: String,
+    pub touch_override_modifier: String,
+    pub focus_keep_apps: String,
+    pub focus_restore_apps: String,
+    pub touch_display_bounds: String,
     /// The panic shortcut, as the UI spells it (`Ctrl+Alt+Shift+M`). Travels with
     /// the layout like every other daemon-side setting, so it reaches the daemon on
     /// the startup replay too. Empty means "whatever the daemon defaults to".
@@ -73,6 +85,17 @@ impl Default for ZonesLayout {
             algorithm: Algorithm::Strait,
             priority: Priority::Normal,
             priority_unhooked: Priority::Above,
+            touch_mouse_independent: false,
+            stylus_mouse_independent: false,
+            restore_keyboard_focus: false,
+            focus_restore_delay: 120,
+            focus_restore_on_mouse_move: false,
+            touch_all_displays: true,
+            touch_display_ids: "".to_owned(),
+            touch_override_modifier: "None".to_owned(),
+            focus_keep_apps: "".to_owned(),
+            focus_restore_apps: "".to_owned(),
+            touch_display_bounds: String::new(),
             rescue_shortcut: String::new(),
             loop_x: false,
             loop_y: false,
@@ -127,6 +150,24 @@ impl ZonesLayout {
         };
         layout.priority = Priority::parse(&get_string(el, "Priority"));
         layout.priority_unhooked = Priority::parse(&get_string(el, "PriorityUnhooked"));
+        layout.touch_mouse_independent = get_bool(el, "TouchMouseIndependent", false);
+        layout.stylus_mouse_independent = get_bool(el, "StylusMouseIndependent", false);
+        layout.restore_keyboard_focus = get_bool(el, "RestoreKeyboardFocus", false);
+        layout.focus_restore_delay = el
+            .attribute("FocusRestoreDelay")
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(120)
+            .clamp(0, 5000);
+        layout.focus_restore_on_mouse_move = get_bool(el, "FocusRestoreOnMouseMove", false);
+        layout.touch_all_displays = get_bool(el, "TouchAllDisplays", true);
+        layout.touch_display_ids = get_string(el, "TouchDisplayIds");
+        layout.touch_override_modifier = el
+            .attribute("TouchOverrideModifier")
+            .unwrap_or("None")
+            .to_owned();
+        layout.focus_keep_apps = get_string(el, "FocusKeepApps");
+        layout.focus_restore_apps = get_string(el, "FocusRestoreApps");
+        layout.touch_display_bounds = get_string(el, "TouchDisplayBounds");
         layout.rescue_shortcut = get_string(el, "RescueShortcut");
 
         if let Some(main_zones) = child(el, "MainZones") {

@@ -28,6 +28,16 @@ fn every_setting_the_panel_moves_survives_the_wire() {
     edited.vcp_control = !edited.vcp_control;
     edited.experimental_features = !edited.experimental_features;
     edited.debug_tools = !edited.debug_tools;
+    edited.touch_mouse_independent = !edited.touch_mouse_independent;
+    edited.stylus_mouse_independent = !edited.stylus_mouse_independent;
+    edited.restore_keyboard_focus = !edited.restore_keyboard_focus;
+    edited.focus_restore_on_mouse_move = !edited.focus_restore_on_mouse_move;
+    edited.touch_all_displays = !edited.touch_all_displays;
+    edited.focus_restore_delay = 275;
+    edited.touch_display_ids = "SRC1".to_owned();
+    edited.touch_override_modifier = "Shift".to_owned();
+    edited.focus_keep_apps = "notepad.exe".to_owned();
+    edited.focus_restore_apps = "control.exe".to_owned();
     edited.show_monitor_action_warning = !edited.show_monitor_action_warning;
     edited.priority = "High".to_owned();
     edited.priority_unhooked = "Idle".to_owned();
@@ -77,6 +87,28 @@ fn every_setting_the_panel_moves_survives_the_wire() {
     assert_eq!(landed.priority, edited.priority);
     assert_eq!(landed.priority_unhooked, edited.priority_unhooked);
     assert_eq!(landed.border_values, edited.border_values);
+    assert_eq!(
+        landed.touch_mouse_independent,
+        edited.touch_mouse_independent
+    );
+    assert_eq!(
+        landed.stylus_mouse_independent,
+        edited.stylus_mouse_independent
+    );
+    assert_eq!(landed.restore_keyboard_focus, edited.restore_keyboard_focus);
+    assert_eq!(
+        landed.focus_restore_on_mouse_move,
+        edited.focus_restore_on_mouse_move
+    );
+    assert_eq!(landed.touch_all_displays, edited.touch_all_displays);
+    assert_eq!(landed.focus_restore_delay, edited.focus_restore_delay);
+    assert_eq!(landed.touch_display_ids, edited.touch_display_ids);
+    assert_eq!(
+        landed.touch_override_modifier,
+        edited.touch_override_modifier
+    );
+    assert_eq!(landed.focus_keep_apps, edited.focus_keep_apps);
+    assert_eq!(landed.focus_restore_apps, edited.focus_restore_apps);
 }
 
 /// The two settings the panel shows but does not edit still have to come back untouched:

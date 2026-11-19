@@ -220,6 +220,9 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         // the layout and resets tracking, so it is exactly the right place to shrug off the poison —
         // this is what lets a Stop/Start (Load) heal crossing instead of staying broken.
         // Before the move: the layout is about to be handed to the engine.
+        let touch_mouse_independent = layout.touch_mouse_independent;
+        let restore_keyboard_focus = layout.restore_keyboard_focus;
+        let touch_policy = crate::hook::touch_policy::TouchPolicy::from_layout(&layout);
         adopt_rescue_shortcut(shared, &layout.rescue_shortcut);
         {
             let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
@@ -230,11 +233,23 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
                 crate::platform::cursor::restore_managed_clip(&mut engine);
             }
             engine.load(layout);
+            *shared
+                .touch_policy
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = std::sync::Arc::new(touch_policy);
+            shared
+                .touch_mouse_independent
+                .store(touch_mouse_independent, Ordering::SeqCst);
+            shared
+                .restore_keyboard_focus
+                .store(restore_keyboard_focus, Ordering::SeqCst);
+            shared.touch_generation.fetch_add(1, Ordering::SeqCst);
         }
         // After the engine has it: what this hook applies is what it accepted, and a
         // Load that failed to parse leaves the previous layout — and its fingerprint.
         *shared.applied.lock().unwrap_or_else(|p| p.into_inner()) =
             lbm_ipc::protocol::fingerprint(xml);
+        hook::touch_options_changed(shared);
         eprintln!(
             "[LittleBigMouse.Hook] layout loaded: {} zones ({} main){tag}",
             info.zones, info.main
@@ -497,6 +512,23 @@ mod tests {
         let mut agent = crate::testing::Listening::to(shared).await;
 
         agent.stays_quiet().await;
+    }
+
+    #[test]
+    fn a_layout_sets_the_touch_option_and_an_older_one_clears_it() {
+        let shared = Shared::new();
+        let layout = ZONES_XML.replace(
+            r#"<ZonesLayout Algorithm="Strait""#,
+            r#"<ZonesLayout TouchMouseIndependent="True" RestoreKeyboardFocus="True" Algorithm="Strait""#,
+        );
+        assert!(load_layout(&shared, &layout, false).is_some());
+        assert!(shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(shared.restore_keyboard_focus.load(Ordering::SeqCst));
+        let generation = shared.touch_generation.load(Ordering::SeqCst);
+        assert!(load_layout(&shared, ZONES_XML, false).is_some());
+        assert!(!shared.touch_mouse_independent.load(Ordering::SeqCst));
+        assert!(!shared.restore_keyboard_focus.load(Ordering::SeqCst));
+        assert_ne!(shared.touch_generation.load(Ordering::SeqCst), generation);
     }
 
     #[test]

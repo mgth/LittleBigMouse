@@ -163,7 +163,7 @@ pub enum Request {
     /// (the XDG entry, the scheduled task), which the agent aligns.
     SaveOptions {
         #[serde(rename = "Options", default, skip_serializing_if = "Option::is_none")]
-        options: Option<GlobalOptionsDto>,
+        options: Option<Box<GlobalOptionsDto>>,
         #[serde(rename = "Excluded", default, skip_serializing_if = "Option::is_none")]
         excluded: Option<Vec<String>>,
         #[serde(

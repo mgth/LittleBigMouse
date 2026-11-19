@@ -699,6 +699,119 @@ async fn the_agent_writes_what_a_frontend_edits_and_previews_it_first() {
 /// A session autostart that cannot be set up refuses the request, but only its own part:
 /// the other options of the same request are applied, stored, and reach the hook.
 #[tokio::test]
+async fn an_option_carried_by_the_layout_reaches_a_running_hook_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let last_load = |fake: &FakeHook| {
+        fake.received().iter().rev().find_map(|c| match c {
+            Command::Load { zones, .. } => Some(zones.clone()),
+            _ => None,
+        })
+    };
+    let touch =
+        |on: bool| json!({ "Method": "SaveOptions", "Options": { "TouchMouseIndependent": on } });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    frontend.ask(json!({ "Method": "Subscribe" })).await;
+
+    // Stopped: stored, and nothing is put in front of the hook.
+    assert_eq!(frontend.ask(touch(true)).await["Result"], Value::Null);
+    assert_eq!(loads(&fake), 0);
+
+    // The Start carries it.
+    frontend.ask(json!({ "Method": "Start" })).await;
+    frontend.state(|s| s["Engine"] == "Running").await;
+    assert!(last_load(&fake)
+        .unwrap()
+        .contains(r#"TouchMouseIndependent="True""#));
+
+    // Running: the change is loaded at once, and the hook stays up.
+    assert_eq!(frontend.ask(touch(false)).await["Result"], Value::Null);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !last_load(&fake)
+            .unwrap()
+            .contains(r#"TouchMouseIndependent="False""#)
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the running hook never got the new option");
+    assert!(fake.hooked());
+
+    // Saying the same thing again changes nothing on the wire.
+    let before = loads(&fake);
+    assert_eq!(frontend.ask(touch(false)).await["Result"], Value::Null);
+    frontend.ask(json!({ "Method": "Snapshot" })).await;
+    assert_eq!(loads(&fake), before);
+}
+
+#[tokio::test]
+async fn an_option_saved_during_a_preview_reaches_the_previewed_layout() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let world = system_world(dir.path());
+    tokio::spawn(async move {
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
+    let mut edited = frontend_layout(dir.path());
+    let monitor = edited.monitors()[0].id.clone();
+    edited.set_location(&monitor, lbm_layout::geo::Point::new(40.0, 20.0));
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&edited)).unwrap();
+    let preview = json!({ "Method": "Preview", "LayoutId": layout_id, "Document": document });
+    assert_eq!(frontend.ask(preview).await["Result"], Value::Null);
+    frontend
+        .state(|s| s["Previewing"] == true && s["Engine"] == "Running")
+        .await;
+    let geometry = |zones: &str| zones.split_once("<MainZones>").unwrap().1.to_owned();
+    let last_load = |fake: &FakeHook| {
+        fake.received().iter().rev().find_map(|c| match c {
+            Command::Load { zones, .. } => Some(zones.clone()),
+            _ => None,
+        })
+    };
+    let previewed = geometry(&last_load(&fake).unwrap());
+
+    let saved = json!({ "Method": "SaveOptions", "Options": { "TouchMouseIndependent": true } });
+    assert_eq!(frontend.ask(saved).await["Result"], Value::Null);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !last_load(&fake)
+            .unwrap()
+            .contains(r#"TouchMouseIndependent="True""#)
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the previewed layout never got the option");
+    assert_eq!(
+        geometry(&last_load(&fake).unwrap()),
+        previewed,
+        "the geometry being edited was lost"
+    );
+}
+
+#[tokio::test]
 async fn an_autostart_that_fails_does_not_keep_the_other_options_from_the_hook() {
     let dir = tempfile::tempdir().unwrap();
     let (hook_endpoint, api_endpoint) = endpoints(&dir);

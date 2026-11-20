@@ -171,3 +171,19 @@ impl Drop for Guard {
         }
     }
 }
+
+/// Restore and activate the editor without changing its keep-above preference.
+/// Winit cannot focus or unminimize native Wayland windows by itself.
+pub fn activate() -> Result<(), String> {
+    let pid = std::process::id();
+    let mut connection = Guard::connect(pid).map_err(|e| e.to_string())?;
+    connection
+        .run(&format!(
+        "var w = workspace.windowList().find(w => w.pid === {pid} && w.normalWindow && !w.deleted);
+\
+         if (!w) throw new Error('LittleBigMouse window not found');
+\
+         w.minimized = false; workspace.activeWindow = w; workspace.raiseWindow(w); return true;"
+    ))
+        .map(|_| ())
+}

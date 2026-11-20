@@ -40,6 +40,11 @@ pub const HOOK: InstanceName = InstanceName {
     mutex: r"Local\LittleBigMouse-Hook",
 };
 
+pub const EDITOR: InstanceName = InstanceName {
+    file: "lbm-editor.lock",
+    mutex: r"Local\LittleBigMouse-Editor",
+};
+
 #[cfg(unix)]
 impl InstanceLock {
     /// Where the lock lives: `$XDG_RUNTIME_DIR/<file>`, else a per-user name in the

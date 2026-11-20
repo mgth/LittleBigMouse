@@ -76,7 +76,19 @@ impl Address {
     pub fn session() -> io::Result<Self> {
         #[cfg(unix)]
         {
-            let lock = InstanceLock::default_path(EDITOR);
+            let shared = InstanceLock::default_path(EDITOR);
+            let stem = shared
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("lbm-editor");
+            let session = graphical_session(
+                std::env::var("XDG_SESSION_ID").ok().as_deref(),
+                std::env::var("WAYLAND_DISPLAY")
+                    .or_else(|_| std::env::var("DISPLAY"))
+                    .ok()
+                    .as_deref(),
+            );
+            let lock = shared.with_file_name(format!("{stem}{session}.lock"));
             Ok(Self {
                 endpoint: lock.with_extension("sock"),
                 lock,
@@ -115,13 +127,32 @@ impl Address {
     }
 }
 
+/// One editor per desktop, not per user: two graphical sessions of the same user share
+/// a runtime directory, and an editor activated on the other one would be invisible.
+#[cfg(unix)]
+fn graphical_session(login: Option<&str>, display: Option<&str>) -> String {
+    [login, display]
+        .into_iter()
+        .flatten()
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let clean: String = part
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .take(24)
+                .collect();
+            format!("-{clean}")
+        })
+        .collect()
+}
+
 pub fn start(address: Address, replace: bool) -> io::Result<Launch> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     let deadline = Instant::now() + DEADLINE;
     let mut draft = None;
-    let mut replacing = replace;
+    let replacing = replace;
     let mut asked_to_close = false;
     loop {
         if let Some(lock) = address.acquire()? {
@@ -132,7 +163,7 @@ pub fn start(address: Address, replace: bool) -> io::Result<Launch> {
                 draft,
             });
         }
-        if !asked_to_close {
+        {
             let request =
                 json!({"Protocol":1, "Command": if replacing { "Replace" } else { "Activate" }})
                     .to_string();
@@ -156,12 +187,17 @@ pub fn start(address: Address, replace: bool) -> io::Result<Launch> {
                 })?
             });
             match result {
+                // The draft stays here until this launch opens with it: if another one
+                // takes the lock first, it is asked to hand over and close in turn.
                 Ok(response) if replacing => {
-                    draft = response.get("Draft").filter(|v| !v.is_null()).cloned();
+                    if let Some(handed) = response.get("Draft").filter(|v| !v.is_null()) {
+                        draft = Some(handed.clone());
+                    }
                     asked_to_close = true;
-                    replacing = false;
                 }
                 Ok(_) => return Ok(Launch::Activated),
+                // Holding a draft, every failure is a window closing or starting: retry.
+                Err(_) if asked_to_close => {}
                 Err(error)
                     if !matches!(
                         error.kind(),
@@ -280,11 +316,15 @@ async fn serve(
             if replace {
                 emit(events, wake, Event::Close)?;
             }
-            Ok::<_, io::Error>(())
+            Ok::<_, io::Error>(replace)
         })
         .await;
-        if let Ok(Err(error)) = result {
-            eprintln!("[lbm-app] instance request: {error}");
+        match result {
+            // Handed over: a closing editor takes no more requests, so the successor
+            // finds the next owner rather than this one again.
+            Ok(Ok(true)) => return,
+            Ok(Err(error)) => eprintln!("[lbm-app] instance request: {error}"),
+            _ => {}
         }
     }
 }
@@ -352,4 +392,19 @@ async fn connect(path: &std::path::Path) -> io::Result<Stream> {
         }
     }
     Ok(Box::new(pipe))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    #[test]
+    fn each_graphical_session_has_its_own_editor() {
+        let one = super::graphical_session(Some("2"), Some("wayland-0"));
+        let other = super::graphical_session(Some("5"), Some("wayland-0"));
+        let nested = super::graphical_session(Some("2"), Some("wayland-1"));
+        assert_eq!(one, "-2-wayland_0");
+        assert_ne!(one, other);
+        assert_ne!(one, nested);
+        assert_eq!(super::graphical_session(None, Some("")), "");
+        assert_eq!(super::graphical_session(Some("../x"), None), "-___x");
+    }
 }

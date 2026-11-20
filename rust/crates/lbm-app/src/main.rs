@@ -857,6 +857,48 @@ impl App {
         }
     }
 
+    /// Requests from other launches. Run from `logic`, which eframe also calls while the
+    /// window is minimized: activating it must not wait for it to be visible again.
+    fn instance_requests(&mut self, ctx: &egui::Context) {
+        if let Some(instance) = &self.instance {
+            for event in instance.pending() {
+                use lbm_app::instance::Event;
+                match event {
+                    Event::Activate(reply) => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        #[cfg(target_os = "linux")]
+                        std::thread::spawn(|| {
+                            if let Err(error) = lbm_app::patterns::editor::activate() {
+                                eprintln!("[lbm-app] KDE activation: {error}");
+                            }
+                        });
+                        let _ = reply.send(serde_json::Value::Null);
+                    }
+                    Event::Replace(reply) => {
+                        // Carry the local layout draft without saving it over the user's
+                        // profile. The replacement takes its saved reference from disk.
+                        let draft = self.layout.as_ref().map(|layout| {
+                            serde_json::json!({
+                                "LayoutId": layout.id,
+                                "Document": lbm_app::settings::document(layout),
+                                "Selected": self.selected,
+                                "Mode": self.mode.id(),
+                            })
+                        });
+                        let _ = reply.send(draft.unwrap_or(serde_json::Value::Null));
+                    }
+                    Event::Close => {
+                        self.test_patterns.stop();
+                        self.screen_overlay.clear();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     /// Throws the edits away: the stored profile again, over the layout as detected.
     ///
     /// Start with the last loaded/accepted state, including first-run defaults, then
@@ -2472,6 +2514,10 @@ impl App {
 // and now does (`runtime::left`). A second mechanism here would just be a second way to
 // end somebody else's preview.
 impl eframe::App for App {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.instance_requests(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         #[cfg(windows)]
         {
@@ -2506,43 +2552,6 @@ impl eframe::App for App {
         }
         self.retire_departed_file_choice();
         let ctx = ui.ctx().clone();
-        if let Some(instance) = &self.instance {
-            for event in instance.pending() {
-                use lbm_app::instance::Event;
-                match event {
-                    Event::Activate(reply) => {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                        #[cfg(target_os = "linux")]
-                        std::thread::spawn(|| {
-                            if let Err(error) = lbm_app::patterns::editor::activate() {
-                                eprintln!("[lbm-app] KDE activation: {error}");
-                            }
-                        });
-                        let _ = reply.send(serde_json::Value::Null);
-                    }
-                    Event::Replace(reply) => {
-                        // Carry the local layout draft without saving it over the user's
-                        // profile. The replacement takes its saved reference from disk.
-                        let draft = self.layout.as_ref().map(|layout| {
-                            serde_json::json!({
-                                "LayoutId": layout.id,
-                                "Document": lbm_app::settings::document(layout),
-                                "Selected": self.selected,
-                                "Mode": self.mode.id(),
-                            })
-                        });
-                        let _ = reply.send(draft.unwrap_or(serde_json::Value::Null));
-                    }
-                    Event::Close => {
-                        self.test_patterns.stop();
-                        self.screen_overlay.clear();
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        return;
-                    }
-                }
-            }
-        }
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
         // Everything that has landed, not just the first: several thumbnails can arrive
@@ -3495,6 +3504,40 @@ mod lifecycle_tests {
             document,
             lbm_app::settings::document(app.layout.as_ref().unwrap())
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn another_launch_is_answered_without_waiting_for_a_frame_to_be_drawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let lbm_app::instance::Launch::Open { owner, inbox, .. } =
+            lbm_app::instance::start(lbm_app::instance::Address::in_directory(dir.path()), false)
+                .unwrap()
+        else {
+            panic!("the first launch opens")
+        };
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.instance = Some(inbox);
+        let path = dir.path().to_owned();
+        let second = std::thread::spawn(move || {
+            lbm_app::instance::start(lbm_app::instance::Address::in_directory(&path), false)
+        });
+        // What eframe calls even for a minimized window: no `ui`, no painting.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !second.is_finished() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the activation was not answered"
+            );
+            app.instance_requests(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(matches!(
+            second.join().unwrap().unwrap(),
+            lbm_app::instance::Launch::Activated
+        ));
+        drop(owner);
     }
 
     #[test]

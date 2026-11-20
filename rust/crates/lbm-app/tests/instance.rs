@@ -148,3 +148,81 @@ fn a_crashed_owner_releases_the_lock_and_the_stale_socket_is_replaced() {
         0o600
     );
 }
+
+/// A plain launch can take the lock between the old window closing and the replacement
+/// trying again. The draft must still end up in the window that opens last.
+#[test]
+fn a_replacement_keeps_its_draft_when_another_launch_takes_the_lock_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, inbox) = open(dir.path());
+    let draft = json!({"LayoutId":"test","Document":{"Layout":{"Options":{"LoopX":true}}}});
+    let (b_done, b_result) = std::sync::mpsc::channel();
+    let path = dir.path().to_owned();
+    let replacing = thread::spawn(move || {
+        b_done
+            .send(instance::start(Address::in_directory(&path), true).unwrap())
+            .unwrap();
+    });
+    let Event::Replace(answer) = next(&inbox) else {
+        panic!("must replace")
+    };
+    answer.send(draft.clone()).unwrap();
+    assert!(matches!(next(&inbox), Event::Close));
+    // A plain launch waits on the lock too: whichever opens first, the other one meets it.
+    let (c_done, c_result) = std::sync::mpsc::channel();
+    let path = dir.path().to_owned();
+    let plain = thread::spawn(move || {
+        c_done
+            .send(instance::start(Address::in_directory(&path), false).unwrap())
+            .unwrap();
+    });
+    thread::sleep(Duration::from_millis(100));
+    drop(first);
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    let restored = loop {
+        assert!(std::time::Instant::now() < deadline, "nobody opened");
+        if let Ok(Launch::Open {
+            owner,
+            inbox,
+            draft: none,
+        }) = c_result.recv_timeout(Duration::from_millis(50))
+        {
+            // The plain launch won: the replacement asks it to hand over in turn.
+            assert_eq!(none, None);
+            let Event::Replace(answer) = next(&inbox) else {
+                panic!("the replacement must ask the new owner too")
+            };
+            answer.send(serde_json::Value::Null).unwrap();
+            assert!(matches!(next(&inbox), Event::Close));
+            drop(owner);
+            let Launch::Open { owner, draft, .. } =
+                b_result.recv_timeout(Duration::from_secs(5)).unwrap()
+            else {
+                panic!("the replacement must open")
+            };
+            drop(owner);
+            break draft;
+        }
+        if let Ok(Launch::Open {
+            owner,
+            inbox,
+            draft,
+        }) = b_result.recv_timeout(Duration::from_millis(50))
+        {
+            // The replacement won: the plain launch only activates it.
+            let Event::Activate(answer) = next(&inbox) else {
+                panic!("the plain launch must activate the replacement")
+            };
+            answer.send(serde_json::Value::Null).unwrap();
+            assert!(matches!(
+                c_result.recv_timeout(Duration::from_secs(5)).unwrap(),
+                Launch::Activated
+            ));
+            drop(owner);
+            break draft;
+        }
+    };
+    assert_eq!(restored, Some(draft));
+    replacing.join().unwrap();
+    plain.join().unwrap();
+}

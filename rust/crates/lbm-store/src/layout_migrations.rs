@@ -115,6 +115,33 @@ pub fn stored_model_size(
     }
 }
 
+/// C# `LayoutMigrations.StoredSizeUnresolved`: whether an unmarked stored size is still
+/// waiting for its orientation migration — the detected size cannot decide (no usable
+/// dimensions yet, or a square) while the stored one has a shape to decide on. Such a
+/// size is applied as stored, and must be saved back UNMARKED until a detection can
+/// decide — or the user changes it — or a save made under a 0x0 first detection would
+/// freeze a pre-5.4.1 oriented size for good. A marked or a square stored size is never
+/// pending.
+pub fn stored_size_unresolved(
+    intrinsic_width: f64,
+    intrinsic_height: f64,
+    stored_width: Option<f64>,
+    stored_height: Option<f64>,
+    stored_intrinsic: bool,
+) -> bool {
+    let positive = |v: Option<f64>| v.filter(|v| *v > 0.0);
+    match (positive(stored_width), positive(stored_height)) {
+        (Some(w), Some(h)) => {
+            !stored_intrinsic
+                && w != h
+                && (intrinsic_width <= 0.0
+                    || intrinsic_height <= 0.0
+                    || intrinsic_width == intrinsic_height)
+        }
+        _ => false,
+    }
+}
+
 /// C# `LayoutMigrations.NormalizeStoredSize`: migration of pre-5.4.1 stored model
 /// sizes (#507).
 ///
@@ -133,7 +160,8 @@ pub fn stored_model_size(
 /// intrinsic AND contradicts the detected shape. Run on every load, it swapped those back
 /// at each start and each wake (#728, #730). It is therefore a ONE-TIME migration: a save
 /// marks the model `IntrinsicSize`, and a marked size never comes here (see
-/// [`stored_model_size`]).
+/// [`stored_model_size`]). A size this test could not decide is not marked by the save
+/// that follows (see [`stored_size_unresolved`]).
 pub fn normalize_stored_size(
     intrinsic_width: f64,
     intrinsic_height: f64,

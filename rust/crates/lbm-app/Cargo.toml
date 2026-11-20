@@ -36,13 +36,21 @@ lbm-icons = { path = "../lbm-icons" }
 # Read saved layout profiles and share wallpaper editor settings with the agent.
 # Nothing here writes directly to the store.
 lbm-store = { path = "../lbm-store" }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+# `ico`: the window icon is decoded from the same .ico that build.rs embeds in the exe.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif", "ico"] }
 # The frame and the endpoint names, so the frontend cannot spell either differently from
 # the agent that binds them.
 lbm-ipc = { path = "../lbm-ipc" }
 serde_json.workspace = true
 raw-window-handle = "0.6"
 tokio = { workspace = true, features = ["rt", "net", "sync", "time", "macros", "io-util"] }
+
+# Icon and VERSIONINFO for lbm-app.exe (see build.rs). Not under a
+# [target.'cfg(windows)'] table: build-dependencies resolve against the host, and
+# build.rs itself does nothing off Windows. Same versions as lbm-hook's.
+[build-dependencies]
+winresource = "0.1.31"
+roxmltree = "0.20"
 
 [dev-dependencies]
 # The real agent, driving the fake hook, so the client is exercised against the server it

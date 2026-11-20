@@ -105,6 +105,19 @@ impl Layout {
     // Models           //
     //==================//
 
+    /// Captures [`MonitorModel::detected_size`] from the current size, unless a previous
+    /// load already did. Not an edit: the saved state is left alone.
+    ///
+    /// [`MonitorModel::detected_size`]: super::MonitorModel::detected_size
+    pub fn capture_detected_size(&mut self, pnp_code: &str) {
+        if let Some(model) = self.models.iter_mut().find(|m| m.pnp_code == pnp_code) {
+            let size = &model.physical_size;
+            model
+                .detected_size
+                .get_or_insert((size.width(), size.height()));
+        }
+    }
+
     /// Sets [`MonitorModel::unresolved_stored_size`]. Not an edit: the saved state is
     /// left alone, as it is store bookkeeping rather than something the user changed.
     ///

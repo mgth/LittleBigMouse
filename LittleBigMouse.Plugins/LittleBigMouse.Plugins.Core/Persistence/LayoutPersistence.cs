@@ -107,8 +107,14 @@ public abstract class LayoutPersistence : ILayoutPersistence
             _excluded.Load(layout.Options, data.GlobalOptions);
             LayoutDtoMapper.Apply(layout.Options, data.Layout?.Options);
 
-            // What a previous load found undecided is re-derived from this one's store.
-            foreach (var monitor in layout.PhysicalMonitors) monitor.Model.UnresolvedStoredSize = null;
+            foreach (var monitor in layout.PhysicalMonitors)
+            {
+                // The first load captures what the platform detected, before any store
+                // is applied over it; a reload keeps it (see DetectedSize).
+                monitor.Model.DetectedSize ??= (monitor.Model.PhysicalSize.Width, monitor.Model.PhysicalSize.Height);
+                // What a previous load found undecided is re-derived from this one's store.
+                monitor.Model.UnresolvedStoredSize = null;
+            }
 
             foreach (var monitor in layout.PhysicalMonitors)
             {

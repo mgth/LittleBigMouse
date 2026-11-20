@@ -116,8 +116,11 @@ pub fn apply_layout(
         .iter()
         .map(|m| (m.id.clone(), m.model.clone()))
         .collect();
-    // What a previous load found undecided is re-derived from this one's store.
     for (_, model) in &monitors {
+        // The first load captures what the platform detected, before any store is
+        // applied over it; a reload keeps it (see `MonitorModel::detected_size`).
+        layout.capture_detected_size(model);
+        // What a previous load found undecided is re-derived from this one's store.
         layout.set_unresolved_stored_size(model, None);
     }
     for (id, model) in &monitors {
@@ -133,22 +136,30 @@ pub fn apply_layout(
 /// C# `Apply(PhysicalMonitorModel, ModelDto)`: a model's stored size, borders and name.
 pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
     let marked = dto.intrinsic_size == Some(true);
-    // Only ever set here, never cleared: a model shared by several monitors is applied
-    // once per monitor, and from the second time on its "detected" size is the stored
-    // one. `apply_layout` clears it before the first.
-    if let Some(detected) = layout.model(pnp_code).map(|m| m.physical_size) {
-        if layout_migrations::stored_size_unresolved(
-            detected.width(),
-            detected.height(),
-            dto.width,
-            dto.height,
-            marked,
-        ) {
-            if let (Some(w), Some(h)) = (dto.width, dto.height) {
-                layout.set_unresolved_stored_size(pnp_code, Some((w, h)));
-            }
-        }
-    }
+    // Against what the platform detected, not the current size: a reload of the same
+    // model, an agent applying a document over the profile it loaded, or a model shared
+    // by several monitors applied once per monitor, would otherwise compare the stored
+    // size with itself (#794 review).
+    let Some((detected_width, detected_height)) = layout.model(pnp_code).map(|m| {
+        m.detected_size
+            .unwrap_or((m.physical_size.width(), m.physical_size.height()))
+    }) else {
+        return;
+    };
+    let unresolved = layout_migrations::stored_size_unresolved(
+        detected_width,
+        detected_height,
+        dto.width,
+        dto.height,
+        marked,
+    );
+    layout.set_unresolved_stored_size(
+        pnp_code,
+        match (unresolved, dto.width, dto.height) {
+            (true, Some(w), Some(h)) => Some((w, h)),
+            _ => None,
+        },
+    );
     layout.edit_model(pnp_code, |size, name| {
         let fixed_ratio = size.fixed_aspect_ratio();
         size.set_fixed_aspect_ratio(false);
@@ -169,8 +180,8 @@ pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
 
         // Placeholder sizes (#419) and pre-5.4.1 oriented sizes (#507).
         let (width, height) = layout_migrations::stored_model_size(
-            size.width(),
-            size.height(),
+            detected_width,
+            detected_height,
             dto.width,
             dto.height,
             marked,

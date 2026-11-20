@@ -681,6 +681,55 @@ public class LayoutPersistenceTests
     }
 
     [Fact]
+    public void UndecidedMigration_SurvivesAReloadOfTheSameModel()
+    {
+        // #794 review, the Undo path: a reload of the same model object must not take the
+        // stored size it already applied for a detection. Border edit, Undo (Load on the
+        // same layout), border edit, save: the size is still the undecided stored one.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = 0;
+        monitor.Model.PhysicalSize.Height = 0;
+        persistence.Load(first);
+        monitor.Model.PhysicalSize.TopBorder = 17;
+        persistence.Load(first);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Width);
+        monitor.Model.PhysicalSize.TopBorder = 18;
+        persistence.Save(first);
+        Assert.Null(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(598, again.Model.PhysicalSize.Width);
+        Assert.Equal(338, again.Model.PhysicalSize.Height);
+        Assert.Equal(18, again.Model.PhysicalSize.TopBorder);
+    }
+
+    [Fact]
+    public void Reload_MigratesAgainstTheDetectedSize_NotTheCurrentOne()
+    {
+        // Undo after a size edit: the unmarked stored size is migrated against the
+        // detection (600x340), not against what the user had typed meanwhile.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _); // detected 600x340
+        persistence.Load(layout);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 200;
+        monitor.Model.PhysicalSize.Height = 700;
+        persistence.Load(layout);
+
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
     public void UndecidedMigration_AUserCorrectionIsMarked()
     {
         // The user's own size is intrinsic whatever the detection could tell.

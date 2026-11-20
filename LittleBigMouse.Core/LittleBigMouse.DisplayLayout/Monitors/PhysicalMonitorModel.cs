@@ -49,5 +49,14 @@ public class PhysicalMonitorModel : SavableReactiveModel
 
     [DataMember] public DisplaySizeInMm PhysicalSize { get; }
 
+    /// <summary>
+    /// The stored size as read, while its pre-5.4.1 orientation migration could not be
+    /// decided because the detected size had no shape yet (see
+    /// <c>LayoutMigrations.StoredSizeUnresolved</c>); null otherwise. Neither persisted nor
+    /// tracked for <c>Saved</c>: it only tells the next save not to mark this size intrinsic
+    /// unless the user has changed it since.
+    /// </summary>
+    public (double Width, double Height)? UnresolvedStoredSize { get; set; }
+
 
 }

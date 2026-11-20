@@ -25,7 +25,9 @@ use lbm_layout::model::{
     BorderSection, DisplaySize, DisplaySource, Layout, Monitor, MonitorModel, PhysicalSource, Ratio,
 };
 use lbm_store::excluded_process_defaults::{contains_entry, ALL, HEADER, LEGACY_V0, VERSION};
-use lbm_store::layout_migrations::{normalize_stored_size, stored_model_size};
+use lbm_store::layout_migrations::{
+    normalize_stored_size, stored_model_size, stored_size_unresolved,
+};
 use lbm_store::{
     BorderResistanceDto, BorderSideDto, BordersDto, GlobalOptionsDto, LayoutDto, LayoutOptionsDto,
     LayoutPersistence, LayoutStore, LayoutStoreData, ModelDto, MonitorDto, SourceDto,
@@ -842,6 +844,103 @@ fn load_unmarked_contradicting_size_is_still_migrated_once() {
     assert_eq!(stored.width, Some(598.0));
     assert_eq!(stored.height, Some(338.0));
     assert_eq!(stored.intrinsic_size, Some(true));
+}
+
+/// C# `UndecidedMigration_IsNotFrozenBySave_AndRunsAtTheNextDetection`, a theory: its
+/// two `InlineData` in order.
+#[test]
+fn undecided_migration_is_not_frozen_by_save_and_runs_at_the_next_detection() {
+    // #794 review: an unmarked pre-5.4.1 portrait size, a first detection that cannot
+    // decide, a save without touching the size, then a detection with real dimensions.
+    // The save must not mark the size, so the second load still migrates it.
+    for (first_width, first_height) in [(0.0, 0.0), (500.0, 500.0)] {
+        let store = FakeStore::default();
+        store.models.borrow_mut().insert(
+            PNP.to_owned(),
+            ModelDto {
+                width: Some(338.0),
+                height: Some(598.0),
+                ..ModelDto::default()
+            },
+        );
+        let (_dir, mut persistence) = new_persistence(&store);
+
+        let mut first = new_layout();
+        first.edit_model(PNP, |size, _| {
+            size.set_width(first_width);
+            size.set_height(first_height);
+        });
+        persistence.load(&mut first).unwrap();
+        assert_eq!(model(&first).physical_size.width(), 338.0);
+        persistence.save(&mut first).unwrap();
+        assert_eq!(store.models.borrow()[PNP].intrinsic_size, None);
+
+        let mut second = new_layout(); // detected 600x340
+        persistence.load(&mut second).unwrap();
+
+        let case = format!("first detection {first_width}x{first_height}");
+        assert_eq!(model(&second).physical_size.width(), 598.0, "{case}");
+        assert_eq!(model(&second).physical_size.height(), 338.0, "{case}");
+    }
+}
+
+/// C# `UndecidedMigration_AUserCorrectionIsMarked`.
+#[test]
+fn undecided_migration_a_user_correction_is_marked() {
+    // The user's own size is intrinsic whatever the detection could tell.
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut first = new_layout();
+    first.edit_model(PNP, |size, _| {
+        size.set_width(0.0);
+        size.set_height(0.0);
+    });
+    persistence.load(&mut first).unwrap();
+    first.edit_model(PNP, |size, _| {
+        size.set_fixed_aspect_ratio(false);
+        size.set_width(300.0);
+    });
+    persistence.save(&mut first).unwrap();
+    assert_eq!(store.models.borrow()[PNP].intrinsic_size, Some(true));
+
+    let mut second = new_layout(); // detected 600x340
+    persistence.load(&mut second).unwrap();
+
+    assert_eq!(model(&second).physical_size.width(), 300.0);
+    assert_eq!(model(&second).physical_size.height(), 598.0);
+}
+
+/// C# `StoredSizeUnresolved_Cases`, a theory: its six `InlineData` in order.
+#[test]
+fn stored_size_unresolved_cases() {
+    // (detectedW, detectedH, storedW, storedH, marked, expected)
+    let cases: [(f64, f64, f64, f64, bool, bool); 6] = [
+        // Undecided: unmarked, stored with a shape, detected without one.
+        (0.0, 0.0, 338.0, 598.0, false, true),
+        (500.0, 500.0, 338.0, 598.0, false, true),
+        // Decided by the detection, or nothing to decide.
+        (600.0, 340.0, 338.0, 598.0, false, false),
+        (0.0, 0.0, 500.0, 500.0, false, false),
+        (0.0, 0.0, 0.0, 0.0, false, false),
+        // Marked: never pending.
+        (0.0, 0.0, 338.0, 598.0, true, false),
+    ];
+    for (dw, dh, sw, sh, marked, expected) in cases {
+        assert_eq!(
+            stored_size_unresolved(dw, dh, Some(sw), Some(sh), marked),
+            expected,
+            "detected {dw}x{dh}, stored {sw}x{sh}, marked {marked}"
+        );
+    }
 }
 
 /// C# `StoredModelSize_MarkedIntrinsicSkipsTheOrientationMigration`, a theory: its

@@ -87,9 +87,16 @@ public static class LayoutDtoMapper
         model.PhysicalSize.LeftBorder = dto.Borders?.Left ?? model.PhysicalSize.LeftBorder;
 
         // Placeholder sizes (#419) and pre-5.4.1 oriented sizes (#507) — see LayoutMigrations.
+        var (detectedWidth, detectedHeight) = (model.PhysicalSize.Width, model.PhysicalSize.Height);
+        var marked = dto.IntrinsicSize == true;
         var (width, height) = LayoutMigrations.StoredModelSize(
-            model.PhysicalSize.Width, model.PhysicalSize.Height, dto.Width, dto.Height,
-            storedIntrinsic: dto.IntrinsicSize == true);
+            detectedWidth, detectedHeight, dto.Width, dto.Height, marked);
+
+        // Only ever set here, never cleared: a model shared by several monitors is applied
+        // once per monitor, and from the second time on its "detected" size is the stored
+        // one. LayoutPersistence.Load clears it before the first.
+        if (LayoutMigrations.StoredSizeUnresolved(detectedWidth, detectedHeight, dto.Width, dto.Height, marked))
+            model.UnresolvedStoredSize = (dto.Width!.Value, dto.Height!.Value);
 
         if (width is { } w) model.PhysicalSize.Width = w;
         if (height is { } h) model.PhysicalSize.Height = h;
@@ -313,7 +320,14 @@ public static class LayoutDtoMapper
         },
         PnpName = model.PnpDeviceName,
         // What this version writes is intrinsic: the orientation migration must not
-        // touch it again on the next load (#728, #730).
-        IntrinsicSize = true
+        // touch it again on the next load (#728, #730). Except an old size whose
+        // migration is still undecided and that the user has not changed: it stays
+        // unmarked, so the next detection that can decide still migrates it.
+        IntrinsicSize = IsUnresolved(model) ? null : true
     };
+
+    static bool IsUnresolved(PhysicalMonitorModel model)
+        => model.UnresolvedStoredSize is { } pending
+           && pending.Width == model.PhysicalSize.Width
+           && pending.Height == model.PhysicalSize.Height;
 }

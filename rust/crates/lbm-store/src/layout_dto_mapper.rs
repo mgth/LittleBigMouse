@@ -116,6 +116,10 @@ pub fn apply_layout(
         .iter()
         .map(|m| (m.id.clone(), m.model.clone()))
         .collect();
+    // What a previous load found undecided is re-derived from this one's store.
+    for (_, model) in &monitors {
+        layout.set_unresolved_stored_size(model, None);
+    }
     for (id, model) in &monitors {
         if let Some(dto) = models.get(model) {
             apply_model(layout, model, dto);
@@ -128,6 +132,23 @@ pub fn apply_layout(
 
 /// C# `Apply(PhysicalMonitorModel, ModelDto)`: a model's stored size, borders and name.
 pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
+    let marked = dto.intrinsic_size == Some(true);
+    // Only ever set here, never cleared: a model shared by several monitors is applied
+    // once per monitor, and from the second time on its "detected" size is the stored
+    // one. `apply_layout` clears it before the first.
+    if let Some(detected) = layout.model(pnp_code).map(|m| m.physical_size) {
+        if layout_migrations::stored_size_unresolved(
+            detected.width(),
+            detected.height(),
+            dto.width,
+            dto.height,
+            marked,
+        ) {
+            if let (Some(w), Some(h)) = (dto.width, dto.height) {
+                layout.set_unresolved_stored_size(pnp_code, Some((w, h)));
+            }
+        }
+    }
     layout.edit_model(pnp_code, |size, name| {
         let fixed_ratio = size.fixed_aspect_ratio();
         size.set_fixed_aspect_ratio(false);
@@ -152,7 +173,7 @@ pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
             size.height(),
             dto.width,
             dto.height,
-            dto.intrinsic_size == Some(true),
+            marked,
         );
         if let Some(w) = width {
             size.set_width(w);
@@ -494,10 +515,19 @@ pub fn to_model_dto(model: &MonitorModel) -> ModelDto {
         }),
         pnp_name: model.pnp_device_name.clone(),
         // What this version writes is intrinsic: the orientation migration must not
-        // touch it again on the next load (#728, #730).
-        intrinsic_size: Some(true),
+        // touch it again on the next load (#728, #730). Except an old size whose
+        // migration is still undecided and that the user has not changed: it stays
+        // unmarked, so the next detection that can decide still migrates it.
+        intrinsic_size: (!is_unresolved(model)).then_some(true),
         ..Default::default()
     }
+}
+
+/// C# `IsUnresolved`: the size is still the stored one its migration could not decide.
+fn is_unresolved(model: &MonitorModel) -> bool {
+    model
+        .unresolved_stored_size
+        .is_some_and(|(w, h)| w == model.physical_size.width() && h == model.physical_size.height())
 }
 
 /// The models of a layout's monitors, once each, in the order the monitors first use

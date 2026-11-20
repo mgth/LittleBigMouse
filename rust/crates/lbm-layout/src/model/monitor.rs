@@ -12,6 +12,12 @@ pub struct MonitorModel {
     pub logo: Option<String>,
     /// The panel's intrinsic (unrotated) size and bezel borders.
     pub physical_size: MmSize,
+    /// C# `PhysicalMonitorModel.UnresolvedStoredSize`: the stored size as read, while
+    /// its pre-5.4.1 orientation migration could not be decided because the detected
+    /// size had no shape yet; `None` otherwise. Neither persisted nor tracked for
+    /// `saved`: it only tells the next save not to mark this size intrinsic unless the
+    /// user has changed it since.
+    pub unresolved_stored_size: Option<(f64, f64)>,
 }
 
 impl MonitorModel {
@@ -21,6 +27,7 @@ impl MonitorModel {
             pnp_device_name: None,
             logo: None,
             physical_size: MmSize::default(),
+            unresolved_stored_size: None,
         }
     }
 }

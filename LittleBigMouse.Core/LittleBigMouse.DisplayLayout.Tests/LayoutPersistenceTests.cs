@@ -652,6 +652,76 @@ public class LayoutPersistenceTests
     }
 
     [Theory]
+    // Detected size without dimensions (EDID not read yet) or square: undecided.
+    [InlineData(0, 0)]
+    [InlineData(500, 500)]
+    public void UndecidedMigration_IsNotFrozenBySave_AndRunsAtTheNextDetection(
+        double firstWidth, double firstHeight)
+    {
+        // #794 review: an unmarked pre-5.4.1 portrait size, a first detection that cannot
+        // decide, a save without touching the size, then a detection with real dimensions.
+        // The save must not mark the size, so the second load still migrates it.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = firstWidth;
+        monitor.Model.PhysicalSize.Height = firstHeight;
+        persistence.Load(first);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Width);
+        persistence.Save(first);
+        Assert.Null(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(598, again.Model.PhysicalSize.Width);
+        Assert.Equal(338, again.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void UndecidedMigration_AUserCorrectionIsMarked()
+    {
+        // The user's own size is intrinsic whatever the detection could tell.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = 0;
+        monitor.Model.PhysicalSize.Height = 0;
+        persistence.Load(first);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 300;
+        persistence.Save(first);
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(300, again.Model.PhysicalSize.Width);
+        Assert.Equal(598, again.Model.PhysicalSize.Height);
+    }
+
+    [Theory]
+    // Undecided: unmarked, stored with a shape, detected without one.
+    [InlineData(0, 0, 338, 598, false, true)]
+    [InlineData(500, 500, 338, 598, false, true)]
+    // Decided by the detection, or nothing to decide.
+    [InlineData(600, 340, 338, 598, false, false)]
+    [InlineData(0, 0, 500, 500, false, false)]
+    [InlineData(0, 0, 0, 0, false, false)]
+    // Marked: never pending.
+    [InlineData(0, 0, 338, 598, true, false)]
+    public void StoredSizeUnresolved_Cases(
+        double detectedW, double detectedH, double storedW, double storedH, bool marked, bool expected)
+    {
+        Assert.Equal(expected,
+            LayoutMigrations.StoredSizeUnresolved(detectedW, detectedH, storedW, storedH, marked));
+    }
+
+    [Theory]
     // Unmarked: the orientation migration decides.
     [InlineData(600, 340, 340, 600, false, 600, 340)]
     // Marked intrinsic: applied as stored, whatever the detected shape.

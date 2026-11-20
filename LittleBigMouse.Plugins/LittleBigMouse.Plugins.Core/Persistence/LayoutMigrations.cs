@@ -119,6 +119,22 @@ public static class LayoutMigrations
     }
 
     /// <summary>
+    /// Whether an unmarked stored size is still waiting for its orientation migration:
+    /// the detected size cannot decide (no usable dimensions yet, or a square) while the
+    /// stored one has a shape to decide on. Such a size is applied as stored, and must be
+    /// saved back UNMARKED until a detection can decide — or the user changes it — or a
+    /// save made under a 0x0 first detection would freeze a pre-5.4.1 oriented size for
+    /// good. A marked or a square stored size is never pending.
+    /// </summary>
+    public static bool StoredSizeUnresolved(
+        double intrinsicWidth, double intrinsicHeight,
+        double? storedWidth, double? storedHeight,
+        bool storedIntrinsic)
+        => !storedIntrinsic
+           && storedWidth is > 0 && storedHeight is > 0 && storedWidth != storedHeight
+           && (intrinsicWidth <= 0 || intrinsicHeight <= 0 || intrinsicWidth == intrinsicHeight);
+
+    /// <summary>
     /// Migration of pre-5.4.1 stored model sizes (#507). The model used to persist the
     /// size ORIENTED to the display's rotation at save time; since 5.4.1 it stores the
     /// intrinsic panel size and the projection chain applies the rotation downstream. A
@@ -135,7 +151,8 @@ public static class LayoutMigrations
     /// intrinsic AND contradicts the detected shape. Run on every load, it swapped those back
     /// at each start and each wake (#728, #730). It is therefore a ONE-TIME migration: a save
     /// marks the model <see cref="ModelDto.IntrinsicSize"/>, and a marked size never comes
-    /// here (see <see cref="StoredModelSize"/>).
+    /// here (see <see cref="StoredModelSize"/>). A size this test could not decide is not
+    /// marked by the save that follows (see <see cref="StoredSizeUnresolved"/>).
     /// </para>
     /// </summary>
     public static (double Width, double Height) NormalizeStoredSize(

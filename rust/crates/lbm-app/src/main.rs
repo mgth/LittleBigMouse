@@ -113,6 +113,8 @@ struct App {
     arriving: Option<std::sync::mpsc::Receiver<Found>>,
     found: std::sync::mpsc::Sender<Found>,
     _session: Option<lbm_app::session::Session>,
+    instance: Option<lbm_app::instance::Inbox>,
+    replacement_draft: Option<serde_json::Value>,
     refresh: lbm_app::refresh::Refresh,
     detecting: Option<u64>,
     retry_display_at: std::time::Instant,
@@ -501,6 +503,8 @@ impl App {
             next_screen_overlay: std::time::Instant::now(),
             selected: None,
             drag: None,
+            instance: None,
+            replacement_draft: None,
             agent: lbm_app::conversation::Conversation::default(),
             probe: lbm_app::probe::Probe::default(),
             show_probe: true,
@@ -832,6 +836,25 @@ impl App {
             }
         }
         id
+    }
+
+    fn restore_replacement_draft(&mut self, layout: &mut Layout) {
+        let Some(draft) = self.replacement_draft.take() else {
+            return;
+        };
+        if draft["LayoutId"].as_str() != Some(layout.id.as_str()) {
+            return;
+        }
+        if let Ok(document) =
+            serde_json::from_value::<lbm_store::LayoutDocument>(draft["Document"].clone())
+        {
+            document.apply(layout);
+            self.selected = draft["Selected"].as_str().map(str::to_owned);
+            self.mode = lbm_ui::mode::Mode::ALL
+                .into_iter()
+                .find(|m| Some(m.id()) == draft["Mode"].as_str())
+                .unwrap_or_default();
+        }
     }
 
     /// Throws the edits away: the stored profile again, over the layout as detected.
@@ -2483,6 +2506,43 @@ impl eframe::App for App {
         }
         self.retire_departed_file_choice();
         let ctx = ui.ctx().clone();
+        if let Some(instance) = &self.instance {
+            for event in instance.pending() {
+                use lbm_app::instance::Event;
+                match event {
+                    Event::Activate(reply) => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        #[cfg(target_os = "linux")]
+                        std::thread::spawn(|| {
+                            if let Err(error) = lbm_app::patterns::editor::activate() {
+                                eprintln!("[lbm-app] KDE activation: {error}");
+                            }
+                        });
+                        let _ = reply.send(serde_json::Value::Null);
+                    }
+                    Event::Replace(reply) => {
+                        // Carry the local layout draft without saving it over the user's
+                        // profile. The replacement takes its saved reference from disk.
+                        let draft = self.layout.as_ref().map(|layout| {
+                            serde_json::json!({
+                                "LayoutId": layout.id,
+                                "Document": lbm_app::settings::document(layout),
+                                "Selected": self.selected,
+                                "Mode": self.mode.id(),
+                            })
+                        });
+                        let _ = reply.send(draft.unwrap_or(serde_json::Value::Null));
+                    }
+                    Event::Close => {
+                        self.test_patterns.stop();
+                        self.screen_overlay.clear();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        return;
+                    }
+                }
+            }
+        }
         // The answer, when it has arrived. Nothing is polled: the thread asks for a
         // repaint after sending, so this runs on the pass that request causes.
         // Everything that has landed, not just the first: several thumbnails can arrive
@@ -2516,6 +2576,7 @@ impl eframe::App for App {
                         self.pending_options.apply(&mut layout.options);
                         let excluded = self.pending_options.excluded().or(excluded);
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
+                        self.restore_replacement_draft(&mut layout);
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
                         self.detected = detected;
@@ -3074,6 +3135,32 @@ fn main() -> eframe::Result<()> {
     if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
         std::process::exit(lbm_overlay::linux::run_host());
     }
+    let mut replace = false;
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--replace" => replace = true,
+            "--help" | "-h" => {
+                println!("LittleBigMouse\n\nUsage: lbm-app [--replace]\n\nWithout arguments, open or activate the session's editor.\n--replace  Close the current editor and open this build, carrying its layout draft.\n           The mouse engine keeps running.");
+                return Ok(());
+            }
+            _ => {
+                return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(
+                    format!("unknown argument: {arg}"),
+                ))))
+            }
+        }
+    }
+    let launch = lbm_app::instance::Address::session()
+        .and_then(|address| lbm_app::instance::start(address, replace))
+        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    let lbm_app::instance::Launch::Open {
+        owner: _owner,
+        inbox,
+        draft,
+    } = launch
+    else {
+        return Ok(());
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LittleBigMouse")
@@ -3084,13 +3171,64 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "LittleBigMouse",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc.egui_ctx.clone())))),
+        Box::new(move |cc| {
+            inbox.attach(cc.egui_ctx.clone());
+            let mut app = App::new(cc.egui_ctx.clone());
+            app.instance = Some(inbox);
+            app.replacement_draft = draft;
+            Ok(Box::new(app))
+        }),
     )
 }
 
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[test]
+    fn replacement_restores_layout_edits_without_saving_them_or_overwriting_preferences() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut loaded = Layout::new(LayoutOptions {
+            vcp_control: true,
+            ..Default::default()
+        });
+        lbm_layout::linux::populate(&mut loaded, &[], |_| Ok::<(), std::io::Error>(())).unwrap();
+        let saved = lbm_app::saved::Reference::of(&loaded);
+        let mut edited = loaded.clone();
+        let monitor = edited.monitors()[0].id.clone();
+        edited.set_location(&monitor, lbm_layout::geo::Point::new(123., 45.));
+        edited.edit_options(|o| o.vcp_control = false);
+        let draft = serde_json::json!({
+            "LayoutId": edited.id,
+            "Document": lbm_app::settings::document(&edited),
+            "Selected": monitor,
+            "Mode": "size",
+        });
+        app.replacement_draft = Some(draft.clone());
+        app.restore_replacement_draft(&mut loaded);
+        assert!(
+            !saved.holds(&loaded),
+            "replacement must keep local edits unsaved"
+        );
+        assert_eq!(
+            lbm_app::settings::document(&loaded),
+            lbm_app::settings::document(&edited)
+        );
+        assert!(
+            loaded.options.vcp_control,
+            "current preferences belong to the store"
+        );
+        assert_eq!(app.selected.as_deref(), Some(monitor.as_str()));
+        assert_eq!(app.mode, lbm_ui::mode::Mode::Size);
+        assert!(app.replacement_draft.is_none());
+
+        let mut other = Layout::new(LayoutOptions::default());
+        other.id = "different displays".into();
+        let before = lbm_app::settings::document(&other);
+        app.replacement_draft = Some(draft);
+        app.restore_replacement_draft(&mut other);
+        assert_eq!(lbm_app::settings::document(&other), before);
+    }
 
     #[test]
     fn test_patterns_follow_the_selected_connector_without_needing_ddc() {

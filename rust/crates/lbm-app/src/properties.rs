@@ -37,6 +37,17 @@ pub struct Detected {
     loaded: HashMap<String, (f64, f64)>,
 }
 
+/// The model sizes of a document as it is sent: what an old agent holds once it has
+/// taken it (see [`Detected::agent_holds`]).
+#[derive(Clone, Debug, Default)]
+pub struct Held(HashMap<String, (f64, f64)>);
+
+impl Held {
+    pub fn of(layout: &Layout) -> Self {
+        Self(sizes(layout))
+    }
+}
+
 fn sizes(layout: &Layout) -> HashMap<String, (f64, f64)> {
     layout
         .models()
@@ -64,6 +75,13 @@ impl Detected {
             loaded: sizes(layout),
             ..self
         }
+    }
+
+    /// An old agent took a document holding `held`: it compares the next one with those
+    /// sizes, so a save accepted under a 0 x 0 detection moves the reference with it
+    /// (#795 review: two saves in one session).
+    pub fn agent_holds(&mut self, held: Held) {
+        self.loaded.extend(held.0);
     }
 
     /// The size an old agent compares `pnp_code`'s size with: the detection when it has a

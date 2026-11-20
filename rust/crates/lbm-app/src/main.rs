@@ -144,6 +144,9 @@ struct App {
     detected: lbm_app::properties::Detected,
     /// The connected agent announced `IntrinsicSize`: a size may cross the detected shape.
     agent_keeps_intrinsic_size: bool,
+    /// The model sizes of each document in flight, by request id: what the agent holds
+    /// once it answers it. An old agent compares the next document with those.
+    held_pending: HashMap<u64, lbm_app::properties::Held>,
     property_error: Option<String>,
     resistance: lbm_ui::resistance::Editor,
     screen_overlay: lbm_overlay::Overlay,
@@ -499,6 +502,7 @@ impl App {
             reports: HashMap::new(),
             detected: Default::default(),
             agent_keeps_intrinsic_size: false,
+            held_pending: HashMap::new(),
             property_error: None,
             resistance: lbm_ui::resistance::Editor::default(),
             screen_overlay: Default::default(),
@@ -566,6 +570,7 @@ impl App {
                 capabilities,
             } => {
                 self.agent_keeps_intrinsic_size = capabilities.iter().any(|c| c == "IntrinsicSize");
+                self.held_pending.clear();
                 self.pending_options.disconnected();
                 self.placement = Default::default();
                 self.topology_pending = None;
@@ -607,6 +612,7 @@ impl App {
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.agent_keeps_intrinsic_size = false;
+                self.held_pending.clear();
                 self.state = lbm_ui::State::default();
                 self.previewed = None;
                 // Forget pending acknowledgements, never the user's document.
@@ -675,7 +681,9 @@ impl App {
                 };
                 let (method, extra) = lbm_app::settings::save_layout(layout);
                 let earned = lbm_app::saved::Reference::of(layout);
+                let held = lbm_app::properties::Held::of(layout);
                 let id = self.send(method, extra);
+                self.held_pending.insert(id, held);
                 // What this save earns if the agent takes it — the document **as sent**.
                 self.agent.earning(id, earned);
                 return;
@@ -719,7 +727,9 @@ impl App {
         extra["LayoutRevision"] =
             serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
         let earned = lbm_app::saved::Reference::of(layout);
+        let held = lbm_app::properties::Held::of(layout);
         let id = self.send(method, extra);
+        self.held_pending.insert(id, held);
         self.agent.earning(id, earned);
         self.topology_pending = Some(id);
     }
@@ -797,7 +807,10 @@ impl App {
             lbm_app::settings::dry_run_topology(layout, self.placement.adjust_scale);
         extra["LayoutRevision"] =
             serde_json::json!(self.agent.layout.as_ref().and_then(|s| s.revision));
-        self.topology_pending = Some(self.send(method, extra));
+        let held = lbm_app::properties::Held::of(layout);
+        let id = self.send(method, extra);
+        self.held_pending.insert(id, held);
+        self.topology_pending = Some(id);
     }
 
     /// Stops previewing: the agent goes back to the layout it had.
@@ -842,7 +855,9 @@ impl App {
             self.previewed = Some((document, std::time::Instant::now()));
             return;
         }
-        self.send(method, extra);
+        let held = lbm_app::properties::Held::of(layout);
+        let id = self.send(method, extra);
+        self.held_pending.insert(id, held);
         self.previewed = Some((document, std::time::Instant::now()));
     }
 
@@ -1050,6 +1065,12 @@ impl App {
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
         if let Message::Answer { id, result } = &message {
+            // A document the agent took is what it now compares the next one with.
+            if let Some(held) = self.held_pending.remove(id) {
+                if result.is_ok() {
+                    self.detected.agent_holds(held);
+                }
+            }
             self.pending_options.answered(*id);
             if self.topology_pending == Some(*id) {
                 self.topology_pending = None;
@@ -2637,6 +2658,7 @@ impl eframe::App for App {
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
                         self.detected = detected;
+                        self.held_pending.clear();
                         self.resistance.clear();
                         self.property_error = None;
                         self.layout = Some(layout);
@@ -3818,6 +3840,72 @@ mod lifecycle_tests {
             result: Ok(json!(null)),
         });
         assert!(!app.state.waiting);
+    }
+
+    /// #795 review, two saves in one session: under a 0 x 0 detection with no profile,
+    /// an old agent takes a first save of 600 x 340 and then compares the next document
+    /// with it. A second save of 300 x 340 must not go out to it.
+    #[test]
+    fn an_old_agent_judges_the_second_save_by_the_first() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[lbm_layout::linux::LinuxMonitor::fallback()],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        layout.id = "A".into();
+        let model = layout.monitors()[0].model.clone();
+        let set = |layout: &mut Layout, w: f64, h: f64| {
+            layout.edit_model(&model, |s, _| {
+                s.set_fixed_aspect_ratio(false);
+                s.set_width(w);
+                s.set_height(h);
+            });
+        };
+        set(&mut layout, 0.0, 0.0); // no EDID, nothing stored
+        app.detected = lbm_app::properties::Detected::of(&layout).with_loaded(&layout);
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.layout = Some(Box::new(layout));
+        let (requests, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.session_event(Event::Connected {
+            requests,
+            snapshot: json!({"LayoutId":"A", "LayoutRevision":1,
+                "DisplaySignature":"1920x1080", "Engine":"Running", "HookConnected":true}),
+            capabilities: Vec::new(),
+        });
+        while receiver.try_recv().is_ok() {}
+        let saves = |receiver: &mut tokio::sync::mpsc::UnboundedReceiver<_>| {
+            let mut ids = Vec::new();
+            while let Ok((id, method, _)) = receiver.try_recv() {
+                let (id, method, _): (u64, &str, serde_json::Value) = (id, method, json!(null));
+                if method == "SaveLayout" {
+                    ids.push(id);
+                }
+            }
+            ids
+        };
+
+        set(app.layout.as_mut().unwrap(), 600.0, 340.0);
+        app.ask(lbm_ui::Press::Save);
+        let first = saves(&mut receiver);
+        assert_eq!(first.len(), 1, "nothing to decide against yet: it goes out");
+        app.agent_said(Message::Answer {
+            id: first[0],
+            result: Ok(json!(null)),
+        });
+
+        set(app.layout.as_mut().unwrap(), 300.0, 340.0);
+        app.ask(lbm_ui::Press::Save);
+        assert!(
+            saves(&mut receiver).is_empty(),
+            "the agent holds 600 x 340 now"
+        );
+        assert_eq!(
+            app.property_error.as_deref(),
+            Some(lbm_app::properties::OLD_AGENT_WOULD_SWAP)
+        );
     }
 
     /// #795 review: an agent predating `IntrinsicSize` transposes any model size that

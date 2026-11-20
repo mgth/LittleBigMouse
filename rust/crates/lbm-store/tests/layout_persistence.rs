@@ -884,6 +884,74 @@ fn undecided_migration_is_not_frozen_by_save_and_runs_at_the_next_detection() {
     }
 }
 
+/// C# `UndecidedMigration_SurvivesAReloadOfTheSameModel`.
+#[test]
+fn undecided_migration_survives_a_reload_of_the_same_model() {
+    // #794 review, the Undo path: a reload of the same layout must not take the stored
+    // size it already applied for a detection.
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut first = new_layout();
+    first.edit_model(PNP, |size, _| {
+        size.set_width(0.0);
+        size.set_height(0.0);
+    });
+    persistence.load(&mut first).unwrap();
+    first.edit_model(PNP, |size, _| {
+        size.set_top_border(17.0);
+    });
+    persistence.load(&mut first).unwrap();
+    assert_eq!(model(&first).physical_size.width(), 338.0);
+    first.edit_model(PNP, |size, _| {
+        size.set_top_border(18.0);
+    });
+    persistence.save(&mut first).unwrap();
+    assert_eq!(store.models.borrow()[PNP].intrinsic_size, None);
+
+    let mut second = new_layout(); // detected 600x340
+    persistence.load(&mut second).unwrap();
+
+    assert_eq!(model(&second).physical_size.width(), 598.0);
+    assert_eq!(model(&second).physical_size.height(), 338.0);
+    assert_eq!(model(&second).physical_size.borders().top, 18.0);
+}
+
+/// C# `Reload_MigratesAgainstTheDetectedSize_NotTheCurrentOne`.
+#[test]
+fn reload_migrates_against_the_detected_size_not_the_current_one() {
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut layout = new_layout(); // detected 600x340
+    persistence.load(&mut layout).unwrap();
+    layout.edit_model(PNP, |size, _| {
+        size.set_fixed_aspect_ratio(false);
+        size.set_width(200.0);
+        size.set_height(700.0);
+    });
+    persistence.load(&mut layout).unwrap();
+
+    assert_eq!(model(&layout).physical_size.width(), 598.0);
+    assert_eq!(model(&layout).physical_size.height(), 338.0);
+}
+
 /// C# `UndecidedMigration_AUserCorrectionIsMarked`.
 #[test]
 fn undecided_migration_a_user_correction_is_marked() {

@@ -88,16 +88,19 @@ public static class LayoutDtoMapper
         model.PhysicalSize.LeftBorder = dto.Borders?.Left ?? model.PhysicalSize.LeftBorder;
 
         // Placeholder sizes (#419) and pre-5.4.1 oriented sizes (#507) — see LayoutMigrations.
-        var (detectedWidth, detectedHeight) = (model.PhysicalSize.Width, model.PhysicalSize.Height);
+        // Against what the platform detected, not the current size: a reload of the same
+        // model, or a model shared by several monitors applied once per monitor, would
+        // otherwise compare the stored size with itself (#794 review).
+        var (detectedWidth, detectedHeight) =
+            model.DetectedSize ?? (model.PhysicalSize.Width, model.PhysicalSize.Height);
         var marked = dto.IntrinsicSize == true;
         var (width, height) = LayoutMigrations.StoredModelSize(
             detectedWidth, detectedHeight, dto.Width, dto.Height, marked);
 
-        // Only ever set here, never cleared: a model shared by several monitors is applied
-        // once per monitor, and from the second time on its "detected" size is the stored
-        // one. LayoutPersistence.Load clears it before the first.
-        if (LayoutMigrations.StoredSizeUnresolved(detectedWidth, detectedHeight, dto.Width, dto.Height, marked))
-            model.UnresolvedStoredSize = (dto.Width!.Value, dto.Height!.Value);
+        model.UnresolvedStoredSize =
+            LayoutMigrations.StoredSizeUnresolved(detectedWidth, detectedHeight, dto.Width, dto.Height, marked)
+                ? (dto.Width!.Value, dto.Height!.Value)
+                : null;
 
         if (width is { } w) model.PhysicalSize.Width = w;
         if (height is { } h) model.PhysicalSize.Height = h;

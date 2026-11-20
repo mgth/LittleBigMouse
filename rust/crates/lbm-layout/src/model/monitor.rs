@@ -12,6 +12,13 @@ pub struct MonitorModel {
     pub logo: Option<String>,
     /// The panel's intrinsic (unrotated) size and bezel borders.
     pub physical_size: MmSize,
+    /// C# `PhysicalMonitorModel.DetectedSize`: the size the platform detected, captured
+    /// by the first load that applies a store over it; `None` until then. The store
+    /// migrations compare a stored size with this, never with the current size: a
+    /// reload of the same model (Undo, an agent applying a document over the profile it
+    /// loaded) would otherwise take the profile's own size for a detection. Not
+    /// persisted.
+    pub detected_size: Option<(f64, f64)>,
     /// C# `PhysicalMonitorModel.UnresolvedStoredSize`: the stored size as read, while
     /// its pre-5.4.1 orientation migration could not be decided because the detected
     /// size had no shape yet; `None` otherwise. Neither persisted nor tracked for
@@ -27,6 +34,7 @@ impl MonitorModel {
             pnp_device_name: None,
             logo: None,
             physical_size: MmSize::default(),
+            detected_size: None,
             unresolved_stored_size: None,
         }
     }

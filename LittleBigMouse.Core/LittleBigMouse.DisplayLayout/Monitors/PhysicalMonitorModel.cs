@@ -50,6 +50,15 @@ public class PhysicalMonitorModel : SavableReactiveModel
     [DataMember] public DisplaySizeInMm PhysicalSize { get; }
 
     /// <summary>
+    /// The size the platform detected for this model, captured by the first load that
+    /// applies a store over it; null until then. The store migrations compare a stored
+    /// size with THIS, never with the current size: a reload of the same model (Undo, an
+    /// agent applying a document over the profile it loaded) would otherwise take the
+    /// profile's own size for a detection (#794 review). Not persisted.
+    /// </summary>
+    public (double Width, double Height)? DetectedSize { get; set; }
+
+    /// <summary>
     /// The stored size as read, while its pre-5.4.1 orientation migration could not be
     /// decided because the detected size had no shape yet (see
     /// <c>LayoutMigrations.StoredSizeUnresolved</c>); null otherwise. Neither persisted nor

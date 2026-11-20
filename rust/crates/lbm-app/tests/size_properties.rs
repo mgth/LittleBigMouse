@@ -1,4 +1,4 @@
-use lbm_app::properties::{apply, size, Detected};
+use lbm_app::properties::{apply, size, swapped_by_old_agent, Detected};
 use lbm_layout::{
     linux::{LinuxEdid, LinuxMonitor},
     model::{Layout, LayoutOptions, PER_MODEL, PER_MONITOR},
@@ -311,4 +311,30 @@ fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
         assert!(apply(&mut layout, Some(&detected), &id, edit).is_err());
         assert!(reference.holds(&layout));
     }
+}
+
+/// #795 review: the document carries every model's size, so what an old agent would
+/// transpose is a property of the whole layout, not of the edit that sends it.
+#[test]
+fn an_old_agent_would_swap_a_crossing_size_whatever_edit_sends_it() {
+    let mut layout = layout(PER_MODEL);
+    let detected = Detected::of(&layout);
+    let id = layout.monitors()[0].id.clone();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), None);
+
+    // Entered with an agent that keeps intrinsic sizes: no guard.
+    apply(&mut layout, None, &id, Edit::Width(250.0)).unwrap();
+    let model = layout.monitors()[0].model.clone();
+    assert_eq!(
+        swapped_by_old_agent(&layout, &detected),
+        Some(model.clone())
+    );
+
+    // A bezel edit does not change that.
+    apply(&mut layout, Some(&detected), &id, Edit::Top(15.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), Some(model));
+
+    // Back to the detected shape: nothing to swap.
+    apply(&mut layout, None, &id, Edit::Width(700.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), None);
 }

@@ -656,6 +656,9 @@ impl App {
             lbm_ui::Press::Stop => Some(("Stop", serde_json::json!({}))),
             // The one press that earns a new reference, and only if the agent takes it.
             lbm_ui::Press::Save => {
+                if self.refused_by_old_agent() {
+                    return;
+                }
                 let Some(layout) = self.layout.as_deref() else {
                     return;
                 };
@@ -694,6 +697,9 @@ impl App {
     /// linking the code that can start a hook. Two processes writing the topology would
     /// fight over it; one of them already knows whether the engine is running.
     fn apply_topology(&mut self) {
+        if self.refused_by_old_agent() {
+            return;
+        }
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
@@ -797,6 +803,9 @@ impl App {
         // by a key repeat or by the agent would wait for the next stray repaint.
         ctx.request_repaint_after(lbm_app::settings::PREVIEW_INTERVAL);
 
+        if self.refused_by_old_agent() {
+            return;
+        }
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
@@ -819,6 +828,23 @@ impl App {
         }
         self.send(method, extra);
         self.previewed = Some((document, std::time::Instant::now()));
+    }
+
+    /// Whether the layout's document must not go to the connected agent: one that
+    /// predates `IntrinsicSize` would transpose a size crossing the detected shape, and
+    /// save or run that, whatever edit sent it. Says why, and keeps the reason up.
+    fn refused_by_old_agent(&mut self) -> bool {
+        if self.requests.is_none() || self.agent_keeps_intrinsic_size {
+            return false;
+        }
+        let Some(layout) = self.layout.as_deref() else {
+            return false;
+        };
+        if lbm_app::properties::swapped_by_old_agent(layout, &self.detected).is_none() {
+            return false;
+        }
+        self.property_error = Some(lbm_app::properties::OLD_AGENT_WOULD_SWAP.into());
+        true
     }
 
     /// Puts a request on the writer thread, and says so if there is nobody to take it.
@@ -1795,7 +1821,8 @@ impl App {
             if let Some(layout) = self.layout.as_mut() {
                 match lbm_app::properties::apply(
                     layout,
-                    (!self.agent_keeps_intrinsic_size).then_some(&self.detected),
+                    (self.requests.is_some() && !self.agent_keeps_intrinsic_size)
+                        .then_some(&self.detected),
                     &id,
                     edit,
                 ) {
@@ -2903,7 +2930,8 @@ impl eframe::App for App {
             if let Some(layout) = self.layout.as_mut() {
                 match lbm_app::properties::apply(
                     layout,
-                    (!self.agent_keeps_intrinsic_size).then_some(&self.detected),
+                    (self.requests.is_some() && !self.agent_keeps_intrinsic_size)
+                        .then_some(&self.detected),
                     &id,
                     edit,
                 ) {
@@ -3360,6 +3388,60 @@ mod lifecycle_tests {
             result: Ok(json!(null)),
         });
         assert!(!app.state.waiting);
+    }
+
+    /// #795 review: an agent predating `IntrinsicSize` transposes any model size that
+    /// crosses the detected shape in the document it is sent, so a bezel edit alone must
+    /// not send such a document to it; an agent announcing the capability gets it.
+    #[test]
+    fn a_document_an_old_agent_would_swap_is_not_sent_even_for_a_bezel_edit() {
+        for (capabilities, goes_out) in [
+            (Vec::new(), false),
+            (vec!["IntrinsicSize".to_owned()], true),
+        ] {
+            let mut app = App::with_config(egui::Context::default(), None);
+            let mut layout = Layout::new(LayoutOptions::default());
+            lbm_layout::linux::populate(
+                &mut layout,
+                &[lbm_layout::linux::LinuxMonitor::fallback()],
+                |_| Ok::<(), ()>(()),
+            )
+            .unwrap();
+            layout.id = "A".into();
+            app.detected = lbm_app::properties::Detected::of(&layout); // 527 x 296
+            let model = layout.monitors()[0].model.clone();
+            // Saved by an updated agent: taller than wide, as a PBP half is.
+            layout.edit_model(&model, |s, _| {
+                s.set_fixed_aspect_ratio(false);
+                s.set_width(250.0);
+            });
+            app.saved = Some(lbm_app::saved::Reference::of(&layout));
+            app.layout = Some(Box::new(layout));
+            let (requests, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+            app.session_event(Event::Connected {
+                requests,
+                snapshot: json!({"LayoutId":"A", "LayoutRevision":1,
+                    "DisplaySignature":"1920x1080", "Engine":"Running", "HookConnected":true}),
+                capabilities: capabilities.clone(),
+            });
+            while receiver.try_recv().is_ok() {}
+
+            app.layout.as_mut().unwrap().edit_model(&model, |s, _| {
+                s.set_top_border(15.0);
+            });
+            app.ask(lbm_ui::Press::Save);
+
+            let mut saved = false;
+            while let Ok((_, method, _)) = receiver.try_recv() {
+                saved |= method == "SaveLayout";
+            }
+            assert_eq!(saved, goes_out, "{capabilities:?}");
+            assert_eq!(
+                app.property_error.as_deref() == Some(lbm_app::properties::OLD_AGENT_WOULD_SWAP),
+                !goes_out,
+                "{capabilities:?}"
+            );
+        }
     }
 
     #[test]

@@ -48,6 +48,32 @@ impl Detected {
     }
 }
 
+/// Why a document must not go to an agent predating `IntrinsicSize`.
+pub const OLD_AGENT_WOULD_SWAP: &str = "the running agent predates this editor and would turn a panel from landscape to portrait or back: restart it to save or preview this layout";
+
+/// The first model of `layout` whose size an agent predating `IntrinsicSize` would
+/// transpose when it applies the document, whatever the edit that made it go out: the
+/// document carries every model's size, so a bezel change alone sends a size the agent
+/// reinterprets (#795 review). `None` when nothing would move.
+pub fn swapped_by_old_agent(layout: &Layout, detected: &Detected) -> Option<String> {
+    layout
+        .models()
+        .iter()
+        .find(|m| {
+            let size = &m.physical_size;
+            let shown = (size.width(), size.height());
+            let (intrinsic_width, intrinsic_height) =
+                detected.0.get(&m.pnp_code).copied().unwrap_or(shown);
+            lbm_store::layout_migrations::normalize_stored_size(
+                intrinsic_width,
+                intrinsic_height,
+                shown.0,
+                shown.1,
+            ) != shown
+        })
+        .map(|m| m.pnp_code.clone())
+}
+
 /// `old_agent` is `Some` when the agent does not announce `IntrinsicSize`: a size it
 /// would read back transposed is then refused. It is only read for panel dimensions:
 /// see [`Detected`].

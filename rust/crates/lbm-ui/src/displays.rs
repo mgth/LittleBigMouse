@@ -99,7 +99,7 @@ impl Panel {
             for output in shown {
                 ui.push_id(&output.connector, |ui| {
                     ui.group(|ui| {
-                        icons::title(
+                        icons::wrapped_title(
                             ui,
                             Icon::Display,
                             &format!("{} · {}", output.name, output.connector),

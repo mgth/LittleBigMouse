@@ -307,6 +307,7 @@ fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detecte
     }
     let detected = lbm_app::properties::Detected::of(&layout);
     read_stored(&mut layout);
+    let detected = detected.with_loaded(&layout);
     Some((Box::new(layout), reports, detected))
 }
 
@@ -773,6 +774,11 @@ impl App {
     /// window that cannot be undone: a user is entitled to read the commands before the
     /// screens move, and the first person ever to press Apply for real deserves it most.
     fn dry_run_topology(&mut self) {
+        // A dry run still has the agent read the document, and on Linux apply it to the
+        // model it holds: an old agent would simulate (and keep) a swapped size.
+        if self.refused_by_old_agent() {
+            return;
+        }
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
@@ -3430,12 +3436,15 @@ mod lifecycle_tests {
                 s.set_top_border(15.0);
             });
             app.ask(lbm_ui::Press::Save);
+            app.dry_run_topology();
 
-            let mut saved = false;
-            while let Ok((_, method, _)) = receiver.try_recv() {
+            let (mut saved, mut simulated) = (false, false);
+            while let Ok((_, method, extra)) = receiver.try_recv() {
                 saved |= method == "SaveLayout";
+                simulated |= method == "ApplyTopology" && extra["DryRun"] == true;
             }
             assert_eq!(saved, goes_out, "{capabilities:?}");
+            assert_eq!(simulated, goes_out, "System arrangement's Preview changes");
             assert_eq!(
                 app.property_error.as_deref() == Some(lbm_app::properties::OLD_AGENT_WOULD_SWAP),
                 !goes_out,

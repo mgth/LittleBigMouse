@@ -338,3 +338,41 @@ fn an_old_agent_would_swap_a_crossing_size_whatever_edit_sends_it() {
     apply(&mut layout, None, &id, Edit::Width(700.0)).unwrap();
     assert_eq!(swapped_by_old_agent(&layout, &detected), None);
 }
+
+/// #795 review: without a detected shape (no EDID: 0 x 0), an old agent compares a
+/// document with the size it loaded, not with the detection. The guard must do the same,
+/// or a crossing size goes through and the old agent saves it swapped.
+#[test]
+fn without_a_detected_shape_an_old_agent_compares_with_the_loaded_size() {
+    // Detected 0 x 0, then the stored 600 x 300 loaded over it, as `detect` does.
+    let loaded = || {
+        let mut layout = layout(PER_MODEL);
+        let model = layout.monitors()[0].model.clone();
+        let set = |layout: &mut lbm_layout::model::Layout, w: f64, h: f64| {
+            layout.edit_model(&model, |s, _| {
+                s.set_fixed_aspect_ratio(false);
+                s.set_width(w);
+                s.set_height(h);
+            });
+        };
+        set(&mut layout, 0.0, 0.0);
+        let undetected = Detected::of(&layout);
+        set(&mut layout, 600.0, 300.0);
+        let detected = undetected.clone().with_loaded(&layout);
+        (layout, undetected, detected, model)
+    };
+
+    // The detection alone decides nothing: 250 wide would go out.
+    let (mut layout, undetected, _, _) = loaded();
+    let id = layout.monitors()[0].id.clone();
+    assert!(apply(&mut layout, Some(&undetected), &id, Edit::Width(250.0)).is_ok());
+
+    // With the loaded size, it is refused as the old agent would swap it...
+    let (mut layout, _, detected, model) = loaded();
+    let error = apply(&mut layout, Some(&detected), &id, Edit::Width(250.0)).unwrap_err();
+    assert!(error.contains("landscape to portrait"), "{error}");
+
+    // ...and a document holding it is one that agent would swap.
+    apply(&mut layout, None, &id, Edit::Width(250.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), Some(model));
+}

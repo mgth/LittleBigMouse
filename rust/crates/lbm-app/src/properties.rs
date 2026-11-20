@@ -25,26 +25,57 @@ pub fn size(layout: &Layout, id: &str) -> Option<Size> {
     })
 }
 
-/// The model sizes as detected, before any stored profile is applied: what
-/// [`lbm_store::layout_migrations::normalize_stored_size`] compares a stored size against
-/// when an agent that predates `IntrinsicSize` applies a saved document to freshly
-/// detected screens. [`apply`] only consults it for such an agent.
+/// What an agent that predates `IntrinsicSize` compares a document's model sizes against
+/// ([`lbm_store::layout_migrations::normalize_stored_size`]) when it applies it over the
+/// layout it holds: the sizes as detected, and, where the detection has no shape to
+/// decide with (0 x 0 without an EDID, or a square), the sizes it loaded from the store
+/// — that agent compares with the model it holds, not with a detection (#795 review).
+/// [`apply`] and [`swapped_by_old_agent`] only consult it for such an agent.
 #[derive(Clone, Debug, Default)]
-pub struct Detected(HashMap<String, (f64, f64)>);
+pub struct Detected {
+    detected: HashMap<String, (f64, f64)>,
+    loaded: HashMap<String, (f64, f64)>,
+}
+
+fn sizes(layout: &Layout) -> HashMap<String, (f64, f64)> {
+    layout
+        .models()
+        .iter()
+        .map(|m| {
+            let size = &m.physical_size;
+            (m.pnp_code.clone(), (size.width(), size.height()))
+        })
+        .collect()
+}
 
 impl Detected {
     /// Read off a layout that has just been detected — before the store is applied.
     pub fn of(layout: &Layout) -> Self {
-        Self(
-            layout
-                .models()
-                .iter()
-                .map(|m| {
-                    let size = &m.physical_size;
-                    (m.pnp_code.clone(), (size.width(), size.height()))
-                })
-                .collect(),
-        )
+        Self {
+            detected: sizes(layout),
+            loaded: HashMap::new(),
+        }
+    }
+
+    /// The same, with the sizes `layout` holds once the store has been applied: what the
+    /// agent holds too, having loaded the same store.
+    pub fn with_loaded(self, layout: &Layout) -> Self {
+        Self {
+            loaded: sizes(layout),
+            ..self
+        }
+    }
+
+    /// The size an old agent compares `pnp_code`'s size with: the detection when it has a
+    /// shape, otherwise what was loaded; `None` when neither is known.
+    fn reference(&self, pnp_code: &str) -> Option<(f64, f64)> {
+        let shaped = |&(w, h): &(f64, f64)| w > 0.0 && h > 0.0 && w != h;
+        self.detected
+            .get(pnp_code)
+            .filter(|size| shaped(size))
+            .or_else(|| self.loaded.get(pnp_code))
+            .or_else(|| self.detected.get(pnp_code))
+            .copied()
     }
 }
 
@@ -63,7 +94,7 @@ pub fn swapped_by_old_agent(layout: &Layout, detected: &Detected) -> Option<Stri
             let size = &m.physical_size;
             let shown = (size.width(), size.height());
             let (intrinsic_width, intrinsic_height) =
-                detected.0.get(&m.pnp_code).copied().unwrap_or(shown);
+                detected.reference(&m.pnp_code).unwrap_or(shown);
             lbm_store::layout_migrations::normalize_stored_size(
                 intrinsic_width,
                 intrinsic_height,
@@ -178,9 +209,7 @@ pub fn apply(
             // another, until it is restarted.
             if let Some(detected) = old_agent {
                 let (intrinsic_width, intrinsic_height) = detected
-                    .0
-                    .get(&model_id)
-                    .copied()
+                    .reference(&model_id)
                     .unwrap_or((current.width(), current.height()));
                 let read_back = lbm_store::layout_migrations::normalize_stored_size(
                     intrinsic_width,

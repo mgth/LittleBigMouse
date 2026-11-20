@@ -187,12 +187,15 @@ fn a_replacement_keeps_its_draft_when_another_launch_takes_the_lock_first() {
             draft: none,
         }) = c_result.recv_timeout(Duration::from_millis(50))
         {
-            // The plain launch won: the replacement asks it to hand over in turn.
+            // The plain launch won: the replacement asks it to hand over in turn. It
+            // has a layout of its own, freshly loaded, which must not replace the edits.
             assert_eq!(none, None);
             let Event::Replace(answer) = next(&inbox) else {
                 panic!("the replacement must ask the new owner too")
             };
-            answer.send(serde_json::Value::Null).unwrap();
+            answer
+                .send(json!({"LayoutId":"test","Document":{"Layout":{"Options":{"LoopX":false}}}}))
+                .unwrap();
             assert!(matches!(next(&inbox), Event::Close));
             drop(owner);
             let Launch::Open { owner, draft, .. } =

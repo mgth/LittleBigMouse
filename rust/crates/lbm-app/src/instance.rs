@@ -81,12 +81,13 @@ impl Address {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("lbm-editor");
+            let display = std::env::var("WAYLAND_DISPLAY")
+                .ok()
+                .filter(|d| !d.is_empty())
+                .or_else(|| std::env::var("DISPLAY").ok().map(|d| x_display(&d)));
             let session = graphical_session(
                 std::env::var("XDG_SESSION_ID").ok().as_deref(),
-                std::env::var("WAYLAND_DISPLAY")
-                    .or_else(|_| std::env::var("DISPLAY"))
-                    .ok()
-                    .as_deref(),
+                display.as_deref(),
             );
             let lock = shared.with_file_name(format!("{stem}{session}.lock"));
             Ok(Self {
@@ -146,6 +147,29 @@ fn graphical_session(login: Option<&str>, display: Option<&str>) -> String {
         .collect()
 }
 
+/// An X display named the same way however it is spelled: `:0`, `:0.0` and `unix:0`
+/// are one screen of one server.
+#[cfg(unix)]
+fn x_display(value: &str) -> String {
+    let Some((host, rest)) = value.rsplit_once(':') else {
+        return value.to_owned();
+    };
+    let host = if host == "unix" { "" } else { host };
+    let (display, screen) = rest.split_once('.').unwrap_or((rest, "0"));
+    if screen == "0" {
+        format!("{host}:{display}")
+    } else {
+        format!("{host}:{display}.{screen}")
+    }
+}
+
+/// Keeps the first draft handed over: later editors only had time to load the profile.
+fn adopt(draft: &mut Option<Value>, handed: Option<&Value>) {
+    if draft.is_none() {
+        *draft = handed.filter(|v| !v.is_null()).cloned();
+    }
+}
+
 pub fn start(address: Address, replace: bool) -> io::Result<Launch> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -188,11 +212,11 @@ pub fn start(address: Address, replace: bool) -> io::Result<Launch> {
             });
             match result {
                 // The draft stays here until this launch opens with it: if another one
-                // takes the lock first, it is asked to hand over and close in turn.
+                // takes the lock first, it is asked to hand over and close in turn. Only
+                // the first editor's draft counts: one that opened in between hands over
+                // the layout it just loaded, which would erase the unsaved edits.
                 Ok(response) if replacing => {
-                    if let Some(handed) = response.get("Draft").filter(|v| !v.is_null()) {
-                        draft = Some(handed.clone());
-                    }
+                    adopt(&mut draft, response.get("Draft"));
                     asked_to_close = true;
                 }
                 Ok(_) => return Ok(Launch::Activated),
@@ -394,6 +418,23 @@ async fn connect(path: &std::path::Path) -> io::Result<Stream> {
     Ok(Box::new(pipe))
 }
 
+#[cfg(test)]
+mod draft_tests {
+    use serde_json::json;
+    #[test]
+    fn the_first_editor_s_draft_survives_an_editor_opened_in_between() {
+        let edited = json!({"Document":{"X":123}});
+        let reloaded = json!({"Document":{"X":0}});
+        let mut draft = None;
+        super::adopt(&mut draft, Some(&serde_json::Value::Null));
+        assert_eq!(draft, None, "nothing to keep yet");
+        super::adopt(&mut draft, Some(&edited));
+        super::adopt(&mut draft, Some(&reloaded));
+        super::adopt(&mut draft, None);
+        assert_eq!(draft, Some(edited));
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     #[test]
@@ -406,5 +447,14 @@ mod tests {
         assert_ne!(one, nested);
         assert_eq!(super::graphical_session(None, Some("")), "");
         assert_eq!(super::graphical_session(Some("../x"), None), "-___x");
+    }
+    #[test]
+    fn one_x_screen_is_one_editor_however_it_is_spelled() {
+        for same in [":1", ":1.0", "unix:1", "unix:1.0"] {
+            assert_eq!(super::x_display(same), ":1", "{same}");
+        }
+        assert_eq!(super::x_display(":1.1"), ":1.1");
+        assert_eq!(super::x_display("remote:1.0"), "remote:1");
+        assert_ne!(super::x_display(":1"), super::x_display(":2"));
     }
 }

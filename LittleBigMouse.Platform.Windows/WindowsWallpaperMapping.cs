@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.Linq;
 using HLab.ColorTools;
 using HLab.Sys.Monitors;
@@ -47,6 +48,42 @@ internal static class WindowsWallpaperMapping
             layout.PhysicalSources
                 .FirstOrDefault(s => s.DeviceId == monitor.Id)
                 ?.Source.UpdateWallpaperFrom(monitor, registryPath);
+        }
+
+        RebindPaintedImages(layout);
+    }
+
+    /// <summary>
+    /// The Win32 tree binds a slot's image to the monitor its device path names, while the shell
+    /// paints it on another monitor — see <see cref="WallpaperSlotOrder"/>. Rebind the preview
+    /// paths to what is actually on screen; without it the editor preview shows the two screens
+    /// swapped on exactly the layouts where the desktop itself is now correct.
+    /// </summary>
+    static void RebindPaintedImages(MonitorsLayout layout)
+    {
+        IDesktopWallpaper desktop;
+        try
+        {
+            desktop = (IDesktopWallpaper)new DesktopWallpaperClass();
+        }
+        catch (Exception)
+        {
+            return; // No COM: keep the plain read-back.
+        }
+
+        if (!WallpaperSlotOrder.TryRead(desktop, out var slots)) return;
+
+        foreach (var (filed, painted) in WallpaperSlotOrder.Pair(slots))
+        {
+            // An empty path is a solid colour; there is nothing to preview and the colour read
+            // above already stands.
+            if (filed.ImagePath is not { Length: > 0 }) continue;
+
+            var source = layout.PhysicalSources
+                .FirstOrDefault(s => WallpaperSlotOrder.Covers(painted, s.Source.InPixel.Bounds));
+
+            if (source is null) continue;
+            source.Source.WallpaperPath = filed.ImagePath;
         }
     }
 

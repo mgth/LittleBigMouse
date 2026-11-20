@@ -3,21 +3,49 @@ use crate::icons::{self, Icon};
 use lbm_layout::model::DisplaySize;
 
 pub fn panel(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
-    let panel = if ui.available_width() >= 760.0 {
+    let beside = ui.available_width() >= 760.0;
+    let max = if beside {
+        430.0
+    } else {
+        (ui.available_height() * 0.6).max(100.0)
+    };
+    let panel = if beside {
         egui::Panel::right("monitor-properties-side")
             .default_size(320.0)
             .min_size(280.0)
-            .max_size(430.0)
+            .max_size(max)
     } else {
         egui::Panel::bottom("monitor-properties-bottom")
             .default_size(260.0)
             .min_size(100.0)
-            .max_size((ui.available_height() * 0.6).max(100.0))
+            .max_size(max)
     };
-    panel
-        .resizable(true)
-        .frame(crate::theme::toolbar())
-        .show(ui, content);
+    let frame = crate::theme::toolbar();
+    let margins = frame.total_margin().sum();
+    panel.resizable(true).frame(frame).show(ui, |ui| {
+        // **Overflow past `max_size` is clipped here, never reported to the panel.** When
+        // its content outgrows `max_size`, egui 0.36 trims the panel's rect back to
+        // `max_size` from the *far* edge of the overflow (`panel.rs`, after `frame.show`),
+        // so the space it reserves shrinks while its content stays where it started: the
+        // central map then paints over the start of every line. A Windows interface path
+        // (`\\?\DISPLAY#…#{GUID}`) as an output's connector was enough. Up to `max_size`
+        // the content is still reported, so the panel keeps growing to fit it.
+        let room = ui.available_rect_before_wrap();
+        let mut reach = room;
+        if beside {
+            reach.max.x = room.min.x + max - margins.x;
+        } else {
+            reach.max.y = room.min.y + max - margins.y;
+        }
+        let mut inner = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("monitor-properties-content")
+                .max_rect(room)
+                .layout(*ui.layout()),
+        );
+        content(&mut inner);
+        ui.advance_cursor_after_rect(inner.min_rect().intersect(reach));
+    });
 }
 
 /// Screen selection and its adjacent map/single-screen toggle stay reachable in every mode.

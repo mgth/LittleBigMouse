@@ -123,6 +123,19 @@ pub fn title(ui: &mut egui::Ui, icon: Icon, text: &str) -> egui::Response {
     label(ui, icon, egui::RichText::new(text).strong())
 }
 
+/// [`title`] for a text that may outgrow its column — a Windows output's interface path —
+/// wrapped onto further lines instead of running past the panel. Kept apart from
+/// [`label`], whose rows sit in grids sized by their content, where wrapping would
+/// break every label to its narrowest.
+pub fn wrapped_title(ui: &mut egui::Ui, icon: Icon, text: &str) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        glyph(ui, icon);
+        ui.add(egui::Label::new(egui::RichText::new(text).strong()).wrap())
+    })
+    .inner
+}
+
 /// A framed command led by its pictogram, the text staying its accessible name.
 pub fn action(ui: &mut egui::Ui, icon: Icon, text: &str, enabled: bool) -> egui::Response {
     pictogram_button(ui, icon, text, None, enabled, true)

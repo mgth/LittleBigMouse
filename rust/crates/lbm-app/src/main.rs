@@ -113,6 +113,8 @@ struct App {
     arriving: Option<std::sync::mpsc::Receiver<Found>>,
     found: std::sync::mpsc::Sender<Found>,
     _session: Option<lbm_app::session::Session>,
+    instance: Option<lbm_app::instance::Inbox>,
+    replacement_draft: Option<serde_json::Value>,
     refresh: lbm_app::refresh::Refresh,
     detecting: Option<u64>,
     retry_display_at: std::time::Instant,
@@ -124,6 +126,8 @@ struct App {
     outputs: lbm_app::displays::Displays,
     vcp: lbm_app::vcp::Controller,
     remote: lbm_app::remote::Controller,
+    test_patterns: lbm_app::patterns::Controller,
+    pattern_strip: lbm_ui::patterns::Strip,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -504,12 +508,16 @@ impl App {
             next_screen_overlay: std::time::Instant::now(),
             selected: None,
             drag: None,
+            instance: None,
+            replacement_draft: None,
             agent: lbm_app::conversation::Conversation::default(),
             probe: lbm_app::probe::Probe::default(),
             show_probe: true,
             outputs: Default::default(),
             vcp: Default::default(),
             remote: Default::default(),
+            test_patterns: Default::default(),
+            pattern_strip: Default::default(),
             excluded: None,
             pattern: String::new(),
             placement: Default::default(),
@@ -564,6 +572,7 @@ impl App {
                 self.outputs = Default::default();
                 self.vcp = Default::default();
                 self.remote = Default::default();
+                self.test_patterns.stop();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
@@ -594,6 +603,7 @@ impl App {
                 self.outputs = Default::default();
                 self.vcp = Default::default();
                 self.remote = Default::default();
+                self.test_patterns.stop();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.agent_keeps_intrinsic_size = false;
@@ -868,6 +878,67 @@ impl App {
             }
         }
         id
+    }
+
+    fn restore_replacement_draft(&mut self, layout: &mut Layout) {
+        let Some(draft) = self.replacement_draft.take() else {
+            return;
+        };
+        if draft["LayoutId"].as_str() != Some(layout.id.as_str()) {
+            return;
+        }
+        if let Ok(document) =
+            serde_json::from_value::<lbm_store::LayoutDocument>(draft["Document"].clone())
+        {
+            document.apply(layout);
+            self.selected = draft["Selected"].as_str().map(str::to_owned);
+            self.mode = lbm_ui::mode::Mode::ALL
+                .into_iter()
+                .find(|m| Some(m.id()) == draft["Mode"].as_str())
+                .unwrap_or_default();
+        }
+    }
+
+    /// Requests from other launches. Run from `logic`, which eframe also calls while the
+    /// window is minimized: activating it must not wait for it to be visible again.
+    fn instance_requests(&mut self, ctx: &egui::Context) {
+        if let Some(instance) = &self.instance {
+            for event in instance.pending() {
+                use lbm_app::instance::Event;
+                match event {
+                    Event::Activate(reply) => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        #[cfg(target_os = "linux")]
+                        std::thread::spawn(|| {
+                            if let Err(error) = lbm_app::patterns::editor::activate() {
+                                eprintln!("[lbm-app] KDE activation: {error}");
+                            }
+                        });
+                        let _ = reply.send(serde_json::Value::Null);
+                    }
+                    Event::Replace(reply) => {
+                        // Carry the local layout draft without saving it over the user's
+                        // profile. The replacement takes its saved reference from disk.
+                        let draft = self.layout.as_ref().map(|layout| {
+                            serde_json::json!({
+                                "LayoutId": layout.id,
+                                "Document": lbm_app::settings::document(layout),
+                                "Selected": self.selected,
+                                "Mode": self.mode.id(),
+                            })
+                        });
+                        let _ = reply.send(draft.unwrap_or(serde_json::Value::Null));
+                    }
+                    Event::Close => {
+                        self.test_patterns.stop();
+                        self.screen_overlay.clear();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     /// Throws the edits away: the stored profile again, over the layout as detected.
@@ -1715,6 +1786,12 @@ impl App {
                         ui.separator();
                     }
                     self.monitor_properties(ui);
+                    // Inside the scrolled part and after the monitor's own controls, so a
+                    // short window still reaches brightness and contrast.
+                    if self.mode == lbm_ui::mode::Mode::Vcp {
+                        ui.separator();
+                        self.test_pattern_controls(ui);
+                    }
                     if location {
                         self.system_display_properties(ui);
                     }
@@ -2203,6 +2280,130 @@ impl App {
         }
     }
 
+    fn test_pattern_target(&self) -> Option<String> {
+        if self.mode != lbm_ui::mode::Mode::Vcp
+            || self.refresh.pending()
+            || self.topology_pending.is_some()
+            || self.outputs.changing()
+            || self.agent.suspended
+            || self.requests.is_none()
+        {
+            return None;
+        }
+        let layout = self.layout.as_ref().filter(|l| !l.is_virtual())?;
+        let monitor = layout.monitor(self.selected.as_deref()?)?;
+        let source = layout.source(monitor.active_source.as_deref()?)?;
+        source
+            .source
+            .interface_path
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .cloned()
+    }
+
+    fn test_pattern_screens(&self) -> Vec<lbm_ui::patterns::Target> {
+        if self.mode != lbm_ui::mode::Mode::Vcp
+            || self.refresh.pending()
+            || self.topology_pending.is_some()
+            || self.outputs.changing()
+            || self.agent.suspended
+            || self.requests.is_none()
+        {
+            return Vec::new();
+        }
+        let Some(layout) = self.layout.as_ref().filter(|l| !l.is_virtual()) else {
+            return Vec::new();
+        };
+        let mut screens = Vec::new();
+        for monitor in layout.monitors() {
+            let Some(source) = monitor
+                .active_source
+                .as_deref()
+                .and_then(|id| layout.source(id))
+            else {
+                continue;
+            };
+            let Some(connector) = source
+                .source
+                .interface_path
+                .as_ref()
+                .filter(|s| !s.is_empty())
+            else {
+                continue;
+            };
+            if !source.source.attached_to_desktop
+                || screens
+                    .iter()
+                    .any(|t: &lbm_ui::patterns::Target| &t.connector == connector)
+            {
+                continue;
+            }
+            let name = layout
+                .model(&monitor.model)
+                .and_then(|m| m.pnp_device_name.as_deref())
+                .unwrap_or(&monitor.id);
+            screens.push(lbm_ui::patterns::Target {
+                connector: connector.clone(),
+                name: format!("{name} · {connector}"),
+            });
+        }
+        screens
+    }
+
+    fn test_pattern_tick(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.test_patterns.stop();
+        }
+        let available = self.test_pattern_screens();
+        let selected = self.test_pattern_target();
+        let targets = self.pattern_strip.targets(&available, selected.as_deref());
+        if self.test_patterns.active().is_some() && self.test_patterns.targets() != targets {
+            if targets.is_empty() {
+                self.test_patterns.stop();
+            } else {
+                self.test_patterns
+                    .show(&targets, &self.pattern_strip.settings, ctx);
+            }
+        }
+        self.test_patterns.poll(ctx);
+    }
+
+    fn test_pattern_controls(&mut self, ui: &mut egui::Ui) {
+        self.test_pattern_tick(ui.ctx());
+        let available = self.test_pattern_screens();
+        let selected = self.test_pattern_target();
+        let blocked = if !lbm_app::patterns::Controller::supported() {
+            Some("Native test patterns currently require a Wayland session.")
+        } else if available.is_empty() || (!self.pattern_strip.matching && selected.is_none()) {
+            Some("Select a local screen after the display configuration has loaded.")
+        } else {
+            None
+        };
+        let action = self.pattern_strip.show(
+            ui,
+            self.test_patterns.active(),
+            self.test_patterns.ready(),
+            blocked,
+            &available,
+            selected.as_deref(),
+        );
+        match action {
+            Some(lbm_ui::patterns::Action::Hide) => self.test_patterns.stop(),
+            Some(lbm_ui::patterns::Action::Show | lbm_ui::patterns::Action::Update) => {
+                let targets = self.pattern_strip.targets(&available, selected.as_deref());
+                self.test_patterns
+                    .show(&targets, &self.pattern_strip.settings, ui.ctx());
+            }
+            None => {}
+        }
+        if let Some(error) = &self.test_patterns.error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        if let Some(note) = &self.test_patterns.note {
+            ui.colored_label(lbm_ui::theme::AMBER, note);
+        }
+    }
+
     fn vcp_properties(&mut self, ui: &mut egui::Ui) {
         let key = self.wallpaper_key().and_then(|key| {
             Some(lbm_app::vcp::Key {
@@ -2361,6 +2562,10 @@ impl App {
 // and now does (`runtime::left`). A second mechanism here would just be a second way to
 // end somebody else's preview.
 impl eframe::App for App {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.instance_requests(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         #[cfg(windows)]
         {
@@ -2428,6 +2633,7 @@ impl eframe::App for App {
                         self.pending_options.apply(&mut layout.options);
                         let excluded = self.pending_options.excluded().or(excluded);
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
+                        self.restore_replacement_draft(&mut layout);
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
                         self.detected = detected;
@@ -2966,6 +3172,7 @@ impl eframe::App for App {
         self.screen_overlay_tick(&ctx, acted.1);
         // Last, so a drag or a setting changed on this frame is in the document this
         // tick sends rather than waiting for the next one.
+        self.test_pattern_tick(&ctx);
         self.preview_tick(&ctx);
     }
 }
@@ -2984,12 +3191,43 @@ fn owned(gesture: Option<map::Gesture<'_>>) -> Option<Did> {
 
 fn main() -> eframe::Result<()> {
     #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--test-pattern-host") {
+        std::process::exit(lbm_pattern::viewer::run(std::env::args().skip(2)));
+    }
+    #[cfg(target_os = "linux")]
     if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
         std::process::exit(lbm_overlay::linux::run_host());
     }
+    let mut replace = false;
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--replace" => replace = true,
+            "--help" | "-h" => {
+                println!("LittleBigMouse\n\nUsage: lbm-app [--replace]\n\nWithout arguments, open or activate the session's editor.\n--replace  Close the current editor and open this build, carrying its layout draft.\n           The mouse engine keeps running.");
+                return Ok(());
+            }
+            _ => {
+                return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(
+                    format!("unknown argument: {arg}"),
+                ))))
+            }
+        }
+    }
+    let launch = lbm_app::instance::Address::session()
+        .and_then(|address| lbm_app::instance::start(address, replace))
+        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    let lbm_app::instance::Launch::Open {
+        owner: _owner,
+        inbox,
+        draft,
+    } = launch
+    else {
+        return Ok(());
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LittleBigMouse")
+            .with_icon(app_icon())
             .with_inner_size([1100.0, 750.0])
             .with_min_inner_size([480.0, 320.0]),
         ..Default::default()
@@ -2997,13 +3235,134 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "LittleBigMouse",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc.egui_ctx.clone())))),
+        Box::new(move |cc| {
+            inbox.attach(cc.egui_ctx.clone());
+            let mut app = App::new(cc.egui_ctx.clone());
+            app.instance = Some(inbox);
+            app.replacement_draft = draft;
+            Ok(Box::new(app))
+        }),
     )
+}
+
+/// The Little Big Mouse logo for the title bar, taskbar and Alt+Tab. Without it eframe
+/// substitutes its own egui logo. Same file as the exe icon (build.rs); the decoder
+/// takes its largest picture and the system scales it down.
+fn app_icon() -> std::sync::Arc<egui::IconData> {
+    let logo = image::load_from_memory_with_format(
+        include_bytes!(
+            "../../../../LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Assets/lbm-logo.ico"
+        ),
+        image::ImageFormat::Ico,
+    )
+    .expect("bundled application icon")
+    .into_rgba8();
+    std::sync::Arc::new(egui::IconData {
+        width: logo.width(),
+        height: logo.height(),
+        rgba: logo.into_raw(),
+    })
 }
 
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[test]
+    fn replacement_restores_layout_edits_without_saving_them_or_overwriting_preferences() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut loaded = Layout::new(LayoutOptions {
+            vcp_control: true,
+            ..Default::default()
+        });
+        lbm_layout::linux::populate(&mut loaded, &[], |_| Ok::<(), std::io::Error>(())).unwrap();
+        let saved = lbm_app::saved::Reference::of(&loaded);
+        let mut edited = loaded.clone();
+        let monitor = edited.monitors()[0].id.clone();
+        edited.set_location(&monitor, lbm_layout::geo::Point::new(123., 45.));
+        edited.edit_options(|o| o.vcp_control = false);
+        let draft = serde_json::json!({
+            "LayoutId": edited.id,
+            "Document": lbm_app::settings::document(&edited),
+            "Selected": monitor,
+            "Mode": "size",
+        });
+        app.replacement_draft = Some(draft.clone());
+        app.restore_replacement_draft(&mut loaded);
+        assert!(
+            !saved.holds(&loaded),
+            "replacement must keep local edits unsaved"
+        );
+        assert_eq!(
+            lbm_app::settings::document(&loaded),
+            lbm_app::settings::document(&edited)
+        );
+        assert!(
+            loaded.options.vcp_control,
+            "current preferences belong to the store"
+        );
+        assert_eq!(app.selected.as_deref(), Some(monitor.as_str()));
+        assert_eq!(app.mode, lbm_ui::mode::Mode::Size);
+        assert!(app.replacement_draft.is_none());
+
+        let mut other = Layout::new(LayoutOptions::default());
+        other.id = "different displays".into();
+        let before = lbm_app::settings::document(&other);
+        app.replacement_draft = Some(draft);
+        app.restore_replacement_draft(&mut other);
+        assert_eq!(lbm_app::settings::document(&other), before);
+    }
+
+    #[test]
+    fn the_window_carries_the_lbm_logo_rather_than_the_egui_default() {
+        let icon = app_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+        assert!(
+            icon.rgba.as_chunks::<4>().0.iter().any(|p| p[3] == 0),
+            "transparent corners"
+        );
+    }
+
+    #[test]
+    fn test_patterns_follow_the_selected_connector_without_needing_ddc() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[
+                lbm_layout::linux::LinuxMonitor {
+                    connector_name: "DP-2".into(),
+                    ..lbm_layout::linux::LinuxMonitor::fallback()
+                },
+                lbm_layout::linux::LinuxMonitor {
+                    connector_name: "DP-3".into(),
+                    logical_x: 1920.,
+                    primary: false,
+                    ..lbm_layout::linux::LinuxMonitor::fallback()
+                },
+            ],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let ids: Vec<_> = layout.monitors().iter().map(|m| m.id.clone()).collect();
+        app.layout = Some(Box::new(layout));
+        app.requests = Some(tokio::sync::mpsc::unbounded_channel().0);
+        app.refresh = Default::default();
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        app.selected = Some(ids[0].clone());
+        assert_eq!(app.test_pattern_target().as_deref(), Some("DP-2"));
+        app.selected = Some(ids[1].clone());
+        assert_eq!(app.test_pattern_target().as_deref(), Some("DP-3"));
+        app.mode = lbm_ui::mode::Mode::Location;
+        assert_eq!(app.test_pattern_target(), None);
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        app.refresh.invalidate();
+        assert_eq!(app.test_pattern_target(), None);
+        app.refresh = Default::default();
+        app.agent.suspended = true;
+        assert_eq!(app.test_pattern_target(), None);
+    }
 
     #[test]
     fn placement_import_can_be_undone_and_export_sends_current_edits() {
@@ -3229,6 +3588,71 @@ mod lifecycle_tests {
         assert_eq!(
             document,
             lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn another_launch_is_answered_without_waiting_for_a_frame_to_be_drawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let lbm_app::instance::Launch::Open { owner, inbox, .. } =
+            lbm_app::instance::start(lbm_app::instance::Address::in_directory(dir.path()), false)
+                .unwrap()
+        else {
+            panic!("the first launch opens")
+        };
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.instance = Some(inbox);
+        let path = dir.path().to_owned();
+        let second = std::thread::spawn(move || {
+            lbm_app::instance::start(lbm_app::instance::Address::in_directory(&path), false)
+        });
+        // What eframe calls even for a minimized window: no `ui`, no painting.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !second.is_finished() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the activation was not answered"
+            );
+            app.instance_requests(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(matches!(
+            second.join().unwrap().unwrap(),
+            lbm_app::instance::Launch::Activated
+        ));
+        drop(owner);
+    }
+
+    #[test]
+    fn a_short_window_still_shows_the_monitor_controls_of_display_lab() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480., 320.),
+                )),
+                ..Default::default()
+            },
+            |ui| app.properties(ui),
+        );
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("Connect to the agent to control the monitor."),
+            "{text}"
         );
     }
 

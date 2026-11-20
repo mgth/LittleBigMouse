@@ -2433,6 +2433,7 @@ dependencies = [
  "lbm-ui",
  "lbm-wallpaper",
  "raw-window-handle",
+ "roxmltree 0.20.0",
  "serde_json",
  "tempfile",
  "tokio",
@@ -2440,6 +2441,7 @@ dependencies = [
  "wayland-backend",
  "wayland-client",
  "windows 0.58.0",
+ "winresource",
  "zbus",
 ]
 

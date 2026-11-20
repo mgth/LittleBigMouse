@@ -3173,6 +3173,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LittleBigMouse")
+            .with_icon(app_icon())
             .with_inner_size([1100.0, 750.0])
             .with_min_inner_size([480.0, 320.0]),
         ..Default::default()
@@ -3188,6 +3189,25 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(app))
         }),
     )
+}
+
+/// The Little Big Mouse logo for the title bar, taskbar and Alt+Tab. Without it eframe
+/// substitutes its own egui logo. Same file as the exe icon (build.rs); the decoder
+/// takes its largest picture and the system scales it down.
+fn app_icon() -> std::sync::Arc<egui::IconData> {
+    let logo = image::load_from_memory_with_format(
+        include_bytes!(
+            "../../../../LittleBigMouse.Ui/LittleBigMouse.Ui.Avalonia/Assets/lbm-logo.ico"
+        ),
+        image::ImageFormat::Ico,
+    )
+    .expect("bundled application icon")
+    .into_rgba8();
+    std::sync::Arc::new(egui::IconData {
+        width: logo.width(),
+        height: logo.height(),
+        rgba: logo.into_raw(),
+    })
 }
 
 #[cfg(test)]
@@ -3237,6 +3257,17 @@ mod lifecycle_tests {
         app.replacement_draft = Some(draft);
         app.restore_replacement_draft(&mut other);
         assert_eq!(lbm_app::settings::document(&other), before);
+    }
+
+    #[test]
+    fn the_window_carries_the_lbm_logo_rather_than_the_egui_default() {
+        let icon = app_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+        assert!(
+            icon.rgba.as_chunks::<4>().0.iter().any(|p| p[3] == 0),
+            "transparent corners"
+        );
     }
 
     #[test]

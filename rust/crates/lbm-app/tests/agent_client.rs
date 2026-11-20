@@ -56,6 +56,7 @@ fn reconnect_subscribes_again_and_does_not_reuse_the_old_request_queue() {
     let SessionEvent::Connected {
         requests: old,
         snapshot,
+        capabilities,
     } = event_until(&events, |event| {
         matches!(event, SessionEvent::Connected { .. })
     })
@@ -63,6 +64,10 @@ fn reconnect_subscribes_again_and_does_not_reuse_the_old_request_queue() {
         unreachable!()
     };
     assert_eq!(snapshot["LayoutId"], "DELA0B1_ABC123");
+    assert!(
+        capabilities.iter().any(|c| c == "IntrinsicSize"),
+        "{capabilities:?}"
+    );
     assert!(snapshot["LayoutRevision"].as_u64().unwrap() > 0);
     drop(first);
     event_until(&events, |event| {
@@ -73,9 +78,12 @@ fn reconnect_subscribes_again_and_does_not_reuse_the_old_request_queue() {
         "old commands must not wait for a new agent"
     );
     let _second = Running::at(dir);
-    let SessionEvent::Connected { requests, snapshot } = event_until(&events, |event| {
+    let SessionEvent::Connected {
+        requests, snapshot, ..
+    } = event_until(&events, |event| {
         matches!(event, SessionEvent::Connected { .. })
-    }) else {
+    })
+    else {
         unreachable!()
     };
     let revision = snapshot["LayoutRevision"].as_u64().unwrap();
@@ -345,6 +353,14 @@ fn the_agent_answers_who_it_is_and_which_protocol() {
     assert_eq!(
         hello["Protocol"], PROTOCOL,
         "the client speaks a protocol the agent does not"
+    );
+    // The size editor lets a size cross the detected shape only for an agent that
+    // says it keeps marked sizes as stored (#795 review).
+    assert!(
+        hello["Capabilities"]
+            .as_array()
+            .is_some_and(|all| all.iter().any(|c| c == "IntrinsicSize")),
+        "{hello}"
     );
 }
 

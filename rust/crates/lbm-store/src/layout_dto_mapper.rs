@@ -137,6 +137,13 @@ pub fn apply_layout(
         .iter()
         .map(|m| (m.id.clone(), m.model.clone()))
         .collect();
+    for (_, model) in &monitors {
+        // The first load captures what the platform detected, before any store is
+        // applied over it; a reload keeps it (see `MonitorModel::detected_size`).
+        layout.capture_detected_size(model);
+        // What a previous load found undecided is re-derived from this one's store.
+        layout.set_unresolved_stored_size(model, None);
+    }
     for (id, model) in &monitors {
         if let Some(dto) = models.get(model) {
             apply_model(layout, model, dto);
@@ -149,6 +156,31 @@ pub fn apply_layout(
 
 /// C# `Apply(PhysicalMonitorModel, ModelDto)`: a model's stored size, borders and name.
 pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
+    let marked = dto.intrinsic_size == Some(true);
+    // Against what the platform detected, not the current size: a reload of the same
+    // model, an agent applying a document over the profile it loaded, or a model shared
+    // by several monitors applied once per monitor, would otherwise compare the stored
+    // size with itself (#794 review).
+    let Some((detected_width, detected_height)) = layout.model(pnp_code).map(|m| {
+        m.detected_size
+            .unwrap_or((m.physical_size.width(), m.physical_size.height()))
+    }) else {
+        return;
+    };
+    let unresolved = layout_migrations::stored_size_unresolved(
+        detected_width,
+        detected_height,
+        dto.width,
+        dto.height,
+        marked,
+    );
+    layout.set_unresolved_stored_size(
+        pnp_code,
+        match (unresolved, dto.width, dto.height) {
+            (true, Some(w), Some(h)) => Some((w, h)),
+            _ => None,
+        },
+    );
     layout.edit_model(pnp_code, |size, name| {
         let fixed_ratio = size.fixed_aspect_ratio();
         size.set_fixed_aspect_ratio(false);
@@ -169,10 +201,11 @@ pub fn apply_model(layout: &mut Layout, pnp_code: &str, dto: &ModelDto) {
 
         // Placeholder sizes (#419) and pre-5.4.1 oriented sizes (#507).
         let (width, height) = layout_migrations::stored_model_size(
-            size.width(),
-            size.height(),
+            detected_width,
+            detected_height,
             dto.width,
             dto.height,
+            marked,
         );
         if let Some(w) = width {
             size.set_width(w);
@@ -535,8 +568,20 @@ pub fn to_model_dto(model: &MonitorModel) -> ModelDto {
             ..Default::default()
         }),
         pnp_name: model.pnp_device_name.clone(),
+        // What this version writes is intrinsic: the orientation migration must not
+        // touch it again on the next load (#728, #730). Except an old size whose
+        // migration is still undecided and that the user has not changed: it stays
+        // unmarked, so the next detection that can decide still migrates it.
+        intrinsic_size: (!is_unresolved(model)).then_some(true),
         ..Default::default()
     }
+}
+
+/// C# `IsUnresolved`: the size is still the stored one its migration could not decide.
+fn is_unresolved(model: &MonitorModel) -> bool {
+    model
+        .unresolved_stored_size
+        .is_some_and(|(w, h)| w == model.physical_size.width() && h == model.physical_size.height())
 }
 
 /// The models of a layout's monitors, once each, in the order the monitors first use

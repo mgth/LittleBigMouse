@@ -25,7 +25,9 @@ use lbm_layout::model::{
     BorderSection, DisplaySize, DisplaySource, Layout, Monitor, MonitorModel, PhysicalSource, Ratio,
 };
 use lbm_store::excluded_process_defaults::{contains_entry, ALL, HEADER, LEGACY_V0, VERSION};
-use lbm_store::layout_migrations::normalize_stored_size;
+use lbm_store::layout_migrations::{
+    normalize_stored_size, stored_model_size, stored_size_unresolved,
+};
 use lbm_store::{
     BorderResistanceDto, BorderSideDto, BordersDto, GlobalOptionsDto, LayoutDto, LayoutOptionsDto,
     LayoutPersistence, LayoutStore, LayoutStoreData, ModelDto, MonitorDto, SourceDto,
@@ -751,6 +753,300 @@ fn load_keeps_stored_size_when_orientation_matches() {
 
     assert_eq!(model(&layout).physical_size.width(), 598.0);
     assert_eq!(model(&layout).physical_size.height(), 338.0);
+}
+
+/// C# `Load_IntrinsicMarkedSize_IsAppliedEvenWhenItContradictsTheDetectedShape`.
+#[test]
+fn load_intrinsic_marked_size_is_applied_even_when_it_contradicts_the_detected_shape() {
+    // A picture-by-picture half: the EDID describes the whole 16:9 panel (detected
+    // 600x340), the half the user measured is taller than wide. Saved by a version that
+    // marks its sizes intrinsic, it is not an old oriented size and must not be swapped
+    // (#730).
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(300.0),
+            height: Some(340.0),
+            intrinsic_size: Some(true),
+            ..ModelDto::default()
+        },
+    );
+
+    let mut layout = new_layout(); // fresh intrinsic model: 600x340
+    let (_dir, mut persistence) = new_persistence(&store);
+    persistence.load(&mut layout).unwrap();
+
+    assert_eq!(model(&layout).physical_size.width(), 300.0);
+    assert_eq!(model(&layout).physical_size.height(), 340.0);
+}
+
+/// C# `Save_MarksTheModelSizeIntrinsic`.
+#[test]
+fn save_marks_the_model_size_intrinsic() {
+    let store = FakeStore::default();
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut layout = new_layout();
+    persistence.load(&mut layout).unwrap();
+    persistence.save(&mut layout).unwrap();
+
+    assert_eq!(store.models.borrow()[PNP].intrinsic_size, Some(true));
+}
+
+/// C# `SizeEditedAcrossTheDetectedShape_SurvivesSaveAndReload`.
+#[test]
+fn size_edited_across_the_detected_shape_survives_save_and_reload() {
+    // #728 / #730 end to end: the user corrects a size so that its shape contradicts the
+    // detected one, saves; every later load (start, wake, display change) used to swap
+    // it back through the pre-5.4.1 migration.
+    let store = FakeStore::default();
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut layout = new_layout(); // detected 600x340
+    persistence.load(&mut layout).unwrap();
+    layout.edit_model(PNP, |size, _| {
+        size.set_fixed_aspect_ratio(false);
+        size.set_width(340.0);
+        size.set_height(600.0);
+    });
+    persistence.save(&mut layout).unwrap();
+
+    let mut reloaded = new_layout(); // detected 600x340 again
+    persistence.load(&mut reloaded).unwrap();
+
+    assert_eq!(model(&reloaded).physical_size.width(), 340.0);
+    assert_eq!(model(&reloaded).physical_size.height(), 600.0);
+}
+
+/// C# `Load_UnmarkedContradictingSize_IsStillMigratedOnce`.
+#[test]
+fn load_unmarked_contradicting_size_is_still_migrated_once() {
+    // A store written before the mark: the pre-5.4.1 migration still applies, and the
+    // next save writes the migrated size with the mark, so it is never re-examined.
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut layout = new_layout();
+    persistence.load(&mut layout).unwrap();
+    assert_eq!(model(&layout).physical_size.width(), 598.0);
+
+    persistence.save(&mut layout).unwrap();
+    let stored = store.models.borrow()[PNP].clone();
+    assert_eq!(stored.width, Some(598.0));
+    assert_eq!(stored.height, Some(338.0));
+    assert_eq!(stored.intrinsic_size, Some(true));
+}
+
+/// C# `UndecidedMigration_IsNotFrozenBySave_AndRunsAtTheNextDetection`, a theory: its
+/// two `InlineData` in order.
+#[test]
+fn undecided_migration_is_not_frozen_by_save_and_runs_at_the_next_detection() {
+    // #794 review: an unmarked pre-5.4.1 portrait size, a first detection that cannot
+    // decide, a save without touching the size, then a detection with real dimensions.
+    // The save must not mark the size, so the second load still migrates it.
+    for (first_width, first_height) in [(0.0, 0.0), (500.0, 500.0)] {
+        let store = FakeStore::default();
+        store.models.borrow_mut().insert(
+            PNP.to_owned(),
+            ModelDto {
+                width: Some(338.0),
+                height: Some(598.0),
+                ..ModelDto::default()
+            },
+        );
+        let (_dir, mut persistence) = new_persistence(&store);
+
+        let mut first = new_layout();
+        first.edit_model(PNP, |size, _| {
+            size.set_width(first_width);
+            size.set_height(first_height);
+        });
+        persistence.load(&mut first).unwrap();
+        assert_eq!(model(&first).physical_size.width(), 338.0);
+        persistence.save(&mut first).unwrap();
+        assert_eq!(store.models.borrow()[PNP].intrinsic_size, None);
+
+        let mut second = new_layout(); // detected 600x340
+        persistence.load(&mut second).unwrap();
+
+        let case = format!("first detection {first_width}x{first_height}");
+        assert_eq!(model(&second).physical_size.width(), 598.0, "{case}");
+        assert_eq!(model(&second).physical_size.height(), 338.0, "{case}");
+    }
+}
+
+/// C# `UndecidedMigration_SurvivesAReloadOfTheSameModel`.
+#[test]
+fn undecided_migration_survives_a_reload_of_the_same_model() {
+    // #794 review, the Undo path: a reload of the same layout must not take the stored
+    // size it already applied for a detection.
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut first = new_layout();
+    first.edit_model(PNP, |size, _| {
+        size.set_width(0.0);
+        size.set_height(0.0);
+    });
+    persistence.load(&mut first).unwrap();
+    first.edit_model(PNP, |size, _| {
+        size.set_top_border(17.0);
+    });
+    persistence.load(&mut first).unwrap();
+    assert_eq!(model(&first).physical_size.width(), 338.0);
+    first.edit_model(PNP, |size, _| {
+        size.set_top_border(18.0);
+    });
+    persistence.save(&mut first).unwrap();
+    assert_eq!(store.models.borrow()[PNP].intrinsic_size, None);
+
+    let mut second = new_layout(); // detected 600x340
+    persistence.load(&mut second).unwrap();
+
+    assert_eq!(model(&second).physical_size.width(), 598.0);
+    assert_eq!(model(&second).physical_size.height(), 338.0);
+    assert_eq!(model(&second).physical_size.borders().top, 18.0);
+}
+
+/// C# `Reload_MigratesAgainstTheDetectedSize_NotTheCurrentOne`.
+#[test]
+fn reload_migrates_against_the_detected_size_not_the_current_one() {
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut layout = new_layout(); // detected 600x340
+    persistence.load(&mut layout).unwrap();
+    layout.edit_model(PNP, |size, _| {
+        size.set_fixed_aspect_ratio(false);
+        size.set_width(200.0);
+        size.set_height(700.0);
+    });
+    persistence.load(&mut layout).unwrap();
+
+    assert_eq!(model(&layout).physical_size.width(), 598.0);
+    assert_eq!(model(&layout).physical_size.height(), 338.0);
+}
+
+/// C# `UndecidedMigration_AUserCorrectionIsMarked`.
+#[test]
+fn undecided_migration_a_user_correction_is_marked() {
+    // The user's own size is intrinsic whatever the detection could tell.
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        PNP.to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let (_dir, mut persistence) = new_persistence(&store);
+
+    let mut first = new_layout();
+    first.edit_model(PNP, |size, _| {
+        size.set_width(0.0);
+        size.set_height(0.0);
+    });
+    persistence.load(&mut first).unwrap();
+    first.edit_model(PNP, |size, _| {
+        size.set_fixed_aspect_ratio(false);
+        size.set_width(300.0);
+    });
+    persistence.save(&mut first).unwrap();
+    assert_eq!(store.models.borrow()[PNP].intrinsic_size, Some(true));
+
+    let mut second = new_layout(); // detected 600x340
+    persistence.load(&mut second).unwrap();
+
+    assert_eq!(model(&second).physical_size.width(), 300.0);
+    assert_eq!(model(&second).physical_size.height(), 598.0);
+}
+
+/// C# `StoredSizeUnresolved_Cases`, a theory: its six `InlineData` in order.
+#[test]
+fn stored_size_unresolved_cases() {
+    // (detectedW, detectedH, storedW, storedH, marked, expected)
+    let cases: [(f64, f64, f64, f64, bool, bool); 6] = [
+        // Undecided: unmarked, stored with a shape, detected without one.
+        (0.0, 0.0, 338.0, 598.0, false, true),
+        (500.0, 500.0, 338.0, 598.0, false, true),
+        // Decided by the detection, or nothing to decide.
+        (600.0, 340.0, 338.0, 598.0, false, false),
+        (0.0, 0.0, 500.0, 500.0, false, false),
+        (0.0, 0.0, 0.0, 0.0, false, false),
+        // Marked: never pending.
+        (0.0, 0.0, 338.0, 598.0, true, false),
+    ];
+    for (dw, dh, sw, sh, marked, expected) in cases {
+        assert_eq!(
+            stored_size_unresolved(dw, dh, Some(sw), Some(sh), marked),
+            expected,
+            "detected {dw}x{dh}, stored {sw}x{sh}, marked {marked}"
+        );
+    }
+}
+
+/// C# `StoredModelSize_MarkedIntrinsicSkipsTheOrientationMigration`, a theory: its
+/// three `InlineData` in order.
+#[test]
+fn stored_model_size_marked_intrinsic_skips_the_orientation_migration() {
+    // (intrinsicW, intrinsicH, storedW, storedH, marked, expectedW, expectedH)
+    let cases: [(f64, f64, f64, f64, bool, f64, f64); 3] = [
+        // Unmarked: the orientation migration decides.
+        (600.0, 340.0, 340.0, 600.0, false, 600.0, 340.0),
+        // Marked intrinsic: applied as stored, whatever the detected shape.
+        (600.0, 340.0, 340.0, 600.0, true, 340.0, 600.0),
+        (340.0, 600.0, 600.0, 340.0, true, 600.0, 340.0),
+    ];
+    for (intrinsic_w, intrinsic_h, stored_w, stored_h, marked, expected_w, expected_h) in cases {
+        let (w, h) = stored_model_size(
+            intrinsic_w,
+            intrinsic_h,
+            Some(stored_w),
+            Some(stored_h),
+            marked,
+        );
+        let case = format!(
+            "intrinsic {intrinsic_w}x{intrinsic_h}, stored {stored_w}x{stored_h}, marked {marked}"
+        );
+        assert_eq!(w, Some(expected_w), "{case}");
+        assert_eq!(h, Some(expected_h), "{case}");
+    }
+}
+
+/// C# `StoredModelSize_MarkedPlaceholderStillDoesNotOverride`.
+#[test]
+fn stored_model_size_marked_placeholder_still_does_not_override() {
+    // The #419 guard is about the value, not its provenance.
+    assert_eq!(
+        stored_model_size(600.0, 340.0, Some(0.0), Some(0.0), true),
+        (None, None)
+    );
 }
 
 /// C# `NormalizeStoredSize_Cases`, a theory: its five `InlineData` in order.

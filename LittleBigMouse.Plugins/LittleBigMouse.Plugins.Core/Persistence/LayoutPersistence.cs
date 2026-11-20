@@ -107,6 +107,15 @@ public abstract class LayoutPersistence : ILayoutPersistence
 
             foreach (var monitor in layout.PhysicalMonitors)
             {
+                // The first load captures what the platform detected, before any store
+                // is applied over it; a reload keeps it (see DetectedSize).
+                monitor.Model.DetectedSize ??= (monitor.Model.PhysicalSize.Width, monitor.Model.PhysicalSize.Height);
+                // What a previous load found undecided is re-derived from this one's store.
+                monitor.Model.UnresolvedStoredSize = null;
+            }
+
+            foreach (var monitor in layout.PhysicalMonitors)
+            {
                 // Model before monitor: the monitor mapping reads the physical size the
                 // model just restored (edge lengths, whole-edge resistance migration).
                 if (data.Models.TryGetValue(monitor.Model.PnpCode, out var model))

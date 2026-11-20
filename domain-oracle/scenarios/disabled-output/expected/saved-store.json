@@ -69,7 +69,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "Dell U2724DE"
+      "PnpName": "Dell U2724DE",
+      "IntrinsicSize": true
     },
     "SAME035": {
       "Width": 697,
@@ -80,7 +81,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "Odyssey G80SD"
+      "PnpName": "Odyssey G80SD",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

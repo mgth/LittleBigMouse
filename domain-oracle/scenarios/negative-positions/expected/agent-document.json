@@ -132,7 +132,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DELL P2419H"
+      "PnpName": "DELL P2419H",
+      "IntrinsicSize": true
     },
     "ACI27A3": {
       "Width": 597,
@@ -143,7 +144,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "ASUS PB278"
+      "PnpName": "ASUS PB278",
+      "IntrinsicSize": true
     },
     "DELD177": {
       "Width": 596,
@@ -154,7 +156,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DELL_G2724D"
+      "PnpName": "DELL_G2724D",
+      "IntrinsicSize": true
     }
   }
 }

@@ -186,7 +186,8 @@ public class RegistryLayoutStore : ILayoutStore
         Width = key.TryGet(@"Size\Width"),
         Height = key.TryGet(@"Size\Height"),
         Borders = ReadBorders(key, "Borders"),
-        PnpName = key.TryGetString("PnpName")
+        PnpName = key.TryGetString("PnpName"),
+        IntrinsicSize = key.TryGetBool(@"Size\Intrinsic")
     };
 
     static BordersDto? ReadBorders(RegistryKey key, string name)
@@ -381,6 +382,7 @@ public class RegistryLayoutStore : ILayoutStore
             WriteBorders(key, "Borders", model.Borders);
             Set(key, @"Size\Width", model.Width);
             Set(key, @"Size\Height", model.Height);
+            Set(key, @"Size\Intrinsic", model.IntrinsicSize);
             Set(key, "PnpName", model.PnpName);
         }
     }

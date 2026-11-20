@@ -1,4 +1,4 @@
-use lbm_app::properties::{apply, size, Detected};
+use lbm_app::properties::{apply, size, swapped_by_old_agent, Detected};
 use lbm_layout::{
     linux::{LinuxEdid, LinuxMonitor},
     model::{Layout, LayoutOptions, PER_MODEL, PER_MONITOR},
@@ -48,8 +48,8 @@ fn portrait_dimensions_keep_the_ratio_and_update_every_screen_of_the_model() {
     let other = layout.monitors()[1].id.clone();
     let source = layout.monitors()[0].active_source.clone().unwrap();
     layout.set_source_orientation(&source, 1);
-    apply(&mut layout, &detected, &id, Edit::Lock(true)).unwrap();
-    apply(&mut layout, &detected, &id, Edit::Width(450.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Lock(true)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(450.0)).unwrap();
     let portrait = size(&layout, &id).unwrap().physical;
     assert_eq!((portrait.width, portrait.height), (450.0, 900.0));
     let landscape = size(&layout, &other).unwrap().physical;
@@ -73,7 +73,7 @@ fn every_rotation_and_border_policy_edits_the_side_the_user_sees() {
                 let source = layout.monitors()[0].active_source.clone().unwrap();
                 layout.set_source_orientation(&source, rotation);
                 let other_before = size(&layout, &other).unwrap().physical;
-                apply(&mut layout, &detected, &id, edit).unwrap();
+                apply(&mut layout, Some(&detected), &id, edit).unwrap();
                 let got = size(&layout, &id).unwrap().physical;
                 match edit {
                     Edit::Left(v) => assert_eq!(got.left_border, v),
@@ -102,14 +102,14 @@ fn outside_measurements_adjust_only_the_expected_bezels_and_survive_the_save_doc
         let before = size(&edited, &id).unwrap().physical;
         apply(
             &mut edited,
-            &detected,
+            Some(&detected),
             &id,
             Edit::OutsideWidth(before.outside_width() + 20.0),
         )
         .unwrap();
         apply(
             &mut edited,
-            &detected,
+            Some(&detected),
             &id,
             Edit::OutsideHeight(before.outside_height() + 15.0),
         )
@@ -142,7 +142,7 @@ fn invalid_measurements_are_rejected_without_changing_the_document() {
         Edit::OutsideWidth(1.0),
         Edit::OutsideHeight(1.0),
     ] {
-        assert!(apply(&mut layout, &detected, &id, edit).is_err());
+        assert!(apply(&mut layout, Some(&detected), &id, edit).is_err());
         assert!(reference.holds(&layout));
     }
 }
@@ -156,7 +156,7 @@ fn reported_dimensions_remain_distinct_from_the_edited_layout() {
     let mut layout = layout(PER_MODEL);
     let sizes = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
-    apply(&mut layout, &sizes, &id, Edit::Width(650.0)).unwrap();
+    apply(&mut layout, Some(&sizes), &id, Edit::Width(650.0)).unwrap();
     assert!(lbm_app::properties::layout_info(&layout, &id)
         .iter()
         .any(|(_, v)| v == "650.00 × 300.00"));
@@ -171,8 +171,8 @@ fn undo_without_a_stored_profile_restores_size_placement_and_border_ownership() 
     let reference = lbm_app::saved::Reference::of(&layout);
     let original = size(&layout, &id).unwrap().physical;
     let positions: Vec<_> = layout.monitors().iter().map(|m| m.location()).collect();
-    apply(&mut layout, &detected, &id, Edit::Width(800.0)).unwrap();
-    apply(&mut layout, &detected, &id, Edit::Left(40.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(800.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Left(40.0)).unwrap();
     assert!(!reference.holds(&layout));
     assert!(layout.monitor(&id).unwrap().borders_customized());
     reference.restore(&mut layout);
@@ -190,9 +190,10 @@ fn undo_without_a_stored_profile_restores_size_placement_and_border_ownership() 
 }
 
 #[test]
-fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
+fn a_size_an_old_agent_would_read_back_transposed_is_refused_before_any_change() {
     // Landscape 600 x 300 as detected, aspect lock off: 250 wide would make it portrait,
-    // which the store's #507 migration reads as a pre-5.4.1 oriented size and swaps.
+    // which an agent predating `IntrinsicSize` reads as a pre-5.4.1 oriented size and
+    // swaps in the document it is sent (#795 review).
     for rotation in 0..4 {
         let mut layout = layout(PER_MODEL);
         let detected = Detected::of(&layout);
@@ -206,7 +207,7 @@ fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
             (Edit::Height(250.0), Edit::Width(700.0))
         };
         for edit in [narrow, tall] {
-            let error = apply(&mut layout, &detected, &id, edit).unwrap_err();
+            let error = apply(&mut layout, Some(&detected), &id, edit).unwrap_err();
             assert!(error.contains("landscape to portrait"), "{error}");
             assert!(reference.holds(&layout));
         }
@@ -216,9 +217,9 @@ fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
     let mut layout = layout(PER_MODEL);
     let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
-    apply(&mut layout, &detected, &id, Edit::Width(300.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(300.0)).unwrap();
     // But a square is not a way round: portrait is still refused from there.
-    assert!(apply(&mut layout, &detected, &id, Edit::Width(200.0)).is_err());
+    assert!(apply(&mut layout, Some(&detected), &id, Edit::Width(200.0)).is_err());
 
     // Every size the editor accepts survives the Save/Live document unchanged.
     for edit in [
@@ -229,7 +230,7 @@ fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
         let mut edited = self::layout(PER_MODEL);
         let detected = Detected::of(&edited);
         let id = edited.monitors()[0].id.clone();
-        apply(&mut edited, &detected, &id, edit).unwrap();
+        apply(&mut edited, Some(&detected), &id, edit).unwrap();
         let shown = size(&edited, &id).unwrap().physical;
         let (_, request) = lbm_app::settings::save_layout(&edited);
         let document: lbm_store::LayoutDocument =
@@ -241,17 +242,57 @@ fn a_size_the_store_would_read_back_transposed_is_refused_before_any_change() {
 }
 
 #[test]
+fn with_an_agent_keeping_intrinsic_sizes_a_size_across_the_detected_shape_survives_the_save_document(
+) {
+    // Landscape 600 x 300 as detected, aspect lock off: 250 wide makes it portrait. An
+    // agent announcing `IntrinsicSize` applies the marked size as stored (#728, #730),
+    // whatever the rotation it was entered under: no guard, and the document keeps it.
+    for rotation in 0..4 {
+        for (narrow, tall) in [
+            (Edit::Width(250.0), Edit::Height(700.0)),
+            (Edit::Width(300.0), Edit::Width(200.0)),
+        ] {
+            let mut edited = layout(PER_MODEL);
+            let id = edited.monitors()[0].id.clone();
+            let source = edited.monitors()[0].active_source.clone().unwrap();
+            edited.set_source_orientation(&source, rotation);
+            let swap = |e: Edit| match (e, rotation % 2) {
+                (Edit::Width(v), 1) => Edit::Height(v),
+                (Edit::Height(v), 1) => Edit::Width(v),
+                (e, _) => e,
+            };
+            apply(&mut edited, None, &id, swap(narrow)).unwrap();
+            apply(&mut edited, None, &id, swap(tall)).unwrap();
+            let shown = size(&edited, &id).unwrap().physical;
+
+            let (_, request) = lbm_app::settings::save_layout(&edited);
+            let document: lbm_store::LayoutDocument =
+                serde_json::from_value(request["Document"].clone()).unwrap();
+            let mut landed = layout(PER_MODEL);
+            let source = landed.monitors()[0].active_source.clone().unwrap();
+            landed.set_source_orientation(&source, rotation);
+            document.apply(&mut landed);
+            assert_eq!(
+                size(&landed, &id).unwrap().physical,
+                shown,
+                "rotation {rotation}, {narrow:?} then {tall:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
     let mut layout = layout(PER_MONITOR);
     let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
     let initial = lbm_app::properties::location(&layout, &id).unwrap();
-    apply(&mut layout, &detected, &id, Edit::X(-123.45)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::X(-123.45)).unwrap();
     let p = lbm_app::properties::location(&layout, &id).unwrap();
     assert_eq!((p.x, p.y), (-123.45, initial.y));
-    apply(&mut layout, &detected, &id, Edit::Y(67.8)).unwrap();
-    apply(&mut layout, &detected, &id, Edit::ScaleX(125.)).unwrap();
-    apply(&mut layout, &detected, &id, Edit::ScaleY(90.)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Y(67.8)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::ScaleX(125.)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::ScaleY(90.)).unwrap();
     let p = lbm_app::properties::location(&layout, &id).unwrap();
     assert_eq!((p.x, p.y, p.scale_x, p.scale_y), (-123.45, 67.8, 125., 90.));
     let (_, request) = lbm_app::settings::save_layout(&layout);
@@ -267,7 +308,71 @@ fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
         Edit::ScaleX(0.),
         Edit::ScaleY(-5.),
     ] {
-        assert!(apply(&mut layout, &detected, &id, edit).is_err());
+        assert!(apply(&mut layout, Some(&detected), &id, edit).is_err());
         assert!(reference.holds(&layout));
     }
+}
+
+/// #795 review: the document carries every model's size, so what an old agent would
+/// transpose is a property of the whole layout, not of the edit that sends it.
+#[test]
+fn an_old_agent_would_swap_a_crossing_size_whatever_edit_sends_it() {
+    let mut layout = layout(PER_MODEL);
+    let detected = Detected::of(&layout);
+    let id = layout.monitors()[0].id.clone();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), None);
+
+    // Entered with an agent that keeps intrinsic sizes: no guard.
+    apply(&mut layout, None, &id, Edit::Width(250.0)).unwrap();
+    let model = layout.monitors()[0].model.clone();
+    assert_eq!(
+        swapped_by_old_agent(&layout, &detected),
+        Some(model.clone())
+    );
+
+    // A bezel edit does not change that.
+    apply(&mut layout, Some(&detected), &id, Edit::Top(15.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), Some(model));
+
+    // Back to the detected shape: nothing to swap.
+    apply(&mut layout, None, &id, Edit::Width(700.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), None);
+}
+
+/// #795 review: without a detected shape (no EDID: 0 x 0), an old agent compares a
+/// document with the size it loaded, not with the detection. The guard must do the same,
+/// or a crossing size goes through and the old agent saves it swapped.
+#[test]
+fn without_a_detected_shape_an_old_agent_compares_with_the_loaded_size() {
+    // Detected 0 x 0, then the stored 600 x 300 loaded over it, as `detect` does.
+    let loaded = || {
+        let mut layout = layout(PER_MODEL);
+        let model = layout.monitors()[0].model.clone();
+        let set = |layout: &mut lbm_layout::model::Layout, w: f64, h: f64| {
+            layout.edit_model(&model, |s, _| {
+                s.set_fixed_aspect_ratio(false);
+                s.set_width(w);
+                s.set_height(h);
+            });
+        };
+        set(&mut layout, 0.0, 0.0);
+        let undetected = Detected::of(&layout);
+        set(&mut layout, 600.0, 300.0);
+        let detected = undetected.clone().with_loaded(&layout);
+        (layout, undetected, detected, model)
+    };
+
+    // The detection alone decides nothing: 250 wide would go out.
+    let (mut layout, undetected, _, _) = loaded();
+    let id = layout.monitors()[0].id.clone();
+    assert!(apply(&mut layout, Some(&undetected), &id, Edit::Width(250.0)).is_ok());
+
+    // With the loaded size, it is refused as the old agent would swap it...
+    let (mut layout, _, detected, model) = loaded();
+    let error = apply(&mut layout, Some(&detected), &id, Edit::Width(250.0)).unwrap_err();
+    assert!(error.contains("landscape to portrait"), "{error}");
+
+    // ...and a document holding it is one that agent would swap.
+    apply(&mut layout, None, &id, Edit::Width(250.0)).unwrap();
+    assert_eq!(swapped_by_old_agent(&layout, &detected), Some(model));
 }

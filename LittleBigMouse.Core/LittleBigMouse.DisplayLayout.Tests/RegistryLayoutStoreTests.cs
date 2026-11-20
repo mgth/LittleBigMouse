@@ -123,7 +123,7 @@ public class RegistryLayoutStoreTests : IDisposable
     public void Model_RoundTripsSizeBordersAndName()
     {
         var borders = Filled<BordersDto>();
-        var model = new ModelDto { Width = 598, Height = 338, Borders = borders, PnpName = "Test Monitor 24" };
+        var model = new ModelDto { Width = 598, Height = 338, Borders = borders, PnpName = "Test Monitor 24", IntrinsicSize = true };
 
         Store.WriteModels(new Dictionary<string, ModelDto> { [Pnp] = model });
         var read = Store.Read("ANY", [Pnp]).Models[Pnp];

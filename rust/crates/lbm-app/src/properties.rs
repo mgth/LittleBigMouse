@@ -25,30 +25,113 @@ pub fn size(layout: &Layout, id: &str) -> Option<Size> {
     })
 }
 
-/// The model sizes as detected, before any stored profile is applied: what
-/// [`lbm_store::layout_migrations::normalize_stored_size`] compares a stored size against
-/// when the agent (or this window) applies a saved document to freshly detected screens.
+/// What an agent that predates `IntrinsicSize` compares a document's model sizes against
+/// ([`lbm_store::layout_migrations::normalize_stored_size`]) when it applies it over the
+/// layout it holds: the sizes as detected, and, where the detection has no shape to
+/// decide with (0 x 0 without an EDID, or a square), the sizes it loaded from the store
+/// — that agent compares with the model it holds, not with a detection (#795 review).
+/// [`apply`] and [`swapped_by_old_agent`] only consult it for such an agent.
 #[derive(Clone, Debug, Default)]
-pub struct Detected(HashMap<String, (f64, f64)>);
+pub struct Detected {
+    detected: HashMap<String, (f64, f64)>,
+    loaded: HashMap<String, (f64, f64)>,
+}
+
+/// The model sizes of a document as it is sent: what an old agent holds once it has
+/// taken it (see [`Detected::agent_holds`]).
+#[derive(Clone, Debug, Default)]
+pub struct Held(HashMap<String, (f64, f64)>);
+
+impl Held {
+    pub fn of(layout: &Layout) -> Self {
+        Self(sizes(layout))
+    }
+}
+
+fn sizes(layout: &Layout) -> HashMap<String, (f64, f64)> {
+    layout
+        .models()
+        .iter()
+        .map(|m| {
+            let size = &m.physical_size;
+            (m.pnp_code.clone(), (size.width(), size.height()))
+        })
+        .collect()
+}
 
 impl Detected {
     /// Read off a layout that has just been detected — before the store is applied.
     pub fn of(layout: &Layout) -> Self {
-        Self(
-            layout
-                .models()
-                .iter()
-                .map(|m| {
-                    let size = &m.physical_size;
-                    (m.pnp_code.clone(), (size.width(), size.height()))
-                })
-                .collect(),
-        )
+        Self {
+            detected: sizes(layout),
+            loaded: HashMap::new(),
+        }
+    }
+
+    /// The same, with the sizes `layout` holds once the store has been applied: what the
+    /// agent holds too, having loaded the same store.
+    pub fn with_loaded(self, layout: &Layout) -> Self {
+        Self {
+            loaded: sizes(layout),
+            ..self
+        }
+    }
+
+    /// An old agent took a document holding `held`: it compares the next one with those
+    /// sizes, so a save accepted under a 0 x 0 detection moves the reference with it
+    /// (#795 review: two saves in one session).
+    pub fn agent_holds(&mut self, held: Held) {
+        self.loaded.extend(held.0);
+    }
+
+    /// The size an old agent compares `pnp_code`'s size with: the detection when it has a
+    /// shape, otherwise what was loaded; `None` when neither is known.
+    fn reference(&self, pnp_code: &str) -> Option<(f64, f64)> {
+        let shaped = |&(w, h): &(f64, f64)| w > 0.0 && h > 0.0 && w != h;
+        self.detected
+            .get(pnp_code)
+            .filter(|size| shaped(size))
+            .or_else(|| self.loaded.get(pnp_code))
+            .or_else(|| self.detected.get(pnp_code))
+            .copied()
     }
 }
 
-/// `detected` is only read for panel dimensions: see [`Detected`].
-pub fn apply(layout: &mut Layout, detected: &Detected, id: &str, edit: Edit) -> Result<(), String> {
+/// Why a document must not go to an agent predating `IntrinsicSize`.
+pub const OLD_AGENT_WOULD_SWAP: &str = "the running agent predates this editor and would turn a panel from landscape to portrait or back: restart it to save or preview this layout";
+
+/// The first model of `layout` whose size an agent predating `IntrinsicSize` would
+/// transpose when it applies the document, whatever the edit that made it go out: the
+/// document carries every model's size, so a bezel change alone sends a size the agent
+/// reinterprets (#795 review). `None` when nothing would move.
+pub fn swapped_by_old_agent(layout: &Layout, detected: &Detected) -> Option<String> {
+    layout
+        .models()
+        .iter()
+        .find(|m| {
+            let size = &m.physical_size;
+            let shown = (size.width(), size.height());
+            let (intrinsic_width, intrinsic_height) =
+                detected.reference(&m.pnp_code).unwrap_or(shown);
+            lbm_store::layout_migrations::normalize_stored_size(
+                intrinsic_width,
+                intrinsic_height,
+                shown.0,
+                shown.1,
+            ) != shown
+        })
+        .map(|m| m.pnp_code.clone())
+}
+
+/// `old_agent` is `Some` when the agent does not announce `IntrinsicSize`: a size it
+/// would read back transposed is then refused. It is only read for panel dimensions:
+/// see [`Detected`].
+pub fn apply(
+    layout: &mut Layout,
+    old_agent: Option<&Detected>,
+    id: &str,
+    edit: Edit,
+) -> Result<(), String> {
     let monitor = layout
         .monitors()
         .iter()
@@ -136,27 +219,28 @@ pub fn apply(layout: &mut Layout, detected: &Detected, id: &str, edit: Edit) -> 
             if !changed.width().is_finite() || !changed.height().is_finite() {
                 return Err("dimensions are too large".into());
             }
-            // The store migrates pre-5.4.1 sizes, saved oriented, by transposing any stored
-            // size whose landscape/portrait shape contradicts the detected panel (#507). An
-            // edit that crosses that line would be saved, then read back — by the agent's
-            // preview as by the next load — with its axes swapped: refuse it here, with the
-            // very rule the store applies, rather than show one size and run another.
-            let (intrinsic_width, intrinsic_height) = detected
-                .0
-                .get(&model_id)
-                .copied()
-                .unwrap_or((current.width(), current.height()));
-            let read_back = lbm_store::layout_migrations::normalize_stored_size(
-                intrinsic_width,
-                intrinsic_height,
-                changed.width(),
-                changed.height(),
-            );
-            if read_back != (changed.width(), changed.height()) {
-                return Err(
-                    "a panel cannot turn from landscape to portrait or back: rotate the display instead"
-                        .into(),
+            // An agent that knows `IntrinsicSize` applies a marked size as stored, so a
+            // size may contradict the detected landscape/portrait shape (a picture-by-
+            // picture half under a full-panel EDID, #730). One that predates it still
+            // transposes such a size in the document it is sent, and saves that: refuse
+            // the edit with the very rule it applies, rather than show one size and run
+            // another, until it is restarted.
+            if let Some(detected) = old_agent {
+                let (intrinsic_width, intrinsic_height) = detected
+                    .reference(&model_id)
+                    .unwrap_or((current.width(), current.height()));
+                let read_back = lbm_store::layout_migrations::normalize_stored_size(
+                    intrinsic_width,
+                    intrinsic_height,
+                    changed.width(),
+                    changed.height(),
                 );
+                if read_back != (changed.width(), changed.height()) {
+                    return Err(
+                        "the running agent predates this editor and would turn this panel from landscape to portrait or back: restart it to enter this size"
+                            .into(),
+                    );
+                }
             }
             layout.edit_model(&model_id, |s, _| *s = changed);
         }

@@ -105,7 +105,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "DELL P2415Q"
+      "PnpName": "DELL P2415Q",
+      "IntrinsicSize": true
     },
     "PHL0927": {
       "Width": 698,
@@ -116,7 +117,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "PHL 328P6VU"
+      "PnpName": "PHL 328P6VU",
+      "IntrinsicSize": true
     },
     "SAME035": {
       "Width": 697,
@@ -127,7 +129,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "Odyssey G80SD"
+      "PnpName": "Odyssey G80SD",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

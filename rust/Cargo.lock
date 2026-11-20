@@ -2428,6 +2428,7 @@ dependencies = [
  "lbm-ipc",
  "lbm-layout",
  "lbm-overlay",
+ "lbm-pattern",
  "lbm-store",
  "lbm-ui",
  "lbm-wallpaper",
@@ -2439,6 +2440,7 @@ dependencies = [
  "wayland-backend",
  "wayland-client",
  "windows 0.58.0",
+ "zbus",
 ]
 
 [[package]]
@@ -2538,10 +2540,15 @@ dependencies = [
 name = "lbm-pattern"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
+ "epaint_default_fonts",
  "libc",
  "png 0.17.16",
+ "serde",
+ "serde_json",
  "wayland-client",
  "wayland-protocols",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]
@@ -2567,6 +2574,7 @@ dependencies = [
  "lbm-icons",
  "lbm-ipc",
  "lbm-layout",
+ "lbm-pattern",
  "lbm-store",
  "lbm-wallpaper",
  "proc-macro2",

@@ -23,6 +23,7 @@ pub mod list;
 pub mod map;
 pub mod mode;
 pub mod options;
+pub mod patterns;
 pub mod placement;
 pub mod probe;
 pub mod properties;

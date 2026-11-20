@@ -6,6 +6,12 @@ license.workspace = true
 publish = false
 description = "Native-Wayland fullscreen bitmap viewer: pixel-perfect test patterns on every output"
 
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+ab_glyph = "0.2"
+epaint_default_fonts = "0.36"
+
 # The Avalonia windows go through XWayland, which KWin rescales on any screen
 # whose scale differs from the global factor. Linux-only; a stub elsewhere.
 [[bin]]
@@ -17,6 +23,7 @@ path = "src/main.rs"
 # the native-resolution buffer maps 1:1 to the panel.
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 png = "0.17"
 # Shared-memory file for the wl_shm pool.
 libc = "0.2"

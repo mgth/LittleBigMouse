@@ -124,6 +124,8 @@ struct App {
     outputs: lbm_app::displays::Displays,
     vcp: lbm_app::vcp::Controller,
     remote: lbm_app::remote::Controller,
+    test_patterns: lbm_app::patterns::Controller,
+    pattern_strip: lbm_ui::patterns::Strip,
     /// The layout the screens were read off, kept so that the window can edit it.
     ///
     /// **In memory only, and this window writes no file.** A drag changes this copy and
@@ -505,6 +507,8 @@ impl App {
             outputs: Default::default(),
             vcp: Default::default(),
             remote: Default::default(),
+            test_patterns: Default::default(),
+            pattern_strip: Default::default(),
             excluded: None,
             pattern: String::new(),
             placement: Default::default(),
@@ -554,6 +558,7 @@ impl App {
                 self.outputs = Default::default();
                 self.vcp = Default::default();
                 self.remote = Default::default();
+                self.test_patterns.stop();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = Some(requests);
                 self.next_id = 3;
@@ -584,6 +589,7 @@ impl App {
                 self.outputs = Default::default();
                 self.vcp = Default::default();
                 self.remote = Default::default();
+                self.test_patterns.stop();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.state = lbm_ui::State::default();
@@ -1673,6 +1679,12 @@ impl App {
                         ui.separator();
                     }
                     self.monitor_properties(ui);
+                    // Inside the scrolled part and after the monitor's own controls, so a
+                    // short window still reaches brightness and contrast.
+                    if self.mode == lbm_ui::mode::Mode::Vcp {
+                        ui.separator();
+                        self.test_pattern_controls(ui);
+                    }
                     if location {
                         self.system_display_properties(ui);
                     }
@@ -2152,6 +2164,130 @@ impl App {
             self.screen_overlay.clear();
             self.screen_overlay_mode = Mode::Off;
             self.screen_overlay_error = Some(error);
+        }
+    }
+
+    fn test_pattern_target(&self) -> Option<String> {
+        if self.mode != lbm_ui::mode::Mode::Vcp
+            || self.refresh.pending()
+            || self.topology_pending.is_some()
+            || self.outputs.changing()
+            || self.agent.suspended
+            || self.requests.is_none()
+        {
+            return None;
+        }
+        let layout = self.layout.as_ref().filter(|l| !l.is_virtual())?;
+        let monitor = layout.monitor(self.selected.as_deref()?)?;
+        let source = layout.source(monitor.active_source.as_deref()?)?;
+        source
+            .source
+            .interface_path
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .cloned()
+    }
+
+    fn test_pattern_screens(&self) -> Vec<lbm_ui::patterns::Target> {
+        if self.mode != lbm_ui::mode::Mode::Vcp
+            || self.refresh.pending()
+            || self.topology_pending.is_some()
+            || self.outputs.changing()
+            || self.agent.suspended
+            || self.requests.is_none()
+        {
+            return Vec::new();
+        }
+        let Some(layout) = self.layout.as_ref().filter(|l| !l.is_virtual()) else {
+            return Vec::new();
+        };
+        let mut screens = Vec::new();
+        for monitor in layout.monitors() {
+            let Some(source) = monitor
+                .active_source
+                .as_deref()
+                .and_then(|id| layout.source(id))
+            else {
+                continue;
+            };
+            let Some(connector) = source
+                .source
+                .interface_path
+                .as_ref()
+                .filter(|s| !s.is_empty())
+            else {
+                continue;
+            };
+            if !source.source.attached_to_desktop
+                || screens
+                    .iter()
+                    .any(|t: &lbm_ui::patterns::Target| &t.connector == connector)
+            {
+                continue;
+            }
+            let name = layout
+                .model(&monitor.model)
+                .and_then(|m| m.pnp_device_name.as_deref())
+                .unwrap_or(&monitor.id);
+            screens.push(lbm_ui::patterns::Target {
+                connector: connector.clone(),
+                name: format!("{name} · {connector}"),
+            });
+        }
+        screens
+    }
+
+    fn test_pattern_tick(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.test_patterns.stop();
+        }
+        let available = self.test_pattern_screens();
+        let selected = self.test_pattern_target();
+        let targets = self.pattern_strip.targets(&available, selected.as_deref());
+        if self.test_patterns.active().is_some() && self.test_patterns.targets() != targets {
+            if targets.is_empty() {
+                self.test_patterns.stop();
+            } else {
+                self.test_patterns
+                    .show(&targets, &self.pattern_strip.settings, ctx);
+            }
+        }
+        self.test_patterns.poll(ctx);
+    }
+
+    fn test_pattern_controls(&mut self, ui: &mut egui::Ui) {
+        self.test_pattern_tick(ui.ctx());
+        let available = self.test_pattern_screens();
+        let selected = self.test_pattern_target();
+        let blocked = if !lbm_app::patterns::Controller::supported() {
+            Some("Native test patterns currently require a Wayland session.")
+        } else if available.is_empty() || (!self.pattern_strip.matching && selected.is_none()) {
+            Some("Select a local screen after the display configuration has loaded.")
+        } else {
+            None
+        };
+        let action = self.pattern_strip.show(
+            ui,
+            self.test_patterns.active(),
+            self.test_patterns.ready(),
+            blocked,
+            &available,
+            selected.as_deref(),
+        );
+        match action {
+            Some(lbm_ui::patterns::Action::Hide) => self.test_patterns.stop(),
+            Some(lbm_ui::patterns::Action::Show | lbm_ui::patterns::Action::Update) => {
+                let targets = self.pattern_strip.targets(&available, selected.as_deref());
+                self.test_patterns
+                    .show(&targets, &self.pattern_strip.settings, ui.ctx());
+            }
+            None => {}
+        }
+        if let Some(error) = &self.test_patterns.error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        if let Some(note) = &self.test_patterns.note {
+            ui.colored_label(lbm_ui::theme::AMBER, note);
         }
     }
 
@@ -2912,6 +3048,7 @@ impl eframe::App for App {
         self.screen_overlay_tick(&ctx, acted.1);
         // Last, so a drag or a setting changed on this frame is in the document this
         // tick sends rather than waiting for the next one.
+        self.test_pattern_tick(&ctx);
         self.preview_tick(&ctx);
     }
 }
@@ -2929,6 +3066,10 @@ fn owned(gesture: Option<map::Gesture<'_>>) -> Option<Did> {
 }
 
 fn main() -> eframe::Result<()> {
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--test-pattern-host") {
+        std::process::exit(lbm_pattern::viewer::run(std::env::args().skip(2)));
+    }
     #[cfg(target_os = "linux")]
     if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
         std::process::exit(lbm_overlay::linux::run_host());
@@ -2950,6 +3091,46 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[test]
+    fn test_patterns_follow_the_selected_connector_without_needing_ddc() {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(
+            &mut layout,
+            &[
+                lbm_layout::linux::LinuxMonitor {
+                    connector_name: "DP-2".into(),
+                    ..lbm_layout::linux::LinuxMonitor::fallback()
+                },
+                lbm_layout::linux::LinuxMonitor {
+                    connector_name: "DP-3".into(),
+                    logical_x: 1920.,
+                    primary: false,
+                    ..lbm_layout::linux::LinuxMonitor::fallback()
+                },
+            ],
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let ids: Vec<_> = layout.monitors().iter().map(|m| m.id.clone()).collect();
+        app.layout = Some(Box::new(layout));
+        app.requests = Some(tokio::sync::mpsc::unbounded_channel().0);
+        app.refresh = Default::default();
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        app.selected = Some(ids[0].clone());
+        assert_eq!(app.test_pattern_target().as_deref(), Some("DP-2"));
+        app.selected = Some(ids[1].clone());
+        assert_eq!(app.test_pattern_target().as_deref(), Some("DP-3"));
+        app.mode = lbm_ui::mode::Mode::Location;
+        assert_eq!(app.test_pattern_target(), None);
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        app.refresh.invalidate();
+        assert_eq!(app.test_pattern_target(), None);
+        app.refresh = Default::default();
+        app.agent.suspended = true;
+        assert_eq!(app.test_pattern_target(), None);
+    }
 
     #[test]
     fn placement_import_can_be_undone_and_export_sends_current_edits() {
@@ -3175,6 +3356,37 @@ mod lifecycle_tests {
         assert_eq!(
             document,
             lbm_app::settings::document(app.layout.as_ref().unwrap())
+        );
+    }
+
+    #[test]
+    fn a_short_window_still_shows_the_monitor_controls_of_display_lab() {
+        let ctx = egui::Context::default();
+        let mut app = App::with_config(ctx.clone(), None);
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480., 320.),
+                )),
+                ..Default::default()
+            },
+            |ui| app.properties(ui),
+        );
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("Connect to the agent to control the monitor."),
+            "{text}"
         );
     }
 

@@ -7,6 +7,7 @@ pub mod conversation;
 pub mod desktop_wallpaper;
 pub mod displays;
 pub mod image_picker;
+pub mod patterns;
 pub mod probe;
 pub mod properties;
 pub mod refresh;

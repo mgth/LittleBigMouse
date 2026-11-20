@@ -168,3 +168,48 @@ fn on_the_wire_it_is_the_stores_json_in_one_object() {
     assert_eq!(after.layout, before.layout);
     assert_eq!(after.excluded, Some(Vec::new()));
 }
+
+/// #795 review: the editor and the agent both loaded an old unmarked profile under a
+/// detection that cannot decide; the editor's document is unmarked. The agent applies
+/// it over the profile it already loaded and saves: still unmarked, so a detection with
+/// real dimensions migrates it.
+#[test]
+fn an_undecided_size_stays_unmarked_through_the_agents_document_save() {
+    use lbm_store::ModelDto;
+
+    let (_dir, excluded) = temp_excluded_file("lbm-document-undecided");
+    let store = FakeStore::default();
+    store.models.borrow_mut().insert(
+        "TST1234".to_owned(),
+        ModelDto {
+            width: Some(338.0),
+            height: Some(598.0),
+            ..ModelDto::default()
+        },
+    );
+    let undetected = || {
+        let mut layout = new_layout();
+        layout.edit_model("TST1234", |size, _| {
+            size.set_width(0.0);
+            size.set_height(0.0);
+        });
+        layout
+    };
+    let mut persistence = test_persistence(store.clone(), &excluded);
+
+    let mut editor = undetected();
+    persistence.load(&mut editor).unwrap();
+    let document = LayoutDocument::of(&editor);
+    assert_eq!(document.models["TST1234"].intrinsic_size, None);
+
+    let mut agent = undetected();
+    persistence.load(&mut agent).unwrap();
+    document.apply(&mut agent);
+    persistence.save(&mut agent).unwrap();
+    assert_eq!(store.models.borrow()["TST1234"].intrinsic_size, None);
+
+    let mut later = new_layout(); // detected 600x340
+    persistence.load(&mut later).unwrap();
+    let size = &later.model("TST1234").unwrap().physical_size;
+    assert_eq!((size.width(), size.height()), (598.0, 338.0));
+}

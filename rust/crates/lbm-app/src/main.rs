@@ -51,6 +51,8 @@ enum Found {
         generation: u64,
         layout: Box<Layout>,
         reports: DisplayReports,
+        /// The model sizes before the stored profile was applied.
+        detected: lbm_app::properties::Detected,
         /// `None` when `Excluded.txt` does not exist yet.
         excluded: Option<Vec<String>>,
     },
@@ -133,6 +135,11 @@ struct App {
     saved: Option<lbm_app::saved::Reference>,
     screens: Vec<Screen>,
     reports: DisplayReports,
+    /// The model sizes as detected, which the size editor must not contradict while the
+    /// agent predates `IntrinsicSize`.
+    detected: lbm_app::properties::Detected,
+    /// The connected agent announced `IntrinsicSize`: a size may cross the detected shape.
+    agent_keeps_intrinsic_size: bool,
     property_error: Option<String>,
     resistance: lbm_ui::resistance::Editor,
     screen_overlay: lbm_overlay::Overlay,
@@ -237,7 +244,7 @@ fn icons_root() -> Option<PathBuf> {
 ///
 /// The layout comes back whole rather than reduced to its screens, because the window
 /// keeps it: a drag writes a position into it and [`screens_of`] reads the result.
-fn detect() -> Option<(Box<Layout>, DisplayReports)> {
+fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detected)> {
     let mut layout = Layout::new(LayoutOptions::default());
     let mut reports = HashMap::new();
 
@@ -298,8 +305,9 @@ fn detect() -> Option<(Box<Layout>, DisplayReports)> {
     if !built {
         return None;
     }
+    let detected = lbm_app::properties::Detected::of(&layout);
     read_stored(&mut layout);
-    Some((Box::new(layout), reports))
+    Some((Box::new(layout), reports, detected))
 }
 
 /// The stored profile onto the layout in memory: the app-wide options, the layout's own
@@ -484,6 +492,8 @@ impl App {
             saved: None,
             screens: Vec::new(),
             reports: HashMap::new(),
+            detected: Default::default(),
+            agent_keeps_intrinsic_size: false,
             property_error: None,
             resistance: lbm_ui::resistance::Editor::default(),
             screen_overlay: Default::default(),
@@ -541,7 +551,12 @@ impl App {
     fn session_event(&mut self, event: lbm_app::session::Event) {
         use lbm_app::session::Event;
         match event {
-            Event::Connected { requests, snapshot } => {
+            Event::Connected {
+                requests,
+                snapshot,
+                capabilities,
+            } => {
+                self.agent_keeps_intrinsic_size = capabilities.iter().any(|c| c == "IntrinsicSize");
                 self.pending_options.disconnected();
                 self.placement = Default::default();
                 self.topology_pending = None;
@@ -580,6 +595,7 @@ impl App {
                 self.remote = Default::default();
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
+                self.agent_keeps_intrinsic_size = false;
                 self.state = lbm_ui::State::default();
                 self.previewed = None;
                 // Forget pending acknowledgements, never the user's document.
@@ -605,7 +621,7 @@ impl App {
         let found = self.found.clone();
         let waker = ctx.clone();
         std::thread::spawn(move || {
-            let Some((layout, reports)) = detect() else {
+            let Some((layout, reports, detected)) = detect() else {
                 let _ = found.send(Found::DetectionFailed { generation });
                 waker.request_repaint();
                 return;
@@ -615,6 +631,7 @@ impl App {
                     generation,
                     layout,
                     reports,
+                    detected,
                     excluded: lbm_app::settings::read_excluded(
                         lbm_store::layout_persistence::default_excluded_list_file(),
                     ),
@@ -1776,7 +1793,12 @@ impl App {
         }
         for edit in edits {
             if let Some(layout) = self.layout.as_mut() {
-                match lbm_app::properties::apply(layout, &id, edit) {
+                match lbm_app::properties::apply(
+                    layout,
+                    (!self.agent_keeps_intrinsic_size).then_some(&self.detected),
+                    &id,
+                    edit,
+                ) {
                     Ok(()) => {
                         self.property_error = None;
                         self.screens = screens_of(layout, self.mode);
@@ -2357,6 +2379,7 @@ impl eframe::App for App {
                         generation,
                         mut layout,
                         reports,
+                        detected,
                         excluded,
                     } => {
                         if self.detecting == Some(generation) {
@@ -2374,6 +2397,7 @@ impl eframe::App for App {
                         self.saved = Some(lbm_app::saved::Reference::of(&layout));
                         self.screens = screens_of(&layout, self.mode);
                         self.reports = reports;
+                        self.detected = detected;
                         self.resistance.clear();
                         self.property_error = None;
                         self.layout = Some(layout);
@@ -2877,7 +2901,12 @@ impl eframe::App for App {
         self.settings_page = settings_page;
         for (id, edit) in inline_edits {
             if let Some(layout) = self.layout.as_mut() {
-                match lbm_app::properties::apply(layout, &id, edit) {
+                match lbm_app::properties::apply(
+                    layout,
+                    (!self.agent_keeps_intrinsic_size).then_some(&self.detected),
+                    &id,
+                    edit,
+                ) {
                     Ok(()) => {
                         self.selected = Some(id);
                         self.property_error = None;
@@ -3346,6 +3375,7 @@ mod lifecycle_tests {
         app.session_event(Event::Connected {
             requests,
             snapshot: snapshot.clone(),
+            capabilities: Vec::new(),
         });
         app.session_event(Event::Disconnected("agent restarted".into()));
 
@@ -3377,6 +3407,7 @@ mod lifecycle_tests {
         app.session_event(Event::Connected {
             requests,
             snapshot: snapshot.clone(),
+            capabilities: Vec::new(),
         });
         let sent = saves(&mut receiver);
         assert_eq!(sent.len(), 1);
@@ -3390,7 +3421,11 @@ mod lifecycle_tests {
         }));
         assert!(app.pending_options.is_empty());
         let (requests, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        app.session_event(Event::Connected { requests, snapshot });
+        app.session_event(Event::Connected {
+            requests,
+            snapshot,
+            capabilities: Vec::new(),
+        });
         assert!(saves(&mut receiver).is_empty(), "nothing is left to replay");
     }
 
@@ -3407,6 +3442,7 @@ mod lifecycle_tests {
         app.session_event(Event::Connected {
             requests,
             snapshot: snapshot.clone(),
+            capabilities: Vec::new(),
         });
         app.refresh.complete(app.refresh.begin(false).unwrap(), "A");
         app.layout
@@ -3425,7 +3461,11 @@ mod lifecycle_tests {
         assert!(!app.state.live);
         assert!(!app.state.waiting);
         let (requests, _receiver) = tokio::sync::mpsc::unbounded_channel();
-        app.session_event(Event::Connected { requests, snapshot });
+        app.session_event(Event::Connected {
+            requests,
+            snapshot,
+            capabilities: Vec::new(),
+        });
         assert!(app.dirty());
         assert!(
             !app.refresh.pending(),

@@ -216,6 +216,7 @@ impl<W: AgentWorld> Agent<W> {
                 "Agent": "lbm-agent",
                 "Version": env!("CARGO_PKG_VERSION"),
                 "Protocol": api::PROTOCOL,
+                "Capabilities": api::CAPABILITIES,
             })),
             Request::Snapshot => serde_json::to_value(self.snapshot()).map_err(|e| e.to_string()),
             Request::WallpaperSettings {

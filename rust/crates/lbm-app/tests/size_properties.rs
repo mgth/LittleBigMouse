@@ -1,4 +1,4 @@
-use lbm_app::properties::{apply, size};
+use lbm_app::properties::{apply, size, Detected};
 use lbm_layout::{
     linux::{LinuxEdid, LinuxMonitor},
     model::{Layout, LayoutOptions, PER_MODEL, PER_MONITOR},
@@ -43,12 +43,13 @@ fn layout(policy: &str) -> Layout {
 #[test]
 fn portrait_dimensions_keep_the_ratio_and_update_every_screen_of_the_model() {
     let mut layout = layout(PER_MONITOR);
+    let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
     let other = layout.monitors()[1].id.clone();
     let source = layout.monitors()[0].active_source.clone().unwrap();
     layout.set_source_orientation(&source, 1);
-    apply(&mut layout, &id, Edit::Lock(true)).unwrap();
-    apply(&mut layout, &id, Edit::Width(450.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Lock(true)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(450.0)).unwrap();
     let portrait = size(&layout, &id).unwrap().physical;
     assert_eq!((portrait.width, portrait.height), (450.0, 900.0));
     let landscape = size(&layout, &other).unwrap().physical;
@@ -66,12 +67,13 @@ fn every_rotation_and_border_policy_edits_the_side_the_user_sees() {
                 Edit::Bottom(33.0),
             ] {
                 let mut layout = layout(policy);
+                let detected = Detected::of(&layout);
                 let id = layout.monitors()[0].id.clone();
                 let other = layout.monitors()[1].id.clone();
                 let source = layout.monitors()[0].active_source.clone().unwrap();
                 layout.set_source_orientation(&source, rotation);
                 let other_before = size(&layout, &other).unwrap().physical;
-                apply(&mut layout, &id, edit).unwrap();
+                apply(&mut layout, Some(&detected), &id, edit).unwrap();
                 let got = size(&layout, &id).unwrap().physical;
                 match edit {
                     Edit::Left(v) => assert_eq!(got.left_border, v),
@@ -95,16 +97,19 @@ fn every_rotation_and_border_policy_edits_the_side_the_user_sees() {
 fn outside_measurements_adjust_only_the_expected_bezels_and_survive_the_save_document() {
     for policy in [PER_MODEL, PER_MONITOR] {
         let mut edited = layout(policy);
+        let detected = Detected::of(&edited);
         let id = edited.monitors()[0].id.clone();
         let before = size(&edited, &id).unwrap().physical;
         apply(
             &mut edited,
+            Some(&detected),
             &id,
             Edit::OutsideWidth(before.outside_width() + 20.0),
         )
         .unwrap();
         apply(
             &mut edited,
+            Some(&detected),
             &id,
             Edit::OutsideHeight(before.outside_height() + 15.0),
         )
@@ -126,6 +131,7 @@ fn outside_measurements_adjust_only_the_expected_bezels_and_survive_the_save_doc
 #[test]
 fn invalid_measurements_are_rejected_without_changing_the_document() {
     let mut layout = layout(PER_MONITOR);
+    let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
     let reference = lbm_app::saved::Reference::of(&layout);
     for edit in [
@@ -136,7 +142,7 @@ fn invalid_measurements_are_rejected_without_changing_the_document() {
         Edit::OutsideWidth(1.0),
         Edit::OutsideHeight(1.0),
     ] {
-        assert!(apply(&mut layout, &id, edit).is_err());
+        assert!(apply(&mut layout, Some(&detected), &id, edit).is_err());
         assert!(reference.holds(&layout));
     }
 }
@@ -148,8 +154,9 @@ fn reported_dimensions_remain_distinct_from_the_edited_layout() {
     assert!(report.contains(&("Size / Width".into(), "600".into())));
     assert!(report.contains(&("Edid".into(), "Not reported".into())));
     let mut layout = layout(PER_MODEL);
+    let sizes = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
-    apply(&mut layout, &id, Edit::Width(650.0)).unwrap();
+    apply(&mut layout, Some(&sizes), &id, Edit::Width(650.0)).unwrap();
     assert!(lbm_app::properties::layout_info(&layout, &id)
         .iter()
         .any(|(_, v)| v == "650.00 × 300.00"));
@@ -159,12 +166,13 @@ fn reported_dimensions_remain_distinct_from_the_edited_layout() {
 #[test]
 fn undo_without_a_stored_profile_restores_size_placement_and_border_ownership() {
     let mut layout = layout(PER_MONITOR);
+    let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
     let reference = lbm_app::saved::Reference::of(&layout);
     let original = size(&layout, &id).unwrap().physical;
     let positions: Vec<_> = layout.monitors().iter().map(|m| m.location()).collect();
-    apply(&mut layout, &id, Edit::Width(800.0)).unwrap();
-    apply(&mut layout, &id, Edit::Left(40.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(800.0)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Left(40.0)).unwrap();
     assert!(!reference.holds(&layout));
     assert!(layout.monitor(&id).unwrap().borders_customized());
     reference.restore(&mut layout);
@@ -182,11 +190,63 @@ fn undo_without_a_stored_profile_restores_size_placement_and_border_ownership() 
 }
 
 #[test]
-fn a_size_across_the_detected_shape_is_accepted_and_survives_the_save_document() {
-    // Landscape 600 x 300 as detected, aspect lock off: 250 wide makes it portrait. The
-    // store's pre-5.4.1 migration used to read that back transposed on every load, and
-    // this editor refused it; the store now marks what it saves intrinsic and applies
-    // it as stored (#728, #730), whatever the rotation it was entered under.
+fn a_size_an_old_agent_would_read_back_transposed_is_refused_before_any_change() {
+    // Landscape 600 x 300 as detected, aspect lock off: 250 wide would make it portrait,
+    // which an agent predating `IntrinsicSize` reads as a pre-5.4.1 oriented size and
+    // swaps in the document it is sent (#795 review).
+    for rotation in 0..4 {
+        let mut layout = layout(PER_MODEL);
+        let detected = Detected::of(&layout);
+        let id = layout.monitors()[0].id.clone();
+        let source = layout.monitors()[0].active_source.clone().unwrap();
+        layout.set_source_orientation(&source, rotation);
+        let reference = lbm_app::saved::Reference::of(&layout);
+        let (narrow, tall) = if rotation % 2 == 0 {
+            (Edit::Width(250.0), Edit::Height(700.0))
+        } else {
+            (Edit::Height(250.0), Edit::Width(700.0))
+        };
+        for edit in [narrow, tall] {
+            let error = apply(&mut layout, Some(&detected), &id, edit).unwrap_err();
+            assert!(error.contains("landscape to portrait"), "{error}");
+            assert!(reference.holds(&layout));
+        }
+    }
+
+    // A square decides nothing in the migration, so it is accepted and saved as shown.
+    let mut layout = layout(PER_MODEL);
+    let detected = Detected::of(&layout);
+    let id = layout.monitors()[0].id.clone();
+    apply(&mut layout, Some(&detected), &id, Edit::Width(300.0)).unwrap();
+    // But a square is not a way round: portrait is still refused from there.
+    assert!(apply(&mut layout, Some(&detected), &id, Edit::Width(200.0)).is_err());
+
+    // Every size the editor accepts survives the Save/Live document unchanged.
+    for edit in [
+        Edit::Width(250.0 * 3.0),
+        Edit::Height(299.0),
+        Edit::Width(300.0),
+    ] {
+        let mut edited = self::layout(PER_MODEL);
+        let detected = Detected::of(&edited);
+        let id = edited.monitors()[0].id.clone();
+        apply(&mut edited, Some(&detected), &id, edit).unwrap();
+        let shown = size(&edited, &id).unwrap().physical;
+        let (_, request) = lbm_app::settings::save_layout(&edited);
+        let document: lbm_store::LayoutDocument =
+            serde_json::from_value(request["Document"].clone()).unwrap();
+        let mut landed = self::layout(PER_MODEL);
+        document.apply(&mut landed);
+        assert_eq!(size(&landed, &id).unwrap().physical, shown, "{edit:?}");
+    }
+}
+
+#[test]
+fn with_an_agent_keeping_intrinsic_sizes_a_size_across_the_detected_shape_survives_the_save_document(
+) {
+    // Landscape 600 x 300 as detected, aspect lock off: 250 wide makes it portrait. An
+    // agent announcing `IntrinsicSize` applies the marked size as stored (#728, #730),
+    // whatever the rotation it was entered under: no guard, and the document keeps it.
     for rotation in 0..4 {
         for (narrow, tall) in [
             (Edit::Width(250.0), Edit::Height(700.0)),
@@ -201,8 +261,8 @@ fn a_size_across_the_detected_shape_is_accepted_and_survives_the_save_document()
                 (Edit::Height(v), 1) => Edit::Width(v),
                 (e, _) => e,
             };
-            apply(&mut edited, &id, swap(narrow)).unwrap();
-            apply(&mut edited, &id, swap(tall)).unwrap();
+            apply(&mut edited, None, &id, swap(narrow)).unwrap();
+            apply(&mut edited, None, &id, swap(tall)).unwrap();
             let shown = size(&edited, &id).unwrap().physical;
 
             let (_, request) = lbm_app::settings::save_layout(&edited);
@@ -224,14 +284,15 @@ fn a_size_across_the_detected_shape_is_accepted_and_survives_the_save_document()
 #[test]
 fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
     let mut layout = layout(PER_MONITOR);
+    let detected = Detected::of(&layout);
     let id = layout.monitors()[0].id.clone();
     let initial = lbm_app::properties::location(&layout, &id).unwrap();
-    apply(&mut layout, &id, Edit::X(-123.45)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::X(-123.45)).unwrap();
     let p = lbm_app::properties::location(&layout, &id).unwrap();
     assert_eq!((p.x, p.y), (-123.45, initial.y));
-    apply(&mut layout, &id, Edit::Y(67.8)).unwrap();
-    apply(&mut layout, &id, Edit::ScaleX(125.)).unwrap();
-    apply(&mut layout, &id, Edit::ScaleY(90.)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::Y(67.8)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::ScaleX(125.)).unwrap();
+    apply(&mut layout, Some(&detected), &id, Edit::ScaleY(90.)).unwrap();
     let p = lbm_app::properties::location(&layout, &id).unwrap();
     assert_eq!((p.x, p.y, p.scale_x, p.scale_y), (-123.45, 67.8, 125., 90.));
     let (_, request) = lbm_app::settings::save_layout(&layout);
@@ -247,7 +308,7 @@ fn position_and_scale_edits_share_the_document_and_preserve_other_axes() {
         Edit::ScaleX(0.),
         Edit::ScaleY(-5.),
     ] {
-        assert!(apply(&mut layout, &id, edit).is_err());
+        assert!(apply(&mut layout, Some(&detected), &id, edit).is_err());
         assert!(reference.holds(&layout));
     }
 }

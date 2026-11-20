@@ -21,6 +21,9 @@ pub enum Event {
     Connected {
         requests: Requests,
         snapshot: Value,
+        /// What the agent announced in `Hello` beyond the protocol
+        /// (`lbm_agent::api::CAPABILITIES`); empty for an agent that announces nothing.
+        capabilities: Vec<String>,
     },
     Message(Message),
     Disconnected(String),
@@ -171,10 +174,14 @@ async fn maintain(mut config: Config, emit: &impl Fn(Event) -> bool) {
             config.launch = None;
             let greeting = tokio::time::timeout(config.deadline, greet(&mut stream)).await;
             match greeting {
-                Ok(Ok(snapshot)) => {
+                Ok(Ok((snapshot, capabilities))) => {
                     delay = config.retry;
                     let (requests, receiver) = mpsc::unbounded_channel();
-                    if !emit(Event::Connected { requests, snapshot }) {
+                    if !emit(Event::Connected {
+                        requests,
+                        snapshot,
+                        capabilities,
+                    }) {
                         return;
                     }
                     let error = converse(stream, receiver, config.deadline, emit).await;
@@ -228,7 +235,8 @@ async fn answer(stream: &mut Stream, id: u64, method: &str, extra: Value) -> io:
     }
 }
 
-async fn greet(stream: &mut Stream) -> io::Result<Value> {
+/// The Subscribe answer and the capabilities the agent announced.
+async fn greet(stream: &mut Stream) -> io::Result<(Value, Vec<String>)> {
     let hello = answer(stream, 1, "Hello", json!({"Client": "lbm-app"})).await?;
     if hello["Agent"] != "lbm-agent" || hello["Protocol"].as_u64() != Some(client::PROTOCOL) {
         return Err(io::Error::new(
@@ -240,7 +248,18 @@ async fn greet(stream: &mut Stream) -> io::Result<Value> {
             ),
         ));
     }
-    answer(stream, 2, "Subscribe", json!({})).await
+    let capabilities = hello["Capabilities"]
+        .as_array()
+        .map(|all| {
+            all.iter()
+                .filter_map(|c| c.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((
+        answer(stream, 2, "Subscribe", json!({})).await?,
+        capabilities,
+    ))
 }
 
 fn request(id: u64, method: &str, extra: Value) -> String {

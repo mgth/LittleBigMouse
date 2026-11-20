@@ -55,6 +55,16 @@ use tokio::task::JoinHandle;
 /// Bumped on any change a client must know about.
 pub const PROTOCOL: u32 = 3;
 
+/// What this agent does that an agent of the same [`PROTOCOL`] may not, announced in
+/// `Hello` as `Capabilities`. A frontend updated before the agent it talks to (the
+/// resident survives an update until restarted) checks for one before relying on it,
+/// rather than the protocol being bumped and every older agent refused outright.
+///
+/// - `IntrinsicSize`: a model size marked `IntrinsicSize` in a document is applied as
+///   stored, whatever the detected shape (#728, #730). An agent without it swaps a
+///   size whose landscape/portrait shape contradicts the detected panel.
+pub const CAPABILITIES: &[&str] = &["IntrinsicSize"];
+
 //==================//
 // The contract     //
 //==================//

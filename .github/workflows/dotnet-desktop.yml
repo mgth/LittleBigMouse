@@ -155,6 +155,19 @@ jobs:
         }
         "hook: $($info.ProductName) $($info.FileVersion)"
 
+    # lbm-app.exe carries the Little Big Mouse icon in the same resource script as its
+    # VERSIONINFO (crates/lbm-app/build.rs). That build script only warns when the
+    # resource fails, which would bring back the generic exe icon unnoticed; the
+    # product name proves the script ran and was linked.
+    - name: Verify app icon and version resource
+      run: |
+        $exe = 'rust\target\release\lbm-app.exe'
+        $info = (Get-Item $exe).VersionInfo
+        if ($info.ProductName -ne 'Little Big Mouse') {
+          throw "app ProductName is '$($info.ProductName)', expected 'Little Big Mouse': the icon resource is missing too"
+        }
+        "app: $($info.ProductName) $($info.FileVersion)"
+
     # A hook that imports vcruntime140.dll does not start at all on a Windows
     # that never installed a VC++ redistributable (#539), and every machine that
     # builds it has one — so the break is invisible right up to the user. The

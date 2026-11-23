@@ -28,7 +28,7 @@ const QUIET: Duration = Duration::from_millis(200);
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
-fn endpoint() -> String {
+pub(crate) fn endpoint() -> String {
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
     #[cfg(windows)]
     {
@@ -51,11 +51,11 @@ pub(crate) struct Listening {
     stream: Box<dyn Stream>,
 }
 
-trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
+pub(crate) trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Stream for T {}
 
 #[cfg(target_os = "linux")]
-async fn connect(endpoint: &str) -> Box<dyn Stream> {
+pub(crate) async fn connect(endpoint: &str) -> Box<dyn Stream> {
     loop {
         match tokio::net::UnixStream::connect(endpoint).await {
             Ok(stream) => return Box::new(stream),
@@ -65,7 +65,7 @@ async fn connect(endpoint: &str) -> Box<dyn Stream> {
 }
 
 #[cfg(windows)]
-async fn connect(endpoint: &str) -> Box<dyn Stream> {
+pub(crate) async fn connect(endpoint: &str) -> Box<dyn Stream> {
     use tokio::net::windows::named_pipe::ClientOptions;
 
     loop {

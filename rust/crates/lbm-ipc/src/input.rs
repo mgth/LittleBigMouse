@@ -267,6 +267,9 @@ mod tests {
             input_endpoint_beside(r"\\.\pipe\LittleBigMouse-v1-session-2"),
             r"\\.\pipe\LittleBigMouse-Input-v1-session-2"
         );
-        assert_eq!(input_endpoint_beside("/tmp/x/hook.sock"), "/tmp/x/hook.sock-input");
+        assert_eq!(
+            input_endpoint_beside("/tmp/x/hook.sock"),
+            "/tmp/x/hook.sock-input"
+        );
     }
 }

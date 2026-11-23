@@ -85,9 +85,9 @@
 mod cursor;
 mod devices;
 mod frame;
-mod probe;
+pub(crate) mod probe;
 mod router;
-mod uinput;
+pub(crate) mod uinput;
 
 // The backend's surface, unchanged by the split: the two entry points
 // `hook::linux` reconciles with, the cursor probe `examples/cursor_probe` calls,

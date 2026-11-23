@@ -16,7 +16,7 @@ use evdev::{Device, KeyCode, RelativeAxisCode};
 
 use crate::hook::linux::accel::PointerAccel;
 
-use super::uinput::VIRTUAL_NAME;
+use super::uinput::is_ours;
 use super::BTN_MOUSE_RANGE;
 
 /// An opened /dev/input node and the path it came from. What an enumeration
@@ -74,15 +74,12 @@ fn is_mouse(d: &Device) -> bool {
 /// devices), or neither, in which case the node is closed right here.
 fn classify(scan: &mut ScanResult, path: PathBuf, d: Device, skip_virtual: bool) {
     if is_mouse(&d) {
-        if d.name().map(|n| !n.contains(VIRTUAL_NAME)).unwrap_or(true)
+        if d.name().map(|n| !is_ours(n)).unwrap_or(true)
             && !(skip_virtual && is_virtual_node(&path))
         {
             scan.mice.push((path, d));
         }
-    } else if d
-        .name()
-        .map(|n| !n.contains("LittleBigMouse virtual"))
-        .unwrap_or(true)
+    } else if d.name().map(|n| !is_ours(n)).unwrap_or(true)
         && d.supported_keys()
             .map(|k| k.contains(KeyCode::KEY_LEFTCTRL))
             .unwrap_or(false)

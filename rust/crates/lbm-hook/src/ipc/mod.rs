@@ -6,4 +6,6 @@
 // Framing and protocol live in the lbm-ipc crate; the server stays here, next to
 // the daemon state it serves.
 pub use lbm_ipc::{framing, protocol};
+pub mod input;
 pub mod server;
+pub(crate) mod transport;

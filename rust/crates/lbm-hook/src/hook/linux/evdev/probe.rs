@@ -17,7 +17,7 @@ use crate::shared::Shared;
 /// and the positions emitted agree.
 ///
 /// Arm-time variant: routing has not started, a blocking lock is fine here.
-pub(super) fn layout_bounds_blocking(shared: &Shared) -> Rect<i32> {
+pub(crate) fn layout_bounds_blocking(shared: &Shared) -> Rect<i32> {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
     bounds_of(&engine)
 }

@@ -1,9 +1,9 @@
 //! Single-client, per-user local IPC server.
 //!
 //! Windows uses a current-session named pipe whose DACL grants only the current
-//! user and SYSTEM. Linux uses a 0600 Unix-domain socket. Both transports share
-//! the same length-prefixed UTF-8 protocol, ordered command queue, and
-//! non-blocking outbound queue.
+//! user and SYSTEM. Linux uses a 0600 Unix-domain socket (both in [`transport`]).
+//! Both transports share the same length-prefixed UTF-8 protocol, ordered command
+//! queue, and non-blocking outbound queue.
 //!
 //! There is exactly one client, and it is the agent (v6): the frontends talk to the
 //! agent, the agent talks to the hook, and nothing else has any business driving the
@@ -19,6 +19,7 @@ use tokio::sync::{mpsc, oneshot, Notify};
 
 use crate::daemon;
 use crate::ipc::framing::{read_frame, write_frame};
+use crate::ipc::transport;
 use crate::shared::Shared;
 
 pub type ClientId = u64;
@@ -186,7 +187,7 @@ pub fn start_with_endpoint(
                 // Tokio's Windows named-pipe constructor requires an active
                 // reactor. Production starts IPC from synchronous main(), so
                 // bind inside the runtime rather than before spawning it.
-                let acceptor = match transport::Acceptor::bind(&endpoint) {
+                let mut acceptor = match transport::Acceptor::bind(&endpoint) {
                     Ok(acceptor) => acceptor,
                     Err(error) => {
                         let _ = ready_tx.send(Err(error));
@@ -195,7 +196,12 @@ pub fn start_with_endpoint(
                 };
                 let _ = ready_tx.send(Ok(()));
                 tokio::spawn(command_worker(command_rx, worker_handle, shared));
-                acceptor.run(accept_handle, shared).await;
+                // Every connection is accepted: the newest client is the one that
+                // matters, and refusing it would leave the hook driven by whoever got
+                // there first — including a connection nobody is reading any more.
+                while let Some(stream) = acceptor.accept().await {
+                    tokio::spawn(run_connection(stream, accept_handle.clone(), shared));
+                }
             });
         })?;
 
@@ -294,221 +300,5 @@ async fn run_connection<S: LocalStream>(stream: S, server: ServerHandle, shared:
         // virtual pointer while it is still alive, then hands every mouse back.
         crate::hook::request_unhook(shared);
         crate::hook::request_quit(shared);
-    }
-}
-
-#[cfg(windows)]
-mod transport {
-    use super::*;
-    use std::os::windows::io::AsRawHandle;
-
-    use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
-    use windows::core::{HSTRING, PWSTR};
-    use windows::Win32::Foundation::{CloseHandle, LocalFree, BOOL, HANDLE, HLOCAL};
-    use windows::Win32::Security::Authorization::{
-        ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
-        SDDL_REVISION_1,
-    };
-    use windows::Win32::Security::{
-        GetTokenInformation, TokenUser, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY,
-        TOKEN_USER,
-    };
-    use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
-    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-    use windows::Win32::System::Threading::{
-        GetCurrentProcess, GetCurrentProcessId, OpenProcessToken,
-    };
-
-    pub struct Acceptor {
-        endpoint: String,
-        first: NamedPipeServer,
-    }
-
-    impl Acceptor {
-        pub fn bind(endpoint: &str) -> io::Result<Self> {
-            Ok(Self {
-                endpoint: endpoint.to_string(),
-                first: create_pipe(endpoint, true)?,
-            })
-        }
-
-        pub async fn run(self, server: ServerHandle, shared: &'static Shared) {
-            let mut next = Some(self.first);
-            loop {
-                let pipe = match next.take() {
-                    Some(first) => first,
-                    None => match create_pipe(&self.endpoint, false) {
-                        Ok(pipe) => pipe,
-                        Err(error) => {
-                            // A transient failure (handle pressure, AV
-                            // interference) must not kill IPC for the rest of
-                            // the daemon's life: log, back off, retry.
-                            eprintln!(
-                                "[LittleBigMouse.Hook] local IPC accept error: {error}; retrying"
-                            );
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            continue;
-                        }
-                    },
-                };
-                if pipe.connect().await.is_err() {
-                    continue;
-                }
-                if !client_is_current_session(&pipe) {
-                    continue;
-                }
-                // Every connection is accepted: the newest client is the one that
-                // matters, and refusing it would leave the hook driven by whoever got
-                // there first — including a connection nobody is reading any more.
-                tokio::spawn(run_connection(pipe, server.clone(), shared));
-            }
-        }
-    }
-
-    pub fn default_endpoint() -> io::Result<String> {
-        Ok(lbm_ipc::endpoint::pipe_name(current_session_id()?))
-    }
-
-    fn current_session_id() -> io::Result<u32> {
-        let mut session = 0;
-        unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut session) }
-            .map_err(io::Error::other)?;
-        Ok(session)
-    }
-
-    fn client_is_current_session(pipe: &NamedPipeServer) -> bool {
-        let handle = HANDLE(pipe.as_raw_handle());
-        let mut client_pid = 0;
-        let mut client_session = 0;
-        unsafe { GetNamedPipeClientProcessId(handle, &mut client_pid) }.is_ok()
-            && unsafe { ProcessIdToSessionId(client_pid, &mut client_session) }.is_ok()
-            && current_session_id().is_ok_and(|session| session == client_session)
-    }
-
-    fn create_pipe(endpoint: &str, first: bool) -> io::Result<NamedPipeServer> {
-        let sid = current_user_sid()?;
-        let sddl = HSTRING::from(format!("D:P(A;;GA;;;SY)(A;;GA;;;{sid})"));
-        let mut descriptor = PSECURITY_DESCRIPTOR::default();
-        unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                &sddl,
-                SDDL_REVISION_1,
-                &mut descriptor,
-                None,
-            )
-        }
-        .map_err(io::Error::other)?;
-
-        let mut attributes = SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: descriptor.0,
-            bInheritHandle: BOOL(0),
-        };
-        let result = unsafe {
-            ServerOptions::new()
-                .first_pipe_instance(first)
-                .reject_remote_clients(true)
-                .create_with_security_attributes_raw(
-                    endpoint,
-                    (&mut attributes as *mut SECURITY_ATTRIBUTES).cast(),
-                )
-        };
-        unsafe {
-            let _ = LocalFree(HLOCAL(descriptor.0));
-        }
-        result
-    }
-
-    fn current_user_sid() -> io::Result<String> {
-        let mut token = HANDLE::default();
-        unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }
-            .map_err(io::Error::other)?;
-
-        let result = (|| {
-            let mut length = 0;
-            let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut length) };
-            if length == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let mut buffer = vec![0u8; length as usize];
-            unsafe {
-                GetTokenInformation(
-                    token,
-                    TokenUser,
-                    Some(buffer.as_mut_ptr().cast()),
-                    length,
-                    &mut length,
-                )
-            }
-            .map_err(io::Error::other)?;
-            let user = unsafe { &*(buffer.as_ptr() as *const TOKEN_USER) };
-            let mut text = PWSTR::null();
-            unsafe { ConvertSidToStringSidW(user.User.Sid, &mut text) }
-                .map_err(io::Error::other)?;
-            let sid = unsafe { text.to_string() }.map_err(io::Error::other);
-            unsafe {
-                let _ = LocalFree(HLOCAL(text.0.cast()));
-            }
-            sid
-        })();
-
-        unsafe {
-            let _ = CloseHandle(token);
-        }
-        result
-    }
-}
-
-#[cfg(target_os = "linux")]
-mod transport {
-    use super::*;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
-
-    use tokio::net::UnixListener;
-
-    pub struct Acceptor {
-        listener: UnixListener,
-        path: PathBuf,
-    }
-
-    impl Acceptor {
-        pub fn bind(endpoint: &str) -> io::Result<Self> {
-            let path = PathBuf::from(endpoint);
-            if let Some(parent) = path.parent() {
-                // Only restrict a directory we create ourselves: the normal
-                // parents (XDG_RUNTIME_DIR, the LBM data dir) already exist
-                // with correct ownership, and chmod on a shared parent like
-                // /tmp is EPERM. The socket itself is chmod 0600 below.
-                if !parent.exists() {
-                    std::fs::create_dir_all(parent)?;
-                    std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
-                }
-            }
-            match std::fs::remove_file(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error),
-            }
-            let listener = UnixListener::bind(&path)?;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-            Ok(Self { listener, path })
-        }
-
-        pub async fn run(self, server: ServerHandle, shared: &'static Shared) {
-            while let Ok((stream, _)) = self.listener.accept().await {
-                // Every connection is accepted: see the Windows side.
-                tokio::spawn(run_connection(stream, server.clone(), shared));
-            }
-            let _ = std::fs::remove_file(&self.path);
-        }
-    }
-
-    pub fn default_endpoint() -> io::Result<String> {
-        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-        let data = crate::platform::paths::lbm_data_file("");
-        lbm_ipc::endpoint::socket_path(runtime.as_deref(), data.as_deref())
-            .map(|path| path.to_string_lossy().into_owned())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no per-user runtime directory"))
     }
 }

@@ -54,6 +54,12 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
         return false;
     }
     let ms = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+    // A pointer a multi-PC master sent here (crate::remote): its engine already
+    // routed it over the whole layout, this machine's monitors included. Routing it
+    // again, or counting it as this machine's own mouse, would fight the master.
+    if ms.dwExtraInfo == crate::remote::windows::INJECTED {
+        return false;
+    }
     if let Some(handled) = super::touch_input::process(wparam.0 as u32, ms) {
         return handled;
     }

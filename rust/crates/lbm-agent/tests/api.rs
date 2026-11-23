@@ -2106,6 +2106,15 @@ struct Master {
 
 impl Master {
     async fn start(tmp: &tempfile::TempDir, discovery: lbm_agent::discovery::Discovery) -> Master {
+        Master::start_with(tmp, discovery, None).await
+    }
+
+    /// As [`Master::start`], the hook's input endpoint at `input_endpoint`.
+    async fn start_with(
+        tmp: &tempfile::TempDir,
+        discovery: lbm_agent::discovery::Discovery,
+        input_endpoint: Option<String>,
+    ) -> Master {
         use lbm_net::wire::{Hello, Role};
 
         let dir = tmp.path();
@@ -2137,7 +2146,7 @@ impl Master {
             config,
             lbm_agent::peers::Setup {
                 bind: "127.0.0.1".parse().unwrap(),
-                input_endpoint: None,
+                input_endpoint,
                 options: lbm_net::link::Options::default(),
             },
         );
@@ -2269,6 +2278,131 @@ async fn a_remotes_screens_reach_the_hook_and_leave_with_it_and_the_desktop_stay
     let (zones, desktop) = load_after(&master.fake, loads_before).await;
     assert!(!zones.contains("Host="), "{zones}");
     assert_eq!(desktop, Some(here));
+}
+
+/// The layout is rebuilt for a remote gone only after the display-change debounce. A
+/// Start meanwhile — the user's, the watchdog's — must not hand the hook the layout built
+/// while that remote was selected: its zones would lead to a machine the stream no longer
+/// goes to. The rebuild on its way hands the hook the right one.
+#[tokio::test]
+async fn a_start_before_the_rebuild_for_a_departed_remote_never_hands_the_hook_its_zones() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
+    let laptop_id = master.laptop_id();
+    let alone_id = master.alone["LayoutId"].as_str().unwrap().to_owned();
+    let link = master.link_the_laptop().await;
+    master
+        .laptop_shows(&link, 1, vec![laptop_screen("eDP-1", None, 0)])
+        .await;
+    assert!(last_load(&master.fake).0.contains("Host="));
+
+    let loads_before = loads(&master.fake);
+    drop(master.listener);
+    link.sender().close("going home").await;
+    drop(link);
+    // The agent has heard the laptop go; its rebuild waits for the debounce.
+    loop {
+        let frame = master.frontend.receive().await;
+        if frame["Event"] == "Peers" && frame["Peers"]["SelectedRemote"].is_null() {
+            break;
+        }
+    }
+    master.frontend.ask(json!({ "Method": "Start" })).await;
+    master
+        .frontend
+        .state(|s| s["LayoutId"] == alone_id.as_str())
+        .await;
+    load_after(&master.fake, loads_before).await;
+    let handed: Vec<String> = master.fake.received()[..]
+        .iter()
+        .filter_map(|c| match c {
+            Command::Load { zones, .. } => Some(zones.clone()),
+            _ => None,
+        })
+        .skip(loads_before)
+        .collect();
+    assert!(
+        handed.iter().all(|zones| !zones.contains(&laptop_id)),
+        "{handed:?}"
+    );
+}
+
+/// The hook makes the remote's zones enterable while the agent holds a connection to its
+/// input endpoint, and a batch carries no destination: the agent connects only while
+/// every zone the hook holds, and every one on its way, leads to the selected remote and
+/// nowhere else — as the hook confirmed it, not as the agent hopes.
+#[cfg(unix)]
+#[tokio::test]
+async fn the_master_relays_its_hooks_input_only_while_the_hook_has_confirmed_zones_for_the_selected_remote(
+) {
+    use lbm_ipc::input::read_batch;
+    let tmp = tempfile::tempdir().unwrap();
+    let input_path = tmp.path().join("hook-input.sock");
+    let input = tokio::net::UnixListener::bind(&input_path).unwrap();
+    let accept = || async {
+        tokio::time::timeout(Duration::from_secs(15), input.accept())
+            .await
+            .expect("the agent connects to the hook's input endpoint")
+            .unwrap()
+            .0
+    };
+    let nobody_connects = || async {
+        tokio::time::timeout(Duration::from_millis(500), input.accept())
+            .await
+            .is_err()
+    };
+    let mut master = Master::start_with(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        Some(input_path.to_string_lossy().into_owned()),
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let link = master.link_the_laptop().await;
+    master
+        .laptop_shows(&link, 1, vec![laptop_screen("eDP-1", None, 0)])
+        .await;
+    let (zones, _) = last_load(&master.fake);
+    let laptops = format!("Host=\"{laptop_id}\"");
+    assert!(zones.contains(&laptops), "{zones}");
+    let mut relaying = accept().await;
+
+    // Another client hands the hook a layout with a zone of a machine that is not the
+    // selected remote: the agent cannot vouch for what the hook holds now, lets go of
+    // its input (the hook brings the pointer home) and does not come back.
+    let stale = zones.replace(&laptops, r#"Host="another-machine""#);
+    let mut other = tokio::net::UnixStream::connect(endpoints(&tmp).0)
+        .await
+        .unwrap();
+    write_frame(
+        &mut other,
+        &lbm_ipc::protocol::frame(&[
+            Command::Load {
+                zones: stale,
+                desktop: None,
+            },
+            Command::Run,
+        ]),
+    )
+    .await
+    .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(15), read_batch(&mut relaying))
+            .await
+            .expect("the agent lets go of the hook's input")
+            .is_err()
+    );
+    assert!(nobody_connects().await);
+
+    // The user's Start hands the hook the laptop's layout again. It is on its way, not
+    // confirmed: still no connection, until the hook says it loaded it.
+    master.fake.hold();
+    let handed = loads(&master.fake);
+    master.frontend.ask(json!({ "Method": "Start" })).await;
+    load_after(&master.fake, handed).await;
+    assert!(nobody_connects().await);
+    master.fake.release();
+    let _relaying = accept().await;
 }
 
 #[tokio::test]

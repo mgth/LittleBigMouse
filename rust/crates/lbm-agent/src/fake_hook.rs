@@ -50,11 +50,18 @@ struct State {
     excluded: Option<Vec<String>>,
     received: Vec<Command>,
     listeners: Vec<mpsc::UnboundedSender<String>>,
+    /// The events held back while the fake plays a hook slow to answer
+    /// ([`FakeHook::hold`]); `None` while it answers at once.
+    holding: Option<Vec<String>>,
 }
 
 impl State {
     fn broadcast(&mut self, event: &Event) {
         let frame = protocol::event(event);
+        if let Some(held) = &mut self.holding {
+            held.push(frame);
+            return;
+        }
         self.listeners.retain(|l| l.send(frame.clone()).is_ok());
     }
 
@@ -124,6 +131,24 @@ impl FakeHook {
     /// Completes once a client sent `Quit`.
     pub async fn quit_requested(&self) {
         self.quit.notified().await;
+    }
+
+    /// Holds back every event the subscribers would be sent from now on, in order, until
+    /// [`FakeHook::release`]: a hook busy elsewhere, whose `Loaded` comes late. What it is
+    /// sent is still applied at once, as the real hook applies it before it answers.
+    pub fn hold(&self) {
+        let mut s = self.state.lock().unwrap();
+        if s.holding.is_none() {
+            s.holding = Some(Vec::new());
+        }
+    }
+
+    /// Sends what [`FakeHook::hold`] held back, and answers at once again.
+    pub fn release(&self) {
+        let mut s = self.state.lock().unwrap();
+        for frame in s.holding.take().unwrap_or_default() {
+            s.listeners.retain(|l| l.send(frame.clone()).is_ok());
+        }
     }
 
     /// Sends an event frame (see [`lbm_ipc::protocol`]) to every subscriber, as the real

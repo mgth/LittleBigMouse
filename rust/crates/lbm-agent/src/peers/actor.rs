@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
@@ -28,6 +29,11 @@ const REDIAL_MAX: Duration = Duration::from_secs(30);
 
 /// How long the links are given to say `Bye` when the mode is turned off.
 const SHUTDOWN_PATIENCE: Duration = Duration::from_secs(1);
+
+/// The last number given to a choice of the selected remote ([`PeersState::selection`]).
+/// One counter for the process, not per manager: a manager turned off and on again must
+/// not take a word the agent said about the previous one's choice for its own.
+static SELECTIONS: AtomicU64 = AtomicU64::new(0);
 
 pub(super) type Reply = oneshot::Sender<Result<Value, String>>;
 
@@ -59,6 +65,8 @@ pub(super) enum Command {
         machine_id: String,
         reply: Reply,
     },
+    /// What the hook's zones are fit for (`Service::hook_ready`).
+    HookReady(Option<u64>),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -164,6 +172,13 @@ struct Actor {
     /// machine is its master), with the id of its link: one at a time (see
     /// [`Actor::select`]).
     selected: Option<(String, u64)>,
+    /// The number of the current choice of `selected` ([`PeersState::selection`]).
+    selection: u64,
+    /// The choice the hook's zones were last said to be fit for ([`Command::HookReady`]).
+    hook_ready: Option<u64>,
+    /// The remote the hook's stream is relayed to now: the selected one, once the hook's
+    /// zones lead nowhere else (see [`Actor::retarget`]).
+    relaying: Option<(String, u64)>,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
@@ -228,6 +243,9 @@ pub(super) async fn run(
         wallpaper_stamp: 0,
         hook: HookInput::spawn(start.input_endpoint),
         selected: None,
+        selection: SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1,
+        hook_ready: None,
+        relaying: None,
         internal,
         notices: start.notices,
         published: None,
@@ -351,6 +369,7 @@ impl Actor {
                 .selected
                 .as_ref()
                 .map(|(machine_id, _)| machine_id.clone()),
+            selection: self.selection,
             peers,
         }
     }
@@ -384,6 +403,10 @@ impl Actor {
             Command::LocalWallpapers(wallpapers) => self.local_wallpapers(wallpapers),
             Command::Wallpapers { machine_id, reply } => {
                 let _ = reply.send(self.remote_wallpapers(&machine_id));
+            }
+            Command::HookReady(selection) => {
+                self.hook_ready = selection;
+                self.retarget();
             }
             Command::SelectInput {
                 machine_id,
@@ -823,7 +846,7 @@ impl Actor {
             // the pointer comes home and the next crossing starts a session afresh.
             Control::InputReset
                 if live.info.hello.role == Role::Remote
-                    && self.selected.as_ref() == Some(&(machine_id.to_owned(), id)) =>
+                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id)) =>
             {
                 eprintln!(
                     "[lbm-agent] multi-PC: {} ended the input session: the pointer comes home",
@@ -878,9 +901,10 @@ impl Actor {
     /// remote with the lowest machine id is taken, the order the layout merges in, so
     /// that the same machines linked give the same choice whatever the timing.
     ///
-    /// A change of remote — or of link to the same one — is a new target for the hook's
-    /// stream: the connection to the hook ends (it comes home) and the previous link is
-    /// told `Leave` before anything goes to the new one (`hook_input`).
+    /// A change of remote — or of link to the same one, or to none — is a new choice,
+    /// numbered anew: the connection to the hook ends at once (it comes home), the previous
+    /// link is told `Leave`, and nothing is relayed to the new one before the hook has
+    /// zones fit for it ([`Actor::retarget`]).
     fn select(&mut self) {
         let is_remote = |live: &Live| live.info.hello.role == Role::Remote;
         let kept = self.selected.as_ref().and_then(|(machine_id, _)| {
@@ -907,7 +931,32 @@ impl Actor {
             None => eprintln!("[lbm-agent] multi-PC: no remote to send the input stream to"),
         }
         self.selected = chosen;
-        self.hook.set_target(next.map(|(_, sender)| sender));
+        self.selection = SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1;
+        self.retarget();
+    }
+
+    /// Relays the hook's stream to the selected remote only while the agent says the
+    /// hook's zones are fit for this very choice of it ([`Command::HookReady`]).
+    ///
+    /// The hook makes the other machines' zones enterable while it has a client, and a
+    /// batch carries no destination. The zones it holds when the choice changes are the
+    /// previous remote's until the rebuild that follows reaches it: connected meanwhile,
+    /// a crossing into the old remote's zone would send its `Enter`, clicks and keys to
+    /// the new one. Without a connection that border is a wall. The word must be about
+    /// this choice, not merely this machine: a choice gone and come back may have left a
+    /// load for the other one on its way to the hook.
+    fn retarget(&mut self) {
+        let ready = self.hook_ready == Some(self.selection);
+        let next = self.selected.clone().filter(|_| ready);
+        if next == self.relaying {
+            return;
+        }
+        let sender = next
+            .as_ref()
+            .and_then(|(machine_id, _)| self.links.get(machine_id))
+            .map(|live| live.sender.clone());
+        self.relaying = next;
+        self.hook.set_target(sender);
     }
 
     fn forget(&mut self, machine_id: &str) -> Result<Value, String> {
@@ -1038,6 +1087,7 @@ impl Actor {
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
         self.selected = None;
+        self.relaying = None;
         self.hook.set_target(None);
         self.pending.clear();
         // Half-made connections are dropped, which closes them; timers simply stop.

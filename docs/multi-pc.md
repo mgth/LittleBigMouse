@@ -84,7 +84,8 @@ On the master (lot 6, evdev backend only; the details are in
 `lbm-hook/src/hook/linux/evdev/pipeline.rs`):
 
 - The other machines' zones are **in play only while the input endpoint has a
-  client**. An agent connects to it while it has a remote to relay to, and closes
+  client**. An agent connects to it while it has a remote to relay to and the hook has
+  confirmed zones leading to that remote alone (see "Master side" below), and closes
   that connection when the remote link goes: the hook then brings the pointer home
   and the borders to the remote become walls again. Every other backend never puts
   them in play (`ZonesLayout::set_remote_enterable`).
@@ -214,6 +215,21 @@ On a remote (`lbm-hook/src/remote`):
   does not take the screens from under the pointer); when there is none, the linked
   remote with the lowest machine id is taken, the merge order, so the same machines give
   the same choice whatever the timing.
+- **Relaying waits for the hook's zones**: the hook makes the other machines' zones
+  enterable while the agent is connected to its input endpoint, and a batch carries no
+  destination, so a zone of a remote no longer selected would send its `Enter`, clicks
+  and keys to the one that is. Every change of the selected remote (to another, another
+  link of the same one, or none) is a new **choice**, numbered anew; the connection to
+  the hook ends at once, and a new one is made only once the agent's loop says the hook's
+  zones are fit for that very choice: every zone the hook holds, and every one sent to it
+  and not yet answered, leads to no machine but that remote. What the hook holds is known
+  from its answers in order — each `Load` the agent sends is answered by `Loaded` or
+  `LoadFailed` — and from its greeting: none, or the fingerprint of the zones the agent
+  would send now. Anything else (a layout from a previous life of the agent, a `Load`
+  another client sent, no hook) is unknown and fit for nothing until the agent's own
+  `Load` is confirmed. The agent never sends zones leading to another machine than the
+  selected remote: a `Load` of the layout built for the previous choice, before the
+  debounced rebuild for the new one, is dropped, and the rebuild sends the right one.
 - **The end of a hop, on the master**: one connection to the hook's input endpoint
   relays to one remote link for its whole life. It ends when the selected remote
   changes or goes, when the hook goes, or when a batch finds the link's queue full (a

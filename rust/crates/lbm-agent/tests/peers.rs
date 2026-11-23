@@ -64,6 +64,9 @@ fn display(id: &str, x: i32) -> PeerDisplay {
 struct Node {
     service: Service,
     notices: UnboundedReceiver<Notice>,
+    /// The last state announced: what the agent's loop would know. Kept whole, unlike the
+    /// answer to `Peers`, which carries no `selection`.
+    last: Option<PeersState>,
 }
 
 impl Node {
@@ -74,7 +77,11 @@ impl Node {
     fn with_setup(directory: &Path, setup: Setup) -> Node {
         let mut service = Service::new(directory.to_owned(), setup);
         let notices = service.take_notices().unwrap();
-        Node { service, notices }
+        Node {
+            service,
+            notices,
+            last: None,
+        }
     }
 
     async fn ask(&mut self, request: PeerRequest) -> Result<Value, String> {
@@ -102,17 +109,23 @@ impl Node {
         serde_json::from_value(state).unwrap()
     }
 
-    /// The first state, now or announced later, that satisfies `want`.
+    /// The first state, the latest announced or one announced later, that satisfies
+    /// `want`.
     async fn until(&mut self, want: impl Fn(&PeersState) -> bool) -> PeersState {
-        let now = self.state().await;
-        if want(&now) {
-            return now;
+        while let Ok(notice) = self.notices.try_recv() {
+            if let Notice::Peers(state) = notice {
+                self.last = Some(state);
+            }
+        }
+        if let Some(last) = self.last.clone().filter(|state| want(state)) {
+            return last;
         }
         tokio::time::timeout(PATIENCE, async {
             loop {
                 let Notice::Peers(state) = self.notices.recv().await.expect("notices") else {
                     continue;
                 };
+                self.last = Some(state.clone());
                 if want(&state) {
                     return state;
                 }
@@ -120,6 +133,18 @@ impl Node {
         })
         .await
         .expect("the state wanted, in time")
+    }
+
+    /// Says, as the agent does once its hook confirmed zones leading to `machine_id` and
+    /// nowhere else, that the hook is fit for the choice of that remote; that choice's
+    /// number, for a test to repeat it later.
+    #[cfg(unix)]
+    async fn hook_ready_for(&mut self, machine_id: &str) -> u64 {
+        let state = self
+            .until(|s| s.selected_remote.as_deref() == Some(machine_id))
+            .await;
+        self.service.hook_ready(Some(state.selection));
+        state.selection
     }
 }
 
@@ -494,6 +519,7 @@ async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends(
     desk.turn_on(0, "desk").await;
     desk.until(|s| linked(s, &tower_id)).await;
     tower.until(|s| linked(s, &desk_id)).await;
+    desk.hook_ready_for(&tower_id).await;
 
     // What the desk's hook captures goes to the tower's hook, in order. The desk's
     // agent connects to its hook's endpoint once a remote is linked; batches written
@@ -773,6 +799,7 @@ async fn a_batch_the_link_has_no_room_for_ends_the_session_and_the_remote_is_tol
     desk.turn_on(0, "desk").await;
     let mut laptop_link = linked_from(&mut listener).await;
     desk.until(|s| linked(s, laptop.fingerprint())).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Ctrl goes down on the laptop, which then reads nothing while the hook's stream
@@ -944,6 +971,7 @@ async fn a_remote_that_ended_the_session_brings_the_masters_pointer_home_for_a_f
     );
     desk.turn_on(0, "desk").await;
     let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
     let accept = || async {
         tokio::time::timeout(PATIENCE, hook_listener.accept())
             .await
@@ -1012,6 +1040,7 @@ async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from
     );
     desk.turn_on(0, "desk").await;
     let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
     let accept = || async {
         tokio::time::timeout(PATIENCE, hook_listener.accept())
             .await
@@ -1121,6 +1150,8 @@ async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_i
         .map(|r| r.machine_id)
         .collect();
     assert_eq!(merged, [alpha.fingerprint().to_owned()]);
+    // The hook holds zones leading to alpha alone: until it does, nothing is relayed.
+    let alpha_choice = desk.hook_ready_for(alpha.fingerprint()).await;
     let mut hook = accept().await;
     let crossing = [
         InputEvent::Enter { x: 5, y: 5 },
@@ -1133,16 +1164,12 @@ async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_i
     assert_eq!(next_input(&mut alpha_link).await, crossing);
     assert!(silent(&mut beta_link).await, "beta hears nothing");
 
-    // Alpha goes: beta is driven now. The hook's connection ends first (its pointer
-    // comes home), and the next one relays to beta from its first batch.
+    // Alpha goes: beta is selected now. The hook's connection ends at once (its pointer
+    // comes home)...
     drop(alpha_link);
-    let now = desk.until(|s| !linked(s, alpha.fingerprint())).await;
-    let now = if now.selected_remote.as_deref() == Some(beta.fingerprint()) {
-        now
-    } else {
-        desk.until(|s| s.selected_remote.as_deref() == Some(beta.fingerprint()))
-            .await
-    };
+    let now = desk
+        .until(|s| s.selected_remote.as_deref() == Some(beta.fingerprint()))
+        .await;
     let merged: Vec<String> = now
         .remote_screens()
         .into_iter()
@@ -1156,6 +1183,30 @@ async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_i
             .is_err(),
         "the first connection is closed"
     );
+
+    // ...but the hook still holds alpha's zones: the rebuild for beta has not reached it.
+    // No connection is made meanwhile, so the hook keeps the border to alpha's old zone a
+    // wall; were one made, a crossing there would be an `Enter` for beta. A word about
+    // alpha's choice, late or repeated, says nothing about this one.
+    desk.service.hook_ready(Some(alpha_choice));
+    let early = tokio::time::timeout(Duration::from_millis(500), hook_listener.accept()).await;
+    if let Ok(Ok((mut early, _))) = early {
+        let crossing_into_alpha = [
+            InputEvent::Enter { x: 5, y: 5 },
+            InputEvent::Button {
+                code: BTN_LEFT,
+                pressed: true,
+            },
+        ];
+        let _ = write_batch(&mut early, &encode(&crossing_into_alpha)).await;
+        assert!(silent(&mut beta_link).await, "beta hears nothing");
+        panic!("the agent connected to the hook while it held alpha's zones");
+    }
+    assert!(silent(&mut beta_link).await, "beta hears nothing");
+
+    // The hook confirmed zones leading to beta: the next connection relays to beta from
+    // its first batch.
+    desk.hook_ready_for(beta.fingerprint()).await;
     let mut successor = accept().await;
     let entering = [InputEvent::Enter { x: 7, y: 7 }];
     write_batch(&mut successor, &encode(&entering))

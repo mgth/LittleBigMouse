@@ -42,7 +42,8 @@ screen), Windows as master, the portal and X11 backends as master.
   (`{ MachineId, Name, Address, Role }`). An unknown fingerprint gets `Hello` and
   nothing else until accepted.
 - One connection carries two kinds of frame, each a four-byte little-endian length,
-  one kind byte, and the body:
+  one kind byte, and the body (the length counts the body only; bodies are bounded at
+  1 MiB for control and 64 KiB for input, and anything else closes the link):
   - kind `0`, **control**: one JSON message (PascalCase, `Type` tag, unknown types
     tolerated);
   - kind `1`, **input**: one batch of `lbm_ipc::input` events, relayed unread.

@@ -1525,6 +1525,228 @@ async fn network_remotes_load_associations_without_a_ddc_bus_and_reject_stale_co
     );
 }
 
+/// The next `Wallpapers` a master receives.
+async fn next_wallpapers(
+    link: &mut lbm_net::link::Link,
+) -> (u64, Vec<lbm_ipc::peer::PeerWallpaper>) {
+    use lbm_net::link::Event;
+    use lbm_net::wire::Control;
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(5), link.next())
+            .await
+            .expect("an event within 5 s");
+        match event {
+            Some(Event::Control(Control::Wallpapers {
+                revision,
+                wallpapers,
+            })) => return (revision, wallpapers),
+            Some(Event::Closed(reason)) => panic!("the link ended: {reason:?}"),
+            None => panic!("the link ended"),
+            Some(_) => {}
+        }
+    }
+}
+
+/// What a desktop shows on the one screen of [`Screens`]: a solid colour. As wide as that
+/// screen after its second and third rebuild, within the pixel of slack the matching
+/// allows (it grows by one at every rebuild).
+fn solid(color: [u8; 3]) -> lbm_agent::desktop::Shown {
+    lbm_agent::desktop::Shown {
+        bounds: lbm_layout::geo::Rect::new(0., 0., 1923., 1080.),
+        path: None,
+        style: lbm_wallpaper::Style::Fill,
+        repeat: lbm_wallpaper::desktop::Repeat::Both,
+        color: [color[0], color[1], color[2], 255],
+    }
+}
+
+fn colour_of(display: &str, color: &str) -> lbm_ipc::peer::PeerWallpaper {
+    lbm_ipc::peer::PeerWallpaper {
+        display: display.into(),
+        image: None,
+        color: Some(color.into()),
+    }
+}
+
+#[tokio::test]
+async fn a_remote_sends_its_wallpapers_at_link_up_and_after_a_display_change_and_only_then() {
+    use lbm_net::wire::{Hello, Role};
+
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let config = dir.path().join("config");
+    let master = lbm_net::identity::Identity::load_or_create(&dir.path().join("master")).unwrap();
+    lbm_net::peers::PeerStore::load(&config)
+        .insert(lbm_net::peers::PairedPeer {
+            machine_id: master.fingerprint().to_owned(),
+            name: "desk".into(),
+            address: String::new(),
+            role: Role::Master,
+        })
+        .unwrap();
+    // The remote's desktop, never the developer's: what it shows is the test's.
+    let desktop = std::sync::Arc::new(lbm_agent::desktop::FakeDesktop::default());
+    desktop.show(vec![solid([0x10, 0x20, 0x30])]);
+    let shown = desktop.clone();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let peers = lbm_agent::peers::Service::new(
+        config.clone(),
+        lbm_agent::peers::Setup {
+            bind: "127.0.0.1".parse().unwrap(),
+            input_endpoint: None,
+            options: lbm_net::link::Options::default(),
+        },
+    );
+    tokio::spawn(async move {
+        let world = Screens {
+            state: Enabled(None),
+            rebuilds: 0,
+        };
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_peers(peers)
+            .with_desktop(desktop);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let on = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0, "Name": "tower" }))
+        .await["Result"]
+        .clone();
+    let address = on["ListenAddress"].as_str().unwrap().to_owned();
+    // Rebuilds with no master linked read nothing: nobody would see it.
+    frontend.ask(json!({ "Method": "Refresh" })).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(shown.asked(), 0, "a machine nobody watches reads nothing");
+
+    let mut link = lbm_net::link::connect(
+        address.as_str(),
+        &master,
+        Hello::new("desk", "0", Role::Master),
+        lbm_net::link::Options::default(),
+    )
+    .await
+    .unwrap()
+    .accept()
+    .await
+    .unwrap();
+    let (first, wallpapers) = next_wallpapers(&mut link).await;
+    assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#102030")]);
+
+    // The user changes the wallpaper: nothing is said — there is no timer — until the
+    // next display event, which brings the new one.
+    shown.show(vec![solid([0x40, 0x50, 0x60])]);
+    let asked = shown.asked();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(shown.asked(), asked, "never polled");
+    frontend.ask(json!({ "Method": "Refresh" })).await;
+    let (next, wallpapers) = next_wallpapers(&mut link).await;
+    assert!(next > first, "{next} after {first}");
+    assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#405060")]);
+}
+
+#[tokio::test]
+async fn a_master_keeps_its_remotes_wallpapers_and_serves_them_apart_from_the_peers_state() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
+    let laptop_id = master.laptop_id();
+    let hello = master.frontend.ask(json!({ "Method": "Hello" })).await;
+    assert!(hello["Result"]["Capabilities"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("PeerWallpapers")));
+    let link = master.link_the_laptop().await;
+    let none = master
+        .frontend
+        .ask(json!({ "Method": "PeerWallpapers", "MachineId": laptop_id }))
+        .await;
+    assert_eq!(
+        none["Result"],
+        json!({ "MachineId": laptop_id, "Revision": 0, "Wallpapers": [] }),
+        "nothing sent yet is no error"
+    );
+
+    let picture = lbm_ipc::peer::PeerWallpaper {
+        display: "eDP-1".into(),
+        image: Some("/9j/4AAQSkZJRg==".into()),
+        color: None,
+    };
+    let send = |revision: u64, wallpapers: Vec<lbm_ipc::peer::PeerWallpaper>| {
+        let sender = link.sender();
+        async move {
+            sender
+                .control(&lbm_net::wire::Control::Wallpapers {
+                    revision,
+                    wallpapers,
+                })
+                .await
+                .unwrap();
+        }
+    };
+    send(1, vec![picture.clone()]).await;
+    // The state says there is something new, and only that: the pictures are asked for.
+    let stamp = loop {
+        let frame = master.frontend.receive().await;
+        if frame["Event"] != "Peers" {
+            continue;
+        }
+        let entry = &frame["Peers"]["Peers"][0];
+        let stamp = entry["WallpaperRevision"].as_u64().unwrap_or(0);
+        if stamp > 0 {
+            assert!(
+                !frame.to_string().contains("4AAQ"),
+                "no picture in the event: {frame}"
+            );
+            break stamp;
+        }
+    };
+    let served = master
+        .frontend
+        .ask(json!({ "Method": "PeerWallpapers", "MachineId": laptop_id }))
+        .await;
+    assert_eq!(served["Result"]["Revision"], stamp);
+    assert_eq!(
+        served["Result"]["Wallpapers"],
+        json!([{ "Display": "eDP-1", "Image": "/9j/4AAQSkZJRg==" }])
+    );
+
+    // The same pictures again change nothing; an older revision is ignored; other ones
+    // are a new stamp.
+    send(2, vec![picture.clone()]).await;
+    send(1, vec![colour_of("eDP-1", "#000000")]).await;
+    send(3, vec![colour_of("eDP-1", "#203040")]).await;
+    let newer = loop {
+        let state = master.frontend.ask(json!({ "Method": "Peers" })).await;
+        let now = state["Result"]["Peers"][0]["WallpaperRevision"]
+            .as_u64()
+            .unwrap();
+        if now != stamp {
+            break now;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(newer, stamp + 1, "one new stamp, for the one change");
+    let served = master
+        .frontend
+        .ask(json!({ "Method": "PeerWallpapers", "MachineId": laptop_id }))
+        .await;
+    assert_eq!(
+        served["Result"]["Wallpapers"],
+        json!([{ "Display": "eDP-1", "Color": "#203040" }])
+    );
+
+    let unknown = master
+        .frontend
+        .ask(json!({ "Method": "PeerWallpapers", "MachineId": "nobody" }))
+        .await;
+    assert!(unknown["Error"].is_string(), "{unknown}");
+}
+
 /// One monitor whose screens, as the multi-PC mode reports them, change with every
 /// rebuild: what a display change looks like from the remote's side.
 struct Screens {

@@ -34,6 +34,7 @@ mod actor;
 pub mod hook_input;
 pub mod local;
 pub mod settings;
+pub mod wallpapers;
 
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
@@ -41,7 +42,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use lbm_ipc::peer::{Peer, PeerDisplay};
+use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::{Identity, IDENTITY_FILE};
 use lbm_net::link;
 use lbm_net::peers::PeerStore;
@@ -173,6 +174,8 @@ pub enum PeerRequest {
     Accept(String),
     Refuse(String),
     Forget(String),
+    /// What a remote of this machine's screens show (`PeerWallpapers`).
+    Wallpapers(String),
 }
 
 /// An answer now, or one to await (in a task of the caller's, never its loop).
@@ -199,6 +202,16 @@ impl Setup {
             input_endpoint,
             options: link::Options::default(),
         }
+    }
+}
+
+/// Hands this machine's wallpapers to the manager (see [`Service::wallpaper_sink`]).
+#[derive(Clone)]
+pub struct WallpaperSink(mpsc::UnboundedSender<Command>);
+
+impl WallpaperSink {
+    pub fn send(&self, wallpapers: Vec<PeerWallpaper>) {
+        let _ = self.0.send(Command::LocalWallpapers(wallpapers));
     }
 }
 
@@ -271,6 +284,16 @@ impl Service {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::LocalDisplays(displays));
         }
+    }
+
+    /// Where this machine's wallpapers go once read, while the manager runs: a handle the
+    /// agent hands to the task that reads and draws them, away from its loop. A handle
+    /// outliving a restart of the manager sends into the void, which is harmless: the
+    /// next link or display event reads them again.
+    pub fn wallpaper_sink(&self) -> Option<WallpaperSink> {
+        self.running
+            .as_ref()
+            .map(|running| WallpaperSink(running.commands.clone()))
     }
 
     /// Asks the remote `machine_id` to switch its monitor `display` to the input `value`
@@ -346,6 +369,9 @@ impl Service {
                     PeerRequest::Accept(machine_id) => Command::Accept { machine_id, reply },
                     PeerRequest::Refuse(machine_id) => Command::Refuse { machine_id, reply },
                     PeerRequest::Forget(machine_id) => Command::Forget { machine_id, reply },
+                    PeerRequest::Wallpapers(machine_id) => {
+                        Command::Wallpapers { machine_id, reply }
+                    }
                     PeerRequest::State | PeerRequest::Set { .. } => unreachable!("handled above"),
                 };
                 let sent = running.commands.send(command).is_ok();
@@ -477,6 +503,7 @@ impl Service {
                         address: paired.address.clone(),
                         connected: false,
                         displays: Vec::new(),
+                        wallpaper_revision: 0,
                     },
                     role: paired.role,
                     state: PeerState::Paired,
@@ -518,6 +545,7 @@ mod tests {
                     height_mm: 194.0,
                     input_source: None,
                 }],
+                wallpaper_revision: 0,
             },
             role,
             state,

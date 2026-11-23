@@ -1,4 +1,6 @@
-use super::{Entry, Rect, Repeat, Style};
+use super::{Entry, Repeat};
+use crate::Style;
+use lbm_layout::geo::Rect;
 use windows::{
     core::{PCWSTR, PWSTR},
     Win32::{

@@ -23,3 +23,4 @@ pub mod wallpaper_editor;
 pub mod vcp;
 
 pub mod remote;
+pub mod remote_wallpapers;

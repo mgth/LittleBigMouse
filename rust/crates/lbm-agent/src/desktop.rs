@@ -36,7 +36,14 @@ pub trait Desktop: Send + Sync {
     /// Complete native references, including stored desktops which are not connected.
     /// An unsupported plugin or an incomplete answer prevents cache collection.
     fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>>;
+    /// What each output shows now, read without changing anything: what a remote draws
+    /// for its master's map (`peers::wallpapers`).
+    fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>>;
 }
+
+/// What one output of the desktop shows (`lbm_wallpaper::desktop`'s reading, shared with
+/// the window).
+pub type Shown = lbm_wallpaper::desktop::Entry;
 
 /// The desktop of an agent nobody gave one: it paints nothing and says it cannot, so the
 /// editor reports an unsupported desktop and the wallpaper cache is never collected
@@ -63,6 +70,9 @@ impl Desktop for NoDesktop {
     fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
         Box::pin(async { Err(NO_DESKTOP.into()) })
     }
+    fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>> {
+        Box::pin(async { Err(NO_DESKTOP.into()) })
+    }
 }
 
 /// A desktop that records what it is asked to show, for the tests. Supported, and it
@@ -70,12 +80,26 @@ impl Desktop for NoDesktop {
 #[derive(Debug, Default)]
 pub struct FakeDesktop {
     applied: Mutex<Vec<Vec<ScreenWallpaper>>>,
+    /// What it answers it shows; `None`: it cannot say.
+    showing: Mutex<Option<Vec<Shown>>>,
+    /// How many times it was asked what it shows.
+    asked: std::sync::atomic::AtomicUsize,
 }
 
 impl FakeDesktop {
     /// Every non-empty request, oldest first.
     pub fn applied(&self) -> Vec<Vec<ScreenWallpaper>> {
         self.applied.lock().unwrap().clone()
+    }
+
+    /// Answers `shown` from now on, as a desktop whose wallpaper the user just changed.
+    pub fn show(&self, shown: Vec<Shown>) {
+        *self.showing.lock().unwrap() = Some(shown);
+    }
+
+    /// How many times it was asked what it shows.
+    pub fn asked(&self) -> usize {
+        self.asked.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -92,6 +116,11 @@ impl Desktop for FakeDesktop {
     fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
         Box::pin(async { Err("a fake desktop vouches for no references".into()) })
     }
+    fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>> {
+        self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let shown = self.showing.lock().unwrap().clone();
+        Box::pin(async move { shown.ok_or_else(|| "a fake desktop shows nothing".to_owned()) })
+    }
 }
 
 /// This session's desktop: Plasma over D-Bus, or IDesktopWallpaper. `main`'s alone.
@@ -107,6 +136,13 @@ impl Desktop for SystemDesktop {
     }
     fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
         Box::pin(references())
+    }
+    fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>> {
+        Box::pin(async {
+            tokio::task::spawn_blocking(lbm_wallpaper::desktop::query)
+                .await
+                .map_err(|e| e.to_string())?
+        })
     }
 }
 
@@ -566,5 +602,6 @@ mod tests {
             NoDesktop.references().await.is_err(),
             "an unread desktop must keep the wallpaper cache from being collected"
         );
+        assert!(NoDesktop.shown().await.is_err(), "nor does it read one");
     }
 }

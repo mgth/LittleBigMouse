@@ -71,4 +71,25 @@ pub struct Peer {
     pub connected: bool,
     #[serde(default)]
     pub displays: Vec<PeerDisplay>,
+    /// Changes whenever the master holds other wallpapers for this machine's screens;
+    /// `0` while it holds none. The pictures themselves are asked for (`PeerWallpapers`):
+    /// they are too large for a state sent to every frontend at every change.
+    #[serde(default)]
+    pub wallpaper_revision: u64,
+}
+
+/// What one screen of a remote shows, drawn small for its master's map: either a picture
+/// or a solid colour. A remote that could not read a screen's wallpaper sends nothing for
+/// it, and the map draws that screen as it would without.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PeerWallpaper {
+    /// The display's id, as in its machine's `Displays`.
+    pub display: String,
+    /// A JPEG or PNG, base64 (standard alphabet, padded), at most 384 pixels wide.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// `#RRGGBB`: a solid background, or what is left of a picture too large to send.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }

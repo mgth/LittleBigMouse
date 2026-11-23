@@ -59,6 +59,10 @@
 //! -> {"Id": 13, "Method": "SetActiveSource", "LayoutId": "…", "Monitor": "DEL4065_ABC123",
 //!     "Source": "HDMI-1@a1b2c3d4"}                             // a shared panel's machine
 //! <- {"Id": 13, "Result": null}
+//! -> {"Id": 14, "Method": "PeerWallpapers", "MachineId": "…"}  // capability PeerWallpapers
+//! <- {"Id": 14, "Result": {"MachineId": "…", "Revision": 3,     // its WallpaperRevision
+//!                          "Wallpapers": [{"Display": "eDP-1", "Image": "<base64 JPEG>"},
+//!                                         {"Display": "HDMI-1", "Color": "#203040"}]}}
 //! ```
 
 use std::io;
@@ -87,7 +91,9 @@ pub const PROTOCOL: u32 = 3;
 ///   event, which also carry the remote machines' screens (docs/multi-pc.md). The
 ///   layout of a master holds its remotes' screens: its `LayoutId` is that of every
 ///   monitor, theirs included.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc"];
+/// - `PeerWallpapers`: the request of that name, and `WallpaperRevision` on every machine
+///   of the `Peers` state: what a remote's screens show, for the master's map.
+pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers"];
 
 //==================//
 // The contract     //
@@ -308,6 +314,12 @@ pub enum Request {
         monitor: String,
         #[serde(rename = "Source")]
         source: String,
+    },
+    /// What the screens of a remote of this machine show (`PeerWallpapers`): the pictures
+    /// it last sent, asked for when its `WallpaperRevision` in the `Peers` state changes.
+    PeerWallpapers {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
     },
 }
 

@@ -103,6 +103,9 @@ pub struct Agent<W> {
     /// unless `main` installs the session's (`with_desktop`). A test cannot reach the
     /// developer's desktop by forgetting a double.
     desktop: std::sync::Arc<dyn crate::desktop::Desktop>,
+    /// Counts the reads of this machine's wallpapers for its masters: only the latest
+    /// one's pictures are sent.
+    wallpaper_reads: std::sync::Arc<std::sync::atomic::AtomicU64>,
     /// The property panel's monitor control, when this agent offers it
     /// (`with_monitor_control`); the lock is also the one DDC/CI bus of this machine, so
     /// the input switching holds it too, with or without a panel to serve.
@@ -160,6 +163,7 @@ impl<W: AgentWorld> Agent<W> {
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
             desktop: std::sync::Arc::new(crate::desktop::NoDesktop),
+            wallpaper_reads: Default::default(),
             vcp: Default::default(),
             remote: None,
             peers: None,
@@ -692,6 +696,9 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerForget { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Forget(machine_id))
             }
+            Request::PeerWallpapers { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
+            }
             Request::SetActiveSource {
                 layout_id,
                 monitor,
@@ -944,10 +951,62 @@ impl<W: AgentWorld> Agent<W> {
             self.handle(Input::DisplayChanged);
         }
         // A master that links needs what selects this machine on its panels, which a
-        // machine without a master does not read.
+        // machine without a master does not read — and what its screens show.
         if master_linked {
             self.read_inputs();
+            self.read_wallpapers();
         }
+    }
+
+    /// Reads what this machine's screens show and hands it, drawn small, to the masters
+    /// it is a remote of (docs/multi-pc.md, "Wallpapers"). Away from the loop: the
+    /// desktop can take its time and the drawing is work. Asked after a rebuild — a
+    /// display event — and when a master links; never on a timer, so a wallpaper changed
+    /// with no display event reaches the master at the next one.
+    ///
+    /// Only while a master is linked: a machine nobody watches reads nothing.
+    fn read_wallpapers(&mut self) {
+        if !self.has_master {
+            return;
+        }
+        let Some(sink) = self.peers.as_ref().and_then(|p| p.wallpaper_sink()) else {
+            return;
+        };
+        let displays = self.world.peer_displays();
+        let desktop = self.desktop.clone();
+        use std::sync::atomic::Ordering;
+        let generation = self.wallpaper_reads.clone();
+        let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        tokio::spawn(async move {
+            let shown = match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                desktop.shown(),
+            )
+            .await
+            {
+                Ok(Ok(shown)) => shown,
+                Ok(Err(error)) => {
+                    eprintln!("[lbm-agent] multi-PC: the wallpapers cannot be read: {error}");
+                    return;
+                }
+                Err(_) => {
+                    eprintln!("[lbm-agent] multi-PC: the desktop did not say what it shows");
+                    return;
+                }
+            };
+            let drawn = tokio::task::spawn_blocking(move || {
+                crate::peers::wallpapers::thumbnails(&displays, &shown)
+            })
+            .await;
+            // A newer read is under way, or done: this one is about screens that were.
+            if generation.load(Ordering::SeqCst) != expected {
+                return;
+            }
+            match drawn {
+                Ok(wallpapers) => sink.send(wallpapers),
+                Err(error) => eprintln!("[lbm-agent] multi-PC: drawing the wallpapers: {error}"),
+            }
+        });
     }
 
     /// A frontend's connection ended.
@@ -1353,6 +1412,7 @@ impl<W: AgentWorld> Agent<W> {
             // The panels' inputs as they are after this display change; what is read
             // only ever reaches the layout and the masters, never a monitor.
             self.read_inputs();
+            self.read_wallpapers();
         }
     }
 

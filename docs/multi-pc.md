@@ -52,6 +52,9 @@ screen), Windows as master, the portal and X11 backends as master.
   - `Paired` / `Refused { Reason }` — the answer to a first `Hello`
   - `Displays { Revision, Displays: [PeerDisplay] }` — remote → master, at connection
     and on every display change
+  - `Wallpapers { Revision, Wallpapers: [{ Display, Image | Color }] }` — remote →
+    master, at link-up and after every display change (see "Wallpapers"); added after
+    protocol 1 without a new version, an older master ignores it as an unknown type
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
@@ -205,7 +208,9 @@ On a remote (`lbm-hook/src/remote`):
   - `Peers` → `{ Enabled, Port, Name, MachineId (this machine's fingerprint, null before
     the first use), ListenAddress, Error, SelectedRemote (the machine id of the selected
     remote, null when none), Peers: [{ MachineId, Name, Address, Connected, Displays,
-    Role, State: "Paired" | "Pending" }] }`;
+    WallpaperRevision, Role, State: "Paired" | "Pending" }] }`;
+  - `PeerWallpapers { MachineId }` (capability `PeerWallpapers`) → `{ MachineId,
+    Revision, Wallpapers: [{ Display, Image | Color }] }`, see "Wallpapers";
   - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
     everything is closed;
   - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
@@ -255,6 +260,42 @@ On a remote (`lbm-hook/src/remote`):
   a known input value, which the switch is to bring there) on the panel, saves, and
   hands a running engine the new zones; answered `null` at once. The input switch it
   may ask for (below) runs afterwards and is never waited for.
+
+## Wallpapers
+
+The master's map draws every screen over the wallpaper it shows. This machine's are read
+by the window itself; a remote's are on another desktop, so the remote sends them.
+
+- **Reading, on the remote** (`lbm-agent/src/peers/wallpapers.rs`): the agent asks its
+  desktop what each output shows — read-only, the same reader the window uses for its own
+  map (`lbm_wallpaper::desktop::query`: Plasma's containments through `evaluateScript`,
+  `IDesktopWallpaper::GetWallpaper` per monitor on Windows; a solid colour is an answer) —
+  matches the outputs to its `Displays` by geometry, and draws each picture as the
+  desktop does (Fill, Fit, Stretch, Center, Span and Tile, with Plasma's one-axis tiles),
+  no wider than **384 px**. The desktop is behind the agent's `Desktop` trait, so a test
+  hands it a fake and never reads the developer's.
+- **Bounds**: a JPEG of at most **96 KiB** per display (quality 80, then 65 and 50, then
+  half and a quarter of the size; past that, the average colour), and at most **512 KiB**
+  of pictures per message (the largest pictures become their colour first). KDE's own
+  wallpapers come out at 8–21 KiB on a 16:9 screen and 22–47 KiB on a portrait one; three
+  screens make a message of 60–110 KB, base64 and JSON included, well within the 1 MiB of
+  a control frame. They travel remote → master, against the input stream, so they never
+  queue ahead of a click.
+- **When**: at link-up (what was last read, then a fresh reading) and after every display
+  change of the remote (its rebuild), under a new `Revision` only when the pictures
+  differ; and only while a master is linked — a machine nobody watches reads nothing.
+  **Never on a timer**: a wallpaper changed on the remote with no display event reaches
+  the master at the next link or display event.
+- **On the master**: the latest per remote (highest revision on the link) is kept and
+  stamped with a counter of the master's own (`WallpaperRevision` in the `Peers` state,
+  `0` while there is none); the same pictures again keep their stamp. The pictures are
+  never in the `Peers` state or event, which every frontend gets at every change: a
+  frontend asks `PeerWallpapers` when the stamp changes.
+- **In the window** (`lbm-app/src/remote_wallpapers.rs`): one request per stamp, the
+  pictures decoded once and uploaded as textures once per change. A screen whose active
+  source is a remote's is drawn over that remote's picture of that display; every other
+  one keeps this desktop's — so a panel two machines share shows the wallpaper of the
+  machine it shows.
 
 ## A panel both machines know
 
@@ -327,3 +368,4 @@ What lot 8 does (`lbm-agent/src/input_switch.rs`, `vcp.rs`):
 6. Master hook (evdev): remote sink, keyboard grab, coming home.
 7. egui: Machines panel, remote monitors, source switch.
 8. Input switching over VCP 0x60 (Windows DDC included).
+9. The remotes' wallpapers on the master's map.

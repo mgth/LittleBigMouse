@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
-use lbm_ipc::peer::{Peer, PeerDisplay};
+use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
@@ -52,6 +52,13 @@ pub(super) enum Command {
     },
     /// This machine's screens changed (or are known for the first time).
     LocalDisplays(Vec<PeerDisplay>),
+    /// What this machine's screens show, drawn small, as last read.
+    LocalWallpapers(Vec<PeerWallpaper>),
+    /// The wallpapers a remote of this machine last sent (`PeerWallpapers`).
+    Wallpapers {
+        machine_id: String,
+        reply: Reply,
+    },
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -121,6 +128,9 @@ struct Live {
     info: PeerInfo,
     /// The screens it last reported, with their revision (a remote's only).
     displays: Option<(u64, Vec<PeerDisplay>)>,
+    /// The wallpapers it last sent (a remote's only): their revision on that link, the
+    /// stamp the frontends know them by, and the pictures.
+    wallpapers: Option<(u64, u64, Vec<PeerWallpaper>)>,
 }
 
 struct Actor {
@@ -142,6 +152,13 @@ struct Actor {
     /// This machine's screens, and how many times they changed.
     displays: Vec<PeerDisplay>,
     revision: u64,
+    /// This machine's wallpapers, and how many times they changed.
+    wallpapers: Vec<PeerWallpaper>,
+    wallpaper_revision: u64,
+    /// The last stamp given to wallpapers received from a remote. One counter for every
+    /// link, never reset while the mode is on: a remote's own revision starts over when
+    /// it restarts, and a frontend comparing it would keep pictures that changed.
+    wallpaper_stamp: u64,
     hook: HookInput,
     /// The remote the hook's stream goes to and whose screens are in the layout (this
     /// machine is its master), with the id of its link: one at a time (see
@@ -206,6 +223,9 @@ pub(super) async fn run(
         // the first change after it is told apart.
         revision: u64::from(!start.displays.is_empty()),
         displays: start.displays,
+        wallpapers: Vec::new(),
+        wallpaper_revision: 0,
+        wallpaper_stamp: 0,
         hook: HookInput::spawn(start.input_endpoint),
         selected: None,
         internal,
@@ -290,6 +310,9 @@ impl Actor {
                             .and_then(|live| live.displays.as_ref())
                             .map(|(_, displays)| displays.clone())
                             .unwrap_or_default(),
+                        wallpaper_revision: live
+                            .and_then(|live| live.wallpapers.as_ref())
+                            .map_or(0, |(_, stamp, _)| *stamp),
                     },
                     role: paired.role,
                     state: PeerState::Paired,
@@ -311,6 +334,7 @@ impl Actor {
                     },
                     connected: false,
                     displays: Vec::new(),
+                    wallpaper_revision: 0,
                 },
                 role: info.hello.role,
                 state: PeerState::Pending,
@@ -357,6 +381,10 @@ impl Actor {
                 let _ = reply.send(self.forget(&machine_id));
             }
             Command::LocalDisplays(displays) => self.local_displays(displays),
+            Command::LocalWallpapers(wallpapers) => self.local_wallpapers(wallpapers),
+            Command::Wallpapers { machine_id, reply } => {
+                let _ = reply.send(self.remote_wallpapers(&machine_id));
+            }
             Command::SelectInput {
                 machine_id,
                 display,
@@ -506,6 +534,7 @@ impl Actor {
                 address: address.to_owned(),
                 connected: false,
                 displays: Vec::new(),
+                wallpaper_revision: 0,
             },
             role: info.hello.role,
             state: if self.store.get(&info.fingerprint).is_some() {
@@ -664,12 +693,18 @@ impl Actor {
         // This machine is the remote: its screens, from the first moment.
         if info.hello.role == Role::Master {
             self.send_displays(&sender);
+            // What was last read: the agent reads again for a master that links, and a
+            // newer reading follows under a higher revision if the desktop changed since.
+            if self.wallpaper_revision > 0 {
+                self.send_wallpapers(&sender);
+            }
         }
         let live = Live {
             id,
             sender,
             info,
             displays: None,
+            wallpapers: None,
         };
         if let Some(older) = self.links.insert(machine_id, live) {
             tokio::spawn(async move {
@@ -760,6 +795,26 @@ impl Actor {
                         displays.len()
                     );
                     live.displays = Some((revision, displays));
+                }
+            }
+            Control::Wallpapers {
+                revision,
+                wallpapers,
+            } if live.info.hello.role == Role::Remote => {
+                let newer = live
+                    .wallpapers
+                    .as_ref()
+                    .is_none_or(|(known, _, _)| revision > *known);
+                let changed = live
+                    .wallpapers
+                    .as_ref()
+                    .is_none_or(|(_, _, known)| *known != wallpapers);
+                if newer && changed {
+                    self.wallpaper_stamp += 1;
+                    live.wallpapers = Some((revision, self.wallpaper_stamp, wallpapers));
+                } else if let Some((known, _, _)) = live.wallpapers.as_mut().filter(|_| newer) {
+                    // The same pictures again: nothing for the frontends to fetch.
+                    *known = revision;
                 }
             }
             // Only this machine's master may switch its monitors: a remote of this
@@ -896,6 +951,60 @@ impl Actor {
         for sender in masters {
             self.send_displays(&sender);
         }
+    }
+
+    /// What this machine's screens show changed: every master this machine is the remote
+    /// of is told, under a new revision. The same pictures again are no change.
+    fn local_wallpapers(&mut self, wallpapers: Vec<PeerWallpaper>) {
+        if wallpapers == self.wallpapers && self.wallpaper_revision > 0 {
+            return;
+        }
+        self.wallpapers = wallpapers;
+        self.wallpaper_revision += 1;
+        let masters: Vec<LinkSender> = self
+            .links
+            .values()
+            .filter(|live| live.info.hello.role == Role::Master)
+            .map(|live| live.sender.clone())
+            .collect();
+        for sender in masters {
+            self.send_wallpapers(&sender);
+        }
+    }
+
+    /// As `send_displays`, and in a task of its own for the same reason. The pictures go
+    /// from the remote to the master, the opposite way to the input stream, so they never
+    /// queue ahead of a click.
+    fn send_wallpapers(&self, sender: &LinkSender) {
+        let message = Control::Wallpapers {
+            revision: self.wallpaper_revision,
+            wallpapers: self.wallpapers.clone(),
+        };
+        let sender = sender.clone();
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+    }
+
+    /// `PeerWallpapers`: what a remote of this machine last sent, under the stamp the
+    /// `Peers` state shows. Nothing yet (a remote not linked, or older than wallpapers)
+    /// is an empty list under stamp 0, not an error: the map just draws no picture.
+    fn remote_wallpapers(&self, machine_id: &str) -> Result<Value, String> {
+        if self.store.get(machine_id).is_none() && !self.links.contains_key(machine_id) {
+            return Err(format!("no machine {machine_id} is known"));
+        }
+        let (stamp, wallpapers) = self
+            .links
+            .get(machine_id)
+            .and_then(|live| live.wallpapers.as_ref())
+            .map_or((0, &[][..]), |(_, stamp, wallpapers)| {
+                (*stamp, wallpapers.as_slice())
+            });
+        Ok(serde_json::json!({
+            "MachineId": machine_id,
+            "Revision": stamp,
+            "Wallpapers": wallpapers,
+        }))
     }
 
     /// Queued in a task of its own: a control message may wait for room on a busy

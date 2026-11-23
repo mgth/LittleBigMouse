@@ -42,6 +42,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # the agent that binds them.
 lbm-ipc = { path = "../lbm-ipc" }
 serde_json.workspace = true
+# The remotes' wallpapers arrive as base64 (`remote_wallpapers`).
+base64 = "0.22"
 raw-window-handle = "0.6"
 tokio = { workspace = true, features = ["rt", "net", "sync", "time", "macros", "io-util"] }
 

@@ -203,6 +203,10 @@ struct App {
     textures: HashMap<String, egui::TextureHandle>,
     desktop_wallpaper: lbm_app::desktop_wallpaper::Watcher,
     desktop_textures: HashMap<String, egui::TextureHandle>,
+    /// The remotes' wallpapers, as their agents drew them (multi-PC).
+    remote_wallpapers: lbm_app::remote_wallpapers::RemoteWallpapers,
+    /// Their textures, uploaded once per change, by `remote_wallpapers::key_of`.
+    remote_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
     wallpaper: lbm_app::wallpaper_editor::Editor,
@@ -612,6 +616,8 @@ impl App {
             textures: HashMap::new(),
             desktop_wallpaper: Default::default(),
             desktop_textures: HashMap::new(),
+            remote_wallpapers: Default::default(),
+            remote_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
             wallpaper_preview_requested: false,
@@ -671,6 +677,7 @@ impl App {
                 self.send_pending_options();
                 // The `Peers` event is a change; what there is now has to be asked.
                 self.machines.connected(&capabilities);
+                self.remote_wallpapers.connected(&capabilities);
                 self.switching = None;
                 if self.machines.offered {
                     self.machines_request("Peers", serde_json::json!({}));
@@ -693,6 +700,7 @@ impl App {
                 self.requests = None;
                 self.agent_keeps_intrinsic_size = false;
                 self.machines.disconnected();
+                self.remote_wallpapers.disconnected();
                 self.switching = None;
                 self.held_pending.clear();
                 self.state = lbm_ui::State::default();
@@ -1007,6 +1015,13 @@ impl App {
         if self.machines.heard(state) {
             self.refresh.invalidate();
         }
+        let on_the_map: Vec<String> = self
+            .machines
+            .remotes
+            .iter()
+            .map(|r| r.machine_id.clone())
+            .collect();
+        self.remote_wallpapers.heard(state, &on_the_map);
     }
 
     /// The machine the selected monitor is showing, when it is not this one.
@@ -1302,6 +1317,9 @@ impl App {
             return;
         }
         if let Message::Answer { id, result } = &message {
+            if self.remote_wallpapers.answered(*id, result) {
+                return;
+            }
             if let Some(changed) = self.machines.answered(*id, result) {
                 if changed {
                     self.refresh.invalidate();
@@ -1516,9 +1534,12 @@ impl App {
                 name: &s.name,
                 mm_outside: s.mm_outside,
                 mm_content: s.mm_content,
+                // The editor's preview is of this desktop; a screen showing a remote
+                // shows that remote's wallpaper, every other one this desktop's.
                 wallpaper: (self.mode == lbm_ui::mode::Mode::Wallpaper)
                     .then(|| self.wallpapers.get(&s.id))
                     .flatten()
+                    .or_else(|| self.remote_texture(&s.id))
                     .or_else(|| self.desktop_textures.get(&s.id)),
                 logo: s
                     .logo
@@ -1649,6 +1670,46 @@ impl App {
                 .answered(id, &Err("The agent stopped listening.".into()));
         }
     }
+    /// The remote wallpaper of the screen `monitor` shows, when it shows a remote.
+    fn remote_texture(&self, monitor: &str) -> Option<&egui::TextureHandle> {
+        let key = lbm_app::remote_wallpapers::key_of(self.layout.as_deref()?, monitor)?;
+        self.remote_textures.get(&key)
+    }
+
+    /// Asks for the remotes' wallpapers the agent holds and this window does not, and
+    /// uploads them once they are in. Nothing on a timer: the agent's `Peers` event says
+    /// when there is something new.
+    fn sync_remote_wallpapers(&mut self, ctx: &egui::Context) {
+        if let Some(requests) = &self.requests {
+            for (machine, extra) in self.remote_wallpapers.wanted() {
+                let id = self.next_id;
+                self.next_id += 1;
+                self.remote_wallpapers.sent(id, machine);
+                if requests.send((id, "PeerWallpapers", extra)).is_err() {
+                    self.remote_wallpapers
+                        .answered(id, &Err("the agent stopped listening".into()));
+                }
+            }
+        }
+        if !self.remote_wallpapers.take_changed() {
+            return;
+        }
+        self.remote_textures = self
+            .remote_wallpapers
+            .pictures()
+            .map(|(key, pixels)| {
+                let size = [pixels.width() as usize, pixels.height() as usize];
+                let texture = ctx.load_texture(
+                    format!("remote-wallpaper:{key}"),
+                    egui::ColorImage::from_rgba_unmultiplied(size, pixels),
+                    egui::TextureOptions::LINEAR,
+                );
+                (key, texture)
+            })
+            .collect();
+        ctx.request_repaint();
+    }
+
     fn sync_wallpaper(&mut self, ctx: &egui::Context) {
         if let Some(layout) = &self.layout {
             // This desktop's pictures, for this machine's screens: a remote screen's
@@ -3050,6 +3111,7 @@ impl eframe::App for App {
 
         self.read_displays(&ctx, false);
         self.sync_wallpaper(&ctx);
+        self.sync_remote_wallpapers(&ctx);
         self.screen_overlay_input();
         if self.refresh.pending() && !self.dirty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
@@ -4894,6 +4956,153 @@ mod machines_tests {
              "State": "Pending", "Displays": []}
         ]))));
         assert!(!app.refresh.pending());
+    }
+
+    /// The `Peers` state of a desk with the laptop linked, its wallpapers at `revision`.
+    fn laptop_linked(revision: u64) -> serde_json::Value {
+        json!({"Enabled": true, "Port": 24817, "Name": "desk", "MachineId": "0f",
+               "ListenAddress": null, "Error": null, "SelectedRemote": LAPTOP, "Peers": [
+            {"MachineId": LAPTOP, "Name": "laptop", "Address": "10.0.0.2:24817",
+             "Connected": true, "Role": "Remote", "State": "Paired",
+             "WallpaperRevision": revision, "Displays": [
+                {"Id": "eDP-1", "X": -1920, "Y": 0, "Width": 1920, "Height": 1080,
+                 "Attached": true}]}]})
+    }
+
+    /// What each screen of the map is drawn over, by monitor id: the texture's id.
+    fn backdrops(app: &App) -> Vec<(String, Option<egui::TextureId>)> {
+        let logos = HashMap::new();
+        app.monitors(&logos)
+            .iter()
+            .map(|m| (m.id.to_owned(), m.wallpaper.map(|t| t.id())))
+            .collect()
+    }
+
+    /// The agent answers the one `PeerWallpapers` the window sent: the laptop's eDP-1 in
+    /// red, its HDMI-1 (the Dell, when shared) in green.
+    fn answer_wallpapers(
+        app: &mut App,
+        ctx: &egui::Context,
+        incoming: &mut tokio::sync::mpsc::UnboundedReceiver<(u64, &'static str, serde_json::Value)>,
+    ) {
+        app.sync_remote_wallpapers(ctx);
+        let asked: Vec<_> = methods(incoming)
+            .into_iter()
+            .filter(|(_, method, _)| *method == "PeerWallpapers")
+            .collect();
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        assert_eq!(asked[0].2, json!({ "MachineId": LAPTOP }));
+        app.agent_said(Message::Answer {
+            id: asked[0].0,
+            result: Ok(json!({ "MachineId": LAPTOP, "Revision": 1, "Wallpapers": [
+                { "Display": "eDP-1", "Color": "#FF0000" },
+                { "Display": "HDMI-1", "Color": "#00FF00" },
+            ]})),
+        });
+        app.sync_remote_wallpapers(ctx);
+        app.sync_remote_wallpapers(ctx);
+        assert!(methods(incoming).is_empty(), "asked once per revision");
+    }
+
+    #[test]
+    fn a_remote_screen_shows_its_machines_wallpaper_and_a_shared_panel_the_one_it_shows() {
+        let layout = desk_and_laptop(true);
+        let (laptop, dell) = (panel_of(&layout), dell_of(&layout));
+        let (mut app, mut incoming) = app_with(layout);
+        let ctx = egui::Context::default();
+        let capabilities = ["MultiPc".to_owned(), "PeerWallpapers".to_owned()];
+        app.machines.connected(&capabilities);
+        app.remote_wallpapers.connected(&capabilities);
+        // This desktop's picture of the Dell, as the watcher reads it.
+        let here = ctx.load_texture(
+            "desktop",
+            egui::ColorImage::filled([2, 2], egui::Color32::BLUE),
+            Default::default(),
+        );
+        app.desktop_textures.insert(dell.clone(), here.clone());
+        // Showing this machine: the Dell is local whichever way the merge left it.
+        let local_source = |app: &App| {
+            let layout = app.layout.as_deref().unwrap();
+            layout
+                .monitor(&dell)
+                .unwrap()
+                .sources
+                .iter()
+                .find(|s| layout.source(s).is_some_and(|s| s.source.is_local()))
+                .cloned()
+                .unwrap()
+        };
+        let source = local_source(&app);
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(source));
+
+        app.agent_said(Message::Peers(laptop_linked(1)));
+        answer_wallpapers(&mut app, &ctx, &mut incoming);
+        let drawn: HashMap<_, _> = backdrops(&app).into_iter().collect();
+        let red = app.remote_textures[&format!("{LAPTOP}/eDP-1")].id();
+        let green = app.remote_textures[&format!("{LAPTOP}/HDMI-1")].id();
+        assert_eq!(drawn[&laptop], Some(red), "the laptop's own screen");
+        assert_eq!(drawn[&dell], Some(here.id()), "the Dell shows this machine");
+
+        // The Dell switched to the laptop: the laptop's wallpaper on it, and back.
+        let remote_source = {
+            let layout = app.layout.as_deref().unwrap();
+            layout
+                .monitor(&dell)
+                .unwrap()
+                .sources
+                .iter()
+                .find(|s| layout.source(s).is_some_and(|s| !s.source.is_local()))
+                .cloned()
+                .unwrap()
+        };
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(remote_source));
+        assert_eq!(
+            backdrops(&app).into_iter().collect::<HashMap<_, _>>()[&dell],
+            Some(green)
+        );
+        let source = local_source(&app);
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(source));
+        assert_eq!(
+            backdrops(&app).into_iter().collect::<HashMap<_, _>>()[&dell],
+            Some(here.id())
+        );
+    }
+
+    #[test]
+    fn a_local_only_layout_is_drawn_as_before_whatever_the_remotes_send() {
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::add_monitor(&mut layout, &desk());
+        layout.id = layout.compute_id();
+        let dell = layout.monitors()[0].id.clone();
+        let (mut app, mut incoming) = app_with(layout);
+        let ctx = egui::Context::default();
+        let capabilities = ["MultiPc".to_owned(), "PeerWallpapers".to_owned()];
+        app.machines.connected(&capabilities);
+        app.remote_wallpapers.connected(&capabilities);
+        let here = ctx.load_texture(
+            "desktop",
+            egui::ColorImage::filled([2, 2], egui::Color32::BLUE),
+            Default::default(),
+        );
+        app.desktop_textures.insert(dell.clone(), here.clone());
+        let before = backdrops(&app);
+        assert_eq!(before, [(dell, Some(here.id()))]);
+
+        // The laptop links and sends its pictures before this window has rebuilt its map
+        // with it: nothing of the laptop's lands on this machine's screen.
+        app.agent_said(Message::Peers(laptop_linked(1)));
+        answer_wallpapers(&mut app, &ctx, &mut incoming);
+        assert_eq!(app.remote_textures.len(), 2);
+        assert_eq!(backdrops(&app), before);
     }
 
     #[test]

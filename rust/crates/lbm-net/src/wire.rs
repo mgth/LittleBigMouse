@@ -8,7 +8,7 @@
 
 use std::io;
 
-use lbm_ipc::peer::PeerDisplay;
+use lbm_ipc::peer::{PeerDisplay, PeerWallpaper};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -95,6 +95,14 @@ pub enum Control {
         revision: u64,
         #[serde(default)]
         displays: Vec<PeerDisplay>,
+    },
+    /// Remote → master: what each of the remote's screens shows, drawn small, at link-up
+    /// and after its display changes. A higher revision replaces a lower one. Added after
+    /// protocol 1 without a new version: an older master sees an unknown type.
+    Wallpapers {
+        revision: u64,
+        #[serde(default)]
+        wallpapers: Vec<PeerWallpaper>,
     },
     /// Either way: write VCP 0x60 = `value` on that display.
     SelectInput {
@@ -249,6 +257,38 @@ mod tests {
             std::str::from_utf8(&select[5..]).unwrap(),
             r#"{"Type":"SelectInput","Display":"DP-1","Value":17}"#
         );
+    }
+
+    #[tokio::test]
+    async fn wallpapers_cross_as_a_picture_or_a_colour_per_display() {
+        let message = Control::Wallpapers {
+            revision: 4,
+            wallpapers: vec![
+                PeerWallpaper {
+                    display: "eDP-1".into(),
+                    image: Some("/9j/4AAQ".into()),
+                    color: None,
+                },
+                PeerWallpaper {
+                    display: "HDMI-1".into(),
+                    image: None,
+                    color: Some("#203040".into()),
+                },
+            ],
+        };
+        let frame = encode_control(&message).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&frame[5..]).unwrap(),
+            concat!(
+                r#"{"Type":"Wallpapers","Revision":4,"Wallpapers":["#,
+                r#"{"Display":"eDP-1","Image":"/9j/4AAQ"},"#,
+                r##"{"Display":"HDMI-1","Color":"#203040"}]}"##
+            )
+        );
+        assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(message));
+        // The bound of a whole message of wallpapers (512 KiB of pictures) fits a control
+        // frame once in base64, with room for the JSON around it.
+        const { assert!(512 * 1024 * 4 / 3 + 64 * 1024 < MAX_CONTROL_SIZE) };
     }
 
     #[tokio::test]

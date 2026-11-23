@@ -266,6 +266,14 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   découverte du monde et non par un `Backend::detect()` refait sur place : un monde de test
   (sorties décrites ou de repli) n'a aucun compositeur à déplacer.
 
+- **Fonds d'écran d'un poste distant** (mode multi-PC, `docs/multi-pc.md`, « Wallpapers ») :
+  le `Desktop` sait aussi dire ce que chaque sortie affiche (`shown`, en lecture seule, le
+  lecteur partagé avec la fenêtre : `lbm_wallpaper::desktop`). Un agent distant le lit, tant
+  qu'un maître est relié, à la liaison et après chaque reconstruction — jamais sur minuterie
+  —, en dessine une vignette par écran (`peers::wallpapers`, 384 px de large, 96 Kio par
+  écran, 512 Kio par message) et l'envoie (`Wallpapers`). Le maître garde la dernière, la
+  signale par `WallpaperRevision` dans l'état `Peers` et la sert par `PeerWallpapers`.
+
 ## Suite
 
 Par ordre de valeur :

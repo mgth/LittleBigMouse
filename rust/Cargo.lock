@@ -2482,6 +2482,7 @@ name = "lbm-app"
 version = "0.1.0"
 dependencies = [
  "ashpd",
+ "base64 0.22.1",
  "eframe",
  "egui",
  "image",
@@ -2673,7 +2674,10 @@ dependencies = [
  "image",
  "lbm-layout",
  "lbm-store",
+ "serde_json",
  "tempfile",
+ "url",
+ "windows 0.58.0",
 ]
 
 [[package]]

@@ -443,7 +443,13 @@ impl Actor {
         let pending = match result {
             Ok(pending) => *pending,
             Err(error) => {
-                if expected.is_none() {
+                // A paired remote is dialled again and again while it is away: say so
+                // the first time only. Saying nothing at all hid a stored address with
+                // no port behind a peer that simply never linked.
+                let first_failure = expected
+                    .as_ref()
+                    .is_none_or(|machine_id| !self.backoff.contains_key(machine_id));
+                if first_failure {
                     eprintln!("[lbm-agent] multi-PC: cannot connect to {address}: {error}");
                 }
                 answer(reply, Err(format!("cannot connect to {address}: {error}")));

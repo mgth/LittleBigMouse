@@ -19,6 +19,7 @@ use lbm_store::{
 use crate::autostart::XdgAutostart;
 use crate::discovery::Discovery;
 use crate::gap_guard::{run_kscreen_doctor, GapGuard};
+use crate::peers::RemoteScreens;
 use crate::reconcile::{LayoutState, World};
 
 /// The world the runtime drives.
@@ -57,6 +58,24 @@ pub trait AgentWorld: World {
     /// only while the mode is on, after a rebuild: none by default.
     fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
         Vec::new()
+    }
+
+    /// The screens of the machines this one is the master of, for the next rebuild to
+    /// merge (multi-PC). Whether they differ from those held: a difference is a display
+    /// change. A world that merges nothing ignores them.
+    fn set_remote_screens(&mut self, _remotes: Vec<RemoteScreens>) -> bool {
+        false
+    }
+
+    /// Shows `source` on the shared panel `monitor` of the current layout, and saves.
+    /// Refused as [`edit`](Self::edit) is for another layout than the current one.
+    fn set_active_source(
+        &mut self,
+        _layout_id: &str,
+        _monitor: &str,
+        _source: &str,
+    ) -> Result<(), String> {
+        Err("this agent shows no other machine's screens".to_owned())
     }
 
     /// Persists the current layout's Enabled alone.
@@ -205,6 +224,9 @@ pub struct SystemWorld<S, P> {
     /// `None` leaves the desktop alone — a scratch agent has no business repainting the
     /// user's background.
     wallpaper: Option<WallpaperPaths>,
+    /// The machines this one is the master of, with their screens: merged into every
+    /// rebuild (multi-PC). Empty unless the mode is on and a remote is linked.
+    remotes: Vec<RemoteScreens>,
 }
 
 /// The two places the wallpaper lives.
@@ -227,6 +249,7 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
             preview: None,
             gaps: None,
             wallpaper: None,
+            remotes: Vec::new(),
         }
     }
 
@@ -274,14 +297,60 @@ impl<S: LayoutStore, P: PersistencePlatform> SystemWorld<S, P> {
         Ok(layout)
     }
 
+    /// The current layout, if `layout_id` names it, it takes edits, and `document` was
+    /// made for the same machines.
+    ///
+    /// The id alone does not say so: a remote whose screens are all panels this
+    /// machine has adds no monitor, so the id stays the same whether it is linked or
+    /// not. A document made while it was (its sources say which machine they are on)
+    /// applied to the layout made after it left, or the other way round, would be an
+    /// edit of a desktop that is not there.
+    fn editable_by(
+        &mut self,
+        layout_id: &str,
+        document: &LayoutDocument,
+    ) -> Result<&mut Layout, String> {
+        let layout = self.editable(layout_id)?;
+        if let Some(stored) = &document.layout {
+            let mut theirs: Vec<String> = stored
+                .monitors
+                .values()
+                .filter_map(|m| m.sources.as_ref())
+                .flat_map(|sources| sources.values())
+                .filter_map(|s| s.host.clone())
+                .collect();
+            theirs.sort();
+            theirs.dedup();
+            if theirs != layout.hosts() {
+                return Err(format!(
+                    "the layout {layout_id} was edited with other machines than are linked \
+                     now: the displays changed"
+                ));
+            }
+        }
+        Ok(layout)
+    }
+
     fn outputs(&self) -> Vec<lbm_layout::linux::LinuxMonitor> {
         self.discovery.outputs()
     }
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
+    /// This machine's signature, followed, while remotes are merged, by a hash of
+    /// their screens: a remote linking, leaving or changing its screens has to be a
+    /// change here, or the settle loop would take the rebuild for one with nothing to
+    /// do. Unchanged when there is no remote, so nothing is rebuilt on that account.
     fn display_signature(&mut self) -> String {
-        self.discovery.signature()
+        let local = self.discovery.signature();
+        if self.remotes.is_empty() {
+            return local;
+        }
+        let remotes = serde_json::to_string(&self.remotes).unwrap_or_default();
+        format!(
+            "{local}|remotes:{}",
+            lbm_ipc::protocol::fingerprint(&remotes)
+        )
     }
 
     fn rebuild_layout(&mut self) {
@@ -289,7 +358,13 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
         let mut layout = Layout::new(LayoutOptions::default());
         let first_load = self.first_load.take();
         let persistence = &mut self.persistence;
+        let remotes = &self.remotes;
         let loaded = self.discovery.populate(&mut layout, |l| {
+            // The remotes go in between this machine's screens and the id, which is
+            // where `populate` calls the load: the id is then the one of every monitor
+            // shown, so the profile loaded is the one of this set of machines, and the
+            // store restores the remote monitors as it restores the others.
+            merge_remotes(l, remotes);
             if let Some(before) = first_load {
                 before(&l.id, persistence.store());
             }
@@ -331,6 +406,47 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
         self.discovery.peer_displays()
+    }
+    fn set_remote_screens(&mut self, remotes: Vec<RemoteScreens>) -> bool {
+        if self.remotes == remotes {
+            return false;
+        }
+        self.remotes = remotes;
+        true
+    }
+    fn set_active_source(
+        &mut self,
+        layout_id: &str,
+        monitor: &str,
+        source: &str,
+    ) -> Result<(), String> {
+        self.editable(layout_id)?;
+        let layout = self.layout.as_mut().ok_or("no layout yet")?;
+        let shown = layout
+            .monitor(monitor)
+            .ok_or_else(|| format!("{monitor} is not a monitor of this layout"))?;
+        if !shown.sources.iter().any(|s| s == source) {
+            return Err(format!("{source} is not a source of {monitor}"));
+        }
+        // A source its machine's desktop does not hold has no zone: choosing it would
+        // take the panel out of the engine altogether. Switching the monitor's input
+        // (lot 8) is what may make a detached source worth choosing.
+        if !layout
+            .source(source)
+            .is_some_and(|s| s.source.attached_to_desktop)
+        {
+            return Err(format!(
+                "{source} is not on its machine's desktop: that machine cannot show {monitor}"
+            ));
+        }
+        layout.set_active_source(monitor, Some(source.to_owned()));
+        self.persistence.save(layout).map_err(|e| e.to_string())?;
+        // The hook runs the preview while there is one. The choice is the user's, not
+        // part of the experiment, so the preview shows it too.
+        if let Some(preview) = self.preview.as_mut() {
+            preview.set_active_source(monitor, Some(source.to_owned()));
+        }
+        Ok(())
     }
     fn vcp_target(&self, monitor: &str) -> Result<crate::vcp::Target, String> {
         crate::vcp::target(self.layout.as_ref().ok_or("No current layout.")?, monitor)
@@ -422,11 +538,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 
     fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
-        let bounds = self
-            .preview
-            .as_ref()
-            .or(self.layout.as_ref())?
-            .desktop_pixel_bounds()?;
+        let bounds = local_desktop(self.preview.as_ref().or(self.layout.as_ref())?)?;
         // Truncated the way the zones' own pixel rectangles are written to the wire,
         // so the two describe the same grid.
         Some(lbm_ipc::protocol::Desktop {
@@ -456,7 +568,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 
     fn edit(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
-        document.apply(self.editable(layout_id)?);
+        document.apply(self.editable_by(layout_id, document)?);
         Ok(())
     }
 
@@ -465,7 +577,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         layout_id: &str,
         document: &LayoutDocument,
     ) -> Result<String, String> {
-        let mut copy = self.editable(layout_id)?.clone();
+        let mut copy = self.editable_by(layout_id, document)?.clone();
         document.apply(&mut copy);
         Ok(compute_zones(&copy).serialize())
     }
@@ -536,7 +648,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         let dry = how == How::DryRun;
         // The layout is borrowed for this block only, so the gap guard below is free.
         let wanted: Vec<lbm_display::linux::topology::Wanted> = {
-            document.apply(self.editable(layout_id)?);
+            document.apply(self.editable_by(layout_id, document)?);
             let layout = self.layout.as_mut().ok_or("no layout yet")?;
             // **A dry run does not save either.** The save is not a detail of applying,
             // it is a write to the user's profile — and a preview that rewrote the thing
@@ -621,8 +733,11 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         if !matches!(self.discovery, Discovery::Windows) {
             return Err("This discovery backend cannot change Windows display positions.".into());
         }
-        let (mut edited, wanted) =
-            crate::windows_topology::prepare(self.editable(layout_id)?, document, adjust_scale)?;
+        let (mut edited, wanted) = crate::windows_topology::prepare(
+            self.editable_by(layout_id, document)?,
+            document,
+            adjust_scale,
+        )?;
         let dry = how == lbm_display::linux::topology::How::DryRun;
         let report = lbm_display::windows::topology::placement::apply(&wanted, dry, || {
             self.persistence
@@ -636,7 +751,7 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     }
 
     fn set_preview(&mut self, layout_id: &str, document: &LayoutDocument) -> Result<(), String> {
-        let mut preview = self.editable(layout_id)?.clone();
+        let mut preview = self.editable_by(layout_id, document)?.clone();
         document.apply(&mut preview);
         self.preview = Some(preview);
         Ok(())
@@ -713,6 +828,53 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             None => false,
         }
     }
+}
+
+/// Merges the remotes' screens into a layout holding this machine's, and gives it the
+/// id of the whole set. Nothing at all without remotes: the id is then the one
+/// `populate` computed, and a machine alone builds exactly what it always has.
+fn merge_remotes(layout: &mut Layout, remotes: &[RemoteScreens]) {
+    if remotes.is_empty() {
+        return;
+    }
+    for remote in remotes {
+        lbm_display::peer::merge_peer(layout, &remote.machine_id, &remote.name, &remote.displays);
+    }
+    layout.id = layout.compute_id();
+}
+
+/// This machine's desktop, in its pixels: what the hook's absolute pointing device
+/// spans, so the remote screens never take part.
+///
+/// A shared panel showing another machine is still an output of this desktop (the
+/// compositor does not know the panel looks elsewhere), so its local source counts
+/// although it is not the one shown. Without remotes, exactly
+/// [`Layout::desktop_pixel_bounds`].
+fn local_desktop(layout: &Layout) -> Option<lbm_layout::geo::Rect> {
+    if layout.hosts().is_empty() {
+        return layout.desktop_pixel_bounds();
+    }
+    layout
+        .sources()
+        .filter(|s| s.source.is_local() && s.source.attached_to_desktop)
+        .filter(|s| {
+            layout.monitor(&s.monitor).is_some_and(|m| {
+                m.active_source.as_deref() == Some(s.source.id.as_str())
+                    || !layout.shows_local_source(m)
+            })
+        })
+        .map(|s| s.source.in_pixel.bounds())
+        .reduce(|a, b| {
+            // Min/max, not `Rect::union`: see `desktop_pixel_bounds`.
+            let left = a.left().min(b.left());
+            let top = a.top().min(b.top());
+            lbm_layout::geo::Rect::new(
+                left,
+                top,
+                a.right().max(b.right()) - left,
+                a.bottom().max(b.bottom()) - top,
+            )
+        })
 }
 
 /// Starting with the session: the XDG autostart entry (Linux), the scheduled task

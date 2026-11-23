@@ -56,6 +56,9 @@
 //! -> {"Id": 11, "Method": "PeerAccept", "MachineId": "…"}     // also PeerRefuse, PeerForget
 //! -> {"Id": 12, "Method": "Peers"}                             // the state, as above
 //! <- {"Event": "Peers", "Peers": {… the state, whenever it changes …}}
+//! -> {"Id": 13, "Method": "SetActiveSource", "LayoutId": "…", "Monitor": "DEL4065_ABC123",
+//!     "Source": "HDMI-1@a1b2c3d4"}                             // a shared panel's machine
+//! <- {"Id": 13, "Result": null}
 //! ```
 
 use std::io;
@@ -80,8 +83,10 @@ pub const PROTOCOL: u32 = 3;
 ///   stored, whatever the detected shape (#728, #730). An agent without it swaps a
 ///   size whose landscape/portrait shape contradicts the detected panel.
 /// - `MultiPc`: the multi-PC requests (`Peers`, `SetMultiPc`, `PeerConnect`,
-///   `PeerAccept`, `PeerRefuse`, `PeerForget`) and the `Peers` event, which also carry
-///   the remote machines' screens (docs/multi-pc.md).
+///   `PeerAccept`, `PeerRefuse`, `PeerForget`, `SetActiveSource`) and the `Peers`
+///   event, which also carry the remote machines' screens (docs/multi-pc.md). The
+///   layout of a master holds its remotes' screens: its `LayoutId` is that of every
+///   monitor, theirs included.
 pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc"];
 
 //==================//
@@ -291,6 +296,18 @@ pub enum Request {
     PeerForget {
         #[serde(rename = "MachineId")]
         machine_id: String,
+    },
+    /// Which machine a panel two machines know shows (`MultiPc`): `Source` is one of
+    /// the sources of `Monitor` in the current layout, on its machine's desktop. Saved,
+    /// and handed to a running engine. Refused for another layout than the current one,
+    /// as an edit is.
+    SetActiveSource {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Monitor")]
+        monitor: String,
+        #[serde(rename = "Source")]
+        source: String,
     },
 }
 

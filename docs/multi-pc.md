@@ -151,10 +151,44 @@ On the master (lot 6, evdev backend only; the details are in
     once it said `Hello`;
   - `PeerAccept`, `PeerRefuse`, `PeerForget` `{ MachineId }` → `null`;
   - event `{ "Event": "Peers", "Peers": <state> }` to subscribers on every change.
-- **Lot 5b** plugs the remotes' screens into the world where the agent receives that
-  state (`Agent::peers_changed` in `runtime.rs`).
 - `cargo run -p lbm-agent --example peer_drive -- ADDR ID_DIR [script]` is a master
   without a hook, for trying a remote by hand (see the example's header).
+
+## The master's layout (lot 5b)
+
+- **Which screens**: those of every machine in `peers.json` linked now as a **remote** of
+  this one (it said `Remote` in its `Hello`) that has sent its `Displays`, in machine-id
+  order. A machine this one is the remote of is never merged, nor one pending.
+- **A display change**: such a machine linking, leaving, or sending other screens goes
+  through the reconciler exactly as a local display change (`Input::DisplayChanged`:
+  debounce, settle loop, rebuild, profile, `Load`+`Run` if the layout is enabled). The
+  display signature carries a hash of the remotes' screens, since a remote sharing only
+  panels this machine has leaves the layout id unchanged.
+- **Building it**, in this order — the agent's rebuild, and what a frontend must do to
+  hold the same layout (same id, same zones):
+  1. this machine's displays mapped (`lbm_layout::linux::populate` /
+     `windows::populate`, which compute an id and then call the load closure);
+  2. in that closure, before anything else, `lbm_display::peer::merge_peer(layout,
+     machine_id, name, &displays)` for each remote, in machine-id order, with the
+     `Displays` of the `Peers` state (`Name` is the peer's);
+  3. `layout.id = layout.compute_id()` (only when something was merged);
+  4. the store loaded (`LayoutPersistence::load`); `populate` then places what the store
+     did not (remote monitors to the right of the local ones) and anchors.
+- A new set of monitors is a new profile, **off** until the user enables it, as for any
+  unknown layout: the first time a remote with screens of its own links, the engine
+  stops on it.
+- **Local only**: `Desktop` in `Load` is this machine's desktop — a shared panel showing
+  the other machine is still one of its outputs, so its local source counts; wallpaper,
+  VCP targets, topology (`ApplyTopology`, `ChangeOutput`), the gap guard and the screens
+  reported to a master see local sources only.
+- **Documents**: an edit, preview, probe or topology document is refused when the
+  machines its sources name (`Host`) are not those of the current layout, even under the
+  same `LayoutId`: an edit made with a remote linked is not applied to the layout made
+  after it left, nor the other way round.
+- **`SetActiveSource { LayoutId, Monitor, Source }`** (API, `MultiPc`): shows `Source` (one
+  of the monitor's sources, attached to its machine's desktop) on the panel, saves, and
+  hands a running engine the new zones; answered `null`. The VCP 0x60 write of input
+  switching (lot 8) plugs in where the runtime handles it.
 
 ## A panel both machines know
 

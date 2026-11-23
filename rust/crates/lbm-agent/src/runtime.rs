@@ -531,7 +531,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.tell_shortcut();
                 self.tell_binding();
                 self.tell_excluded();
-                self.reload_changed_options();
+                self.reload_changed_zones();
                 saved.map(|()| serde_json::Value::Null)
             }
             Request::SaveWallpaper {
@@ -615,6 +615,27 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerForget { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Forget(machine_id))
             }
+            Request::SetActiveSource {
+                layout_id,
+                monitor,
+                source,
+            } => self
+                .world
+                .set_active_source(&layout_id, &monitor, &source)
+                .map(|()| {
+                    eprintln!("[lbm-agent] {monitor} now shows {source}");
+                    // LOT 8 PLUGS IN HERE: a panel wired to both machines on two inputs
+                    // is switched by writing VCP 0x60 with the chosen source's
+                    // `InputSource` — here when this machine reaches it over DDC, else
+                    // asked of its machine with `SelectInput` (docs/multi-pc.md,
+                    // "Input switching"). Until then only the routing follows the
+                    // choice, which is all a hardware KVM needs.
+                    //
+                    // The zone of the panel has changed hands: a running engine must
+                    // route it to the machine now shown.
+                    self.reload_changed_zones();
+                    serde_json::Value::Null
+                }),
         };
         client.send(api::answer(id, result));
         if let Some(report) = report {
@@ -664,14 +685,20 @@ impl<W: AgentWorld> Agent<W> {
 
     /// What the multi-PC manager reports changed: a machine paired, linked, left, or —
     /// for a remote of this machine — reported its screens.
+    ///
+    /// The screens of the remotes of this machine are part of its layout: a remote
+    /// linking, leaving or changing its screens is a display change, and goes the way
+    /// of one — the debounce and the settle loop, then the rebuild, the profile of the
+    /// new set of monitors, and the hook handed the result if the user wants it hooked.
+    /// The same path as a local change, so that a link flapping is absorbed as a
+    /// compositor's burst of notifications is.
     fn peers_changed(&mut self, state: crate::peers::PeersState) {
-        // LOT 5b PLUGS IN HERE: the remotes' screens (`state.peers[..].peer.displays`
-        // of the linked `Role::Remote` peers) are to be merged into the world, and a
-        // remote appearing, leaving or changing its screens becomes a display change
-        // for the reconciler (`Input::DisplayChanged`, docs/multi-pc.md "Model"). Until
-        // then they only reach the frontends.
         let event = api::peers_event(&state);
         self.subscribers.retain(|s| s.send(event.clone()));
+        if self.world.set_remote_screens(state.remote_screens()) {
+            eprintln!("[lbm-agent] the remote machines' screens changed");
+            self.handle(Input::DisplayChanged);
+        }
     }
 
     /// A frontend's connection ended.
@@ -786,10 +813,11 @@ impl<W: AgentWorld> Agent<W> {
     ///
     /// Sent before any layout, so the first `Run` of a connection is decided against
     /// the user's list and not against an empty one.
-    /// Some options travel inside the layout the hook holds (the touchscreen ones): a
-    /// running engine only gets them with a new Load. Nothing is sent when the zones
-    /// did not change, and a stopped engine picks them up at its next Start.
-    fn reload_changed_options(&mut self) {
+    /// Some options travel inside the layout the hook holds (the touchscreen ones), and
+    /// so does which machine a shared panel shows: a running engine only gets them with
+    /// a new Load. Nothing is sent when the zones did not change, and a stopped engine
+    /// picks them up at its next Start.
+    fn reload_changed_zones(&mut self) {
         if !matches!(
             self.reconciler.engine(),
             EngineState::Running | EngineState::Paused

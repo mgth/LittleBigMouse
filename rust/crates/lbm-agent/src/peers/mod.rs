@@ -92,6 +92,49 @@ pub struct PeersState {
     pub peers: Vec<PeerEntry>,
 }
 
+/// A machine this one is the master of, and the screens it reported: what the layout
+/// merges (docs/multi-pc.md, "Model").
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RemoteScreens {
+    /// Its certificate fingerprint: the host of the sources merged from it.
+    pub machine_id: String,
+    /// What the map shows it as.
+    pub name: String,
+    pub displays: Vec<PeerDisplay>,
+}
+
+impl PeersState {
+    /// The screens the layout is to hold besides this machine's: those of every paired
+    /// machine linked as a remote of this one, in machine-id order so that the same
+    /// machines always give the same layout.
+    ///
+    /// A machine this one is the remote of is never merged: its screens are its own
+    /// master's business, and it sends none anyway. A pending machine is not trusted
+    /// yet, and a linked remote that has not reported its screens has nothing to add.
+    pub fn remote_screens(&self) -> Vec<RemoteScreens> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        let mut remotes: Vec<RemoteScreens> = self
+            .peers
+            .iter()
+            .filter(|p| {
+                p.state == PeerState::Paired
+                    && p.role == Role::Remote
+                    && p.peer.connected
+                    && !p.peer.displays.is_empty()
+            })
+            .map(|p| RemoteScreens {
+                machine_id: p.peer.machine_id.clone(),
+                name: p.peer.name.clone(),
+                displays: p.peer.displays.clone(),
+            })
+            .collect();
+        remotes.sort_by(|a, b| a.machine_id.cmp(&b.machine_id));
+        remotes
+    }
+}
+
 /// What the manager tells the agent.
 #[derive(Clone, Debug)]
 pub enum Notice {
@@ -407,3 +450,75 @@ impl Service {
 }
 
 const STOPPED: &str = "the multi-PC manager stopped";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: &str, role: Role, state: PeerState, connected: bool) -> PeerEntry {
+        PeerEntry {
+            peer: Peer {
+                machine_id: id.to_owned(),
+                name: id.to_owned(),
+                address: String::new(),
+                connected,
+                displays: vec![PeerDisplay {
+                    id: "eDP-1".into(),
+                    connector: "eDP-1".into(),
+                    name: String::new(),
+                    edid: None,
+                    x: 0,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                    scale: 1.0,
+                    effective_dpi: 96.0,
+                    orientation: 0,
+                    frequency: 60.0,
+                    primary: true,
+                    attached: true,
+                    width_mm: 344.0,
+                    height_mm: 194.0,
+                    input_source: None,
+                }],
+            },
+            role,
+            state,
+        }
+    }
+
+    fn state(enabled: bool, peers: Vec<PeerEntry>) -> PeersState {
+        PeersState {
+            enabled,
+            port: 24817,
+            name: "desk".into(),
+            machine_id: None,
+            listen_address: None,
+            error: None,
+            peers,
+        }
+    }
+
+    fn ids(remotes: &[RemoteScreens]) -> Vec<&str> {
+        remotes.iter().map(|r| r.machine_id.as_str()).collect()
+    }
+
+    #[test]
+    fn only_the_linked_paired_remotes_of_this_machine_are_merged_in_machine_id_order() {
+        let mut silent = entry("e", Role::Remote, PeerState::Paired, true);
+        silent.peer.displays.clear();
+        let peers = vec![
+            entry("d", Role::Remote, PeerState::Paired, true),
+            entry("a", Role::Master, PeerState::Paired, true),
+            entry("b", Role::Remote, PeerState::Paired, false),
+            entry("c", Role::Remote, PeerState::Pending, true),
+            entry("c2", Role::Remote, PeerState::Paired, true),
+            silent,
+        ];
+        assert_eq!(
+            ids(&state(true, peers.clone()).remote_screens()),
+            ["c2", "d"]
+        );
+        assert!(state(false, peers).remote_screens().is_empty());
+    }
+}

@@ -354,8 +354,11 @@ fn measure(source: &Path) -> Option<Size> {
     }
 }
 
+/// A panel showing another machine (multi-PC) is not on this desktop: its rectangle is
+/// in that machine's pixels.
 fn on_the_desktop(layout: &Layout, monitor: &lbm_layout::model::Monitor) -> bool {
-    active_source(layout, monitor).is_some_and(|source| source.attached_to_desktop)
+    active_source(layout, monitor)
+        .is_some_and(|source| source.attached_to_desktop && source.is_local())
 }
 
 fn active_source<'a>(
@@ -523,6 +526,51 @@ mod tests {
             (1920.0, 0.0),
             "the second screen's own position, which is how the desktop finds it"
         );
+    }
+
+    #[test]
+    fn a_screen_of_another_machine_is_not_painted_here() {
+        use lbm_layout::remote::{merge_remote, RemoteMonitor};
+
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut layout = desktop();
+        merge_remote(
+            &mut layout,
+            "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+            "laptop",
+            &[RemoteMonitor {
+                id: "eDP-1".into(),
+                connector: "eDP-1".into(),
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+                attached: true,
+                width_mm: 344.0,
+                height_mm: 194.0,
+                ..RemoteMonitor::default()
+            }],
+        );
+        layout.set_locations_from_system_configuration(false);
+        let mut settings = LayoutWallpaperSettings::default();
+        for id in ids(&layout) {
+            settings.per_screen.insert(
+                id,
+                ScreenWallpaperSettings {
+                    kind: ScreenWallpaperKind::Color,
+                    image_path: None,
+                    style: WallpaperStyle::Fill,
+                    color: "#102030".to_owned(),
+                },
+            );
+        }
+        assert_eq!(ids(&layout).len(), 3);
+
+        // Both ways of working out the screens: this module's, and the renderer the
+        // agent paints the saved settings with.
+        assert_eq!(screens(&layout, &settings, dir.path()).len(), 2);
+        let painted = crate::wallpaper_job::screens(&layout, &settings, dir.path()).unwrap();
+        assert_eq!(painted.len(), 2);
+        assert!(painted.iter().all(|s| s.x < 3840.0));
     }
 
     #[test]

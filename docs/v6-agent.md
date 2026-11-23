@@ -167,8 +167,21 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   terminaison d'entrée du hook, fermé à la fin du lien. Maître : derniers `Displays` gardés
   par distant, lots du hook relayés au distant lié (un seul à la fois pour l'instant). API
   additive (capacité `MultiPc`, protocole inchangé) : `Peers`, `SetMultiPc`, `PeerConnect`,
-  `PeerAccept`, `PeerRefuse`, `PeerForget`, événement `Peers`. Le point d'entrée du lot 5b
-  (écrans distants dans le monde) est `Agent::peers_changed`.
+  `PeerAccept`, `PeerRefuse`, `PeerForget`, `SetActiveSource`, événement `Peers`.
+- Écrans distants dans la mise en page (lot 5b) : `Agent::peers_changed` passe au monde les
+  écrans des machines dont celle-ci est le maître (appairées, liées, rôle `Remote`, ayant
+  envoyé leurs `Displays`, triées par empreinte) ; un changement de cet ensemble est un
+  `DisplayChanged` comme un autre (anti-rebond, stabilisation, reconstruction, profil,
+  `Load`+`Run` si voulu). La signature d'écrans y ajoute une empreinte des écrans distants,
+  puisqu'un distant ne partageant que des dalles déjà connues ne change pas l'identifiant.
+  La reconstruction fusionne (`lbm_display::peer::merge_peer`) entre les écrans locaux et
+  le calcul de l'identifiant, avant le chargement du profil. `Desktop` reste le bureau local
+  (une dalle partagée montrant l'autre machine en fait toujours partie) ; fond d'écran et
+  VCP ignorent les écrans distants. Un document dont les sources ne nomment pas les mêmes
+  machines que la mise en page courante est refusé même à identifiant égal.
+  `SetActiveSource { LayoutId, Monitor, Source }` choisit la machine qu'affiche une dalle
+  partagée (source attachée seulement), enregistre, et renvoie les zones à un moteur en
+  marche ; l'écriture VCP 0x60 viendra au lot 8 (point d'accroche marqué dans `runtime.rs`).
 - Élévation au démarrage sous Windows (`elevation`, C# `WindowsElevation`, #512/#400) :
   avant même le verrou d'instance, si `StartElevated` est demandé (store, ou registre 5.x
   tant que l'import n'a pas eu lieu) **et** que l'utilisateur peut élever (jeton filtré

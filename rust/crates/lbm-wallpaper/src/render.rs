@@ -192,7 +192,9 @@ pub fn paint(
         .iter()
         .filter_map(|m| {
             let s = &layout.source(m.active_source.as_deref()?)?.source;
-            if !s.attached_to_desktop {
+            // A panel showing another machine (multi-PC) is not this desktop's to
+            // paint: its rectangle is in that machine's pixels.
+            if !s.attached_to_desktop || !s.is_local() {
                 return None;
             }
             Some((m, s, layout.depth_projection(m)?))

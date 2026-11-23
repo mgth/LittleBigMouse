@@ -1705,3 +1705,515 @@ async fn a_frontend_drives_the_multi_pc_mode_and_a_master_sees_the_screens_follo
     assert_eq!(off["ListenAddress"], Value::Null);
     assert_eq!(off["Name"], "tower", "kept for the next time");
 }
+
+//==================//
+// A master's layout //
+//==================//
+
+/// A 128-byte EDID block of a Dell U2720Q (DEL 4065) with `serial_string` as its serial
+/// descriptor. `interface` is the low nibble of byte 20 (5: DisplayPort, 2: HDMI), which
+/// differs between two inputs of one monitor, as the checksum does; the panel key does
+/// not.
+fn dell_edid(serial_string: &str, interface: u8) -> Vec<u8> {
+    let mut b = vec![0u8; 128];
+    b[..8].copy_from_slice(&[0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0]);
+    // "DEL": D=4, E=5, L=12 in five-bit letters.
+    let letters = (4u16 << 10) | (5 << 5) | 12;
+    b[8] = (letters >> 8) as u8;
+    b[9] = letters as u8;
+    b[10] = 0x65;
+    b[11] = 0x40;
+    b[12..16].copy_from_slice(&[0x01, 0x02, 0x03, 0x04]);
+    b[16] = 12;
+    b[17] = 30;
+    b[18] = 1;
+    b[19] = 4;
+    b[20] = 0xA0 | interface;
+    b[21] = 60;
+    b[22] = 34;
+    // First detailed timing: 597 x 336 mm.
+    b[54] = 0x01;
+    b[66] = (597 & 0xFF) as u8;
+    b[67] = (336 & 0xFF) as u8;
+    b[68] = (((597 >> 8) << 4) | (336 >> 8)) as u8;
+    let descriptor = |b: &mut Vec<u8>, at: usize, tag: u8, text: &str| {
+        b[at..at + 5].copy_from_slice(&[0, 0, 0, tag, 0]);
+        let mut bytes = text.as_bytes().to_vec();
+        bytes.push(0x0A);
+        bytes.resize(13, 0x20);
+        b[at + 5..at + 18].copy_from_slice(&bytes);
+    };
+    descriptor(&mut b, 72, 0xFF, serial_string);
+    descriptor(&mut b, 90, 0xFC, "DELL U2720Q");
+    let sum: u32 = b[..127].iter().map(|&x| u32::from(x)).sum();
+    b[127] = ((256 - sum % 256) % 256) as u8;
+    b
+}
+
+/// The panel key both machines compute for that Dell.
+const SHARED_DELL: &str = "DEL4065_ABC123";
+
+/// This machine with the Dell on DisplayPort, alone: the outputs a test discovery gives.
+fn dell_here() -> &'static [lbm_layout::linux::LinuxMonitor] {
+    let edid = lbm_display::edid::parse("card0-DP-1", &dell_edid("ABC123", 5)).to_linux();
+    Box::leak(Box::new([lbm_layout::linux::LinuxMonitor {
+        connector_name: "DP-1".to_owned(),
+        logical_x: 0.0,
+        logical_y: 0.0,
+        logical_width: 2560.0,
+        logical_height: 1440.0,
+        pixel_width: 2560,
+        pixel_height: 1440,
+        scale: 1.0,
+        width_mm: 597.0,
+        height_mm: 336.0,
+        primary: true,
+        enabled: true,
+        orientation: 0,
+        frequency: 60,
+        edid: Some(edid),
+    }]))
+}
+
+/// One screen of the laptop, as it reports it.
+fn laptop_screen(id: &str, edid: Option<Vec<u8>>, x: i32) -> lbm_ipc::peer::PeerDisplay {
+    use base64::Engine as _;
+    lbm_ipc::peer::PeerDisplay {
+        id: id.to_owned(),
+        connector: id.to_owned(),
+        name: id.to_owned(),
+        edid: edid.map(|e| base64::engine::general_purpose::STANDARD.encode(e)),
+        x,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        scale: 1.0,
+        effective_dpi: 96.0,
+        orientation: 0,
+        frequency: 60.0,
+        primary: x == 0,
+        attached: true,
+        width_mm: 344.0,
+        height_mm: 194.0,
+        input_source: None,
+    }
+}
+
+/// What a frontend does to hold the layout a master holds: this machine's displays,
+/// then each linked remote's merged in machine-id order, the id of the whole set, and
+/// only then the store — the order the agent's rebuild follows.
+fn master_layout(
+    dir: &std::path::Path,
+    outputs: &[lbm_layout::linux::LinuxMonitor],
+    remotes: &[(&str, &str, Vec<lbm_ipc::peer::PeerDisplay>)],
+) -> lbm_layout::model::Layout {
+    let mut layout = lbm_layout::model::Layout::new(lbm_layout::model::LayoutOptions::default());
+    let mut persistence = persistence(dir);
+    lbm_layout::linux::populate(&mut layout, outputs, |l| {
+        for (machine_id, name, displays) in remotes {
+            lbm_display::peer::merge_peer(l, machine_id, name, displays);
+        }
+        l.id = l.compute_id();
+        persistence.load(l)
+    })
+    .unwrap();
+    layout
+}
+
+/// The last `Load` the hook was handed: its zones and its desktop.
+fn last_load(fake: &FakeHook) -> (String, Option<lbm_ipc::protocol::Desktop>) {
+    fake.received()
+        .iter()
+        .rev()
+        .find_map(|c| match c {
+            Command::Load { zones, desktop } => Some((zones.clone(), *desktop)),
+            _ => None,
+        })
+        .expect("a Load")
+}
+
+/// A master agent over `discovery` and a store in `dir`, its hook the fake one, and a
+/// laptop the user paired earlier as its remote, listening on loopback with nothing of
+/// an agent: what it says on its link is the test's.
+struct Master {
+    frontend: Frontend,
+    fake: FakeHook,
+    laptop: lbm_net::identity::Identity,
+    listener: lbm_net::link::Listener,
+    /// The layout of this machine alone, running.
+    alone: Value,
+}
+
+impl Master {
+    async fn start(tmp: &tempfile::TempDir, discovery: lbm_agent::discovery::Discovery) -> Master {
+        use lbm_net::wire::{Hello, Role};
+
+        let dir = tmp.path();
+        let (hook_endpoint, api_endpoint) = endpoints(tmp);
+        let fake = FakeHook::bind(&hook_endpoint).unwrap();
+        let config = dir.join("config");
+        let laptop = lbm_net::identity::Identity::load_or_create(&dir.join("laptop")).unwrap();
+        let listener = lbm_net::link::listen(
+            "127.0.0.1:0",
+            &laptop,
+            Hello::new("laptop", "0", Role::Remote),
+            lbm_net::link::Options::default(),
+        )
+        .await
+        .unwrap();
+        lbm_net::peers::PeerStore::load(&config)
+            .insert(lbm_net::peers::PairedPeer {
+                machine_id: laptop.fingerprint().to_owned(),
+                name: "laptop".into(),
+                address: listener.local_addr().to_string(),
+                role: Role::Remote,
+            })
+            .unwrap();
+
+        let (hook, signals) = HookClient::spawn(hook_endpoint);
+        let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (calls, listening) = listen(&api_endpoint);
+        let peers = lbm_agent::peers::Service::new(
+            config,
+            lbm_agent::peers::Setup {
+                bind: "127.0.0.1".parse().unwrap(),
+                input_endpoint: None,
+                options: lbm_net::link::Options::default(),
+            },
+        );
+        let world = lbm_agent::world::SystemWorld::new(discovery, persistence(dir));
+        tokio::spawn(async move {
+            let _listening = listening;
+            let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+                .with_api(calls)
+                .with_peers(peers);
+            agent.run(signals, inputs_rx, std::future::pending()).await;
+        });
+
+        let mut frontend = Frontend::connect(&api_endpoint).await;
+        frontend.ask(json!({ "Method": "Subscribe" })).await;
+        frontend.ask(json!({ "Method": "Start" })).await;
+        let alone = frontend.state(|s| s["Engine"] == "Running").await;
+        Master {
+            frontend,
+            fake,
+            laptop,
+            listener,
+            alone,
+        }
+    }
+
+    fn laptop_id(&self) -> String {
+        self.laptop.fingerprint().to_owned()
+    }
+
+    /// Turns the mode on and waits for the agent to call the laptop back: the link,
+    /// from the laptop's side.
+    async fn link_the_laptop(&mut self) -> lbm_net::link::Link {
+        let on = self
+            .frontend
+            .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0 }))
+            .await;
+        assert_eq!(on["Result"]["Enabled"], true, "{on}");
+        let pending = tokio::time::timeout(Duration::from_secs(15), self.listener.next())
+            .await
+            .expect("the agent calls its paired remote back")
+            .unwrap()
+            .unwrap();
+        pending.accept().await.unwrap()
+    }
+
+    /// The laptop reports `screens`; once the agent rebuilt on them (another layout id
+    /// than `before`, or a new revision of it), the user starts the engine on that
+    /// layout — a new set of monitors is a new profile, off until enabled.
+    async fn laptop_shows(
+        &mut self,
+        link: &lbm_net::link::Link,
+        revision: u64,
+        screens: Vec<lbm_ipc::peer::PeerDisplay>,
+    ) -> Value {
+        let before = self.alone["LayoutRevision"].as_u64().unwrap();
+        link.sender()
+            .control(&lbm_net::wire::Control::Displays {
+                revision,
+                displays: screens,
+            })
+            .await
+            .unwrap();
+        let rebuilt = self
+            .frontend
+            .state(|s| s["LayoutRevision"].as_u64().unwrap() > before)
+            .await;
+        // The engine state is the hook's word, which lags: what says the user's Start
+        // went through is the Load it sends.
+        let handed = loads(&self.fake);
+        self.frontend.ask(json!({ "Method": "Start" })).await;
+        load_after(&self.fake, handed).await;
+        // Stopped on the new layout (off until enabled), then running it.
+        self.frontend.state(|s| s["Engine"] == "Running").await;
+        rebuilt
+    }
+}
+
+/// The `Load` after the first `before`, once the hook has it.
+async fn load_after(
+    fake: &FakeHook,
+    before: usize,
+) -> (String, Option<lbm_ipc::protocol::Desktop>) {
+    for _ in 0..500 {
+        if loads(fake) > before {
+            return last_load(fake);
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no Load after the first {before}");
+}
+
+#[tokio::test]
+async fn a_remotes_screens_reach_the_hook_and_leave_with_it_and_the_desktop_stays_this_ones() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
+    let laptop_id = master.laptop_id();
+    let (zones, desktop) = last_load(&master.fake);
+    assert!(!zones.contains("Host="), "{zones}");
+    let here = desktop.expect("the desktop travels with the layout");
+    let alone_id = master.alone["LayoutId"].as_str().unwrap().to_owned();
+
+    // The laptop links and reports a screen of its own: its zone is in what the hook
+    // runs, marked as the laptop's; the desktop the hook spans is still this one.
+    let link = master.link_the_laptop().await;
+    let together = master
+        .laptop_shows(&link, 1, vec![laptop_screen("eDP-1", None, 0)])
+        .await;
+    assert_ne!(together["LayoutId"], alone_id.as_str(), "a monitor more");
+    let (zones, desktop) = last_load(&master.fake);
+    assert!(zones.contains(&format!("Host=\"{laptop_id}\"")), "{zones}");
+    assert_eq!(desktop, Some(here));
+    assert!(master.fake.hooked());
+
+    // The laptop leaves, and stays away: back to this machine's layout, enabled
+    // before, so the hook is handed it again at once — with no zone of the laptop's.
+    let loads_before = loads(&master.fake);
+    drop(master.listener);
+    link.sender().close("going home").await;
+    drop(link);
+    let back = master
+        .frontend
+        .state(|s| s["LayoutId"] == alone_id.as_str())
+        .await;
+    assert_eq!(back["Enabled"], true);
+    let (zones, desktop) = load_after(&master.fake, loads_before).await;
+    assert!(!zones.contains("Host="), "{zones}");
+    assert_eq!(desktop, Some(here));
+}
+
+#[tokio::test]
+async fn a_remote_monitors_placement_is_saved_and_rebuilt_from_the_store() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
+    let laptop_id = master.laptop_id();
+    let screens = vec![laptop_screen("eDP-1", None, 0)];
+    let link = master.link_the_laptop().await;
+    let together = master.laptop_shows(&link, 1, screens.clone()).await;
+    let layout_id = together["LayoutId"].as_str().unwrap().to_owned();
+
+    // The frontend builds the agent's layout by the same steps, and moves the laptop's
+    // screen to the left of this machine's.
+    let remotes = [(laptop_id.as_str(), "laptop", screens)];
+    let mut edited = master_layout(tmp.path(), &[], &remotes);
+    assert_eq!(edited.id, layout_id, "the same layout as the agent's");
+    let panel = lbm_layout::remote::remote_source_id(&laptop_id, "eDP-1");
+    edited.set_location(&panel, lbm_layout::geo::Point::new(-400.0, 25.0));
+    edited.set_placed(&panel, true);
+    let moved = edited.monitor(&panel).unwrap().location();
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&edited)).unwrap();
+    let saved = master
+        .frontend
+        .ask(json!({ "Method": "SaveLayout", "LayoutId": layout_id, "Document": document }))
+        .await;
+    assert_eq!(saved["Result"], Value::Null, "{saved}");
+
+    // Rebuilt from the displays and the store: the laptop's screen is where it was
+    // put, in millimetres, and the hook runs exactly what the frontend reads back.
+    let revision = together["LayoutRevision"].as_u64().unwrap();
+    master.frontend.ask(json!({ "Method": "Refresh" })).await;
+    master
+        .frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > revision && s["Engine"] == "Running")
+        .await;
+    let reread = master_layout(tmp.path(), &[], &remotes);
+    assert_eq!(reread.monitor(&panel).unwrap().location(), moved);
+    assert!(reread.monitor(&panel).unwrap().placed);
+    let expected = lbm_layout::zoning::compute_zones(&reread).serialize();
+    let mut ran = String::new();
+    for _ in 0..500 {
+        ran = last_load(&master.fake).0;
+        if ran == expected {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(ran, expected);
+}
+
+#[tokio::test]
+async fn choosing_the_machine_a_shared_panel_shows_hands_its_zone_to_that_machine() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Given(dell_here())).await;
+    let laptop_id = master.laptop_id();
+    let (_, here) = last_load(&master.fake);
+    let alone_id = master.alone["LayoutId"].as_str().unwrap().to_owned();
+
+    // The laptop has its own panel, and the Dell on HDMI: the Dell is one monitor with
+    // two sources, this machine's shown first.
+    let screens = vec![
+        laptop_screen("eDP-1", None, -1920),
+        laptop_screen("HDMI-1", Some(dell_edid("ABC123", 2)), 0),
+    ];
+    let link = master.link_the_laptop().await;
+    let together = master.laptop_shows(&link, 1, screens.clone()).await;
+    let layout_id = together["LayoutId"].as_str().unwrap().to_owned();
+    let dell_there = lbm_layout::remote::remote_source_id(&laptop_id, "HDMI-1");
+    // How many screens the engine routes to the laptop.
+    let on_the_laptop = |zones: &str| -> usize {
+        let layout = lbm_zones::ZonesLayout::from_xml(zones).unwrap();
+        layout
+            .main_zones
+            .iter()
+            .filter(|id| layout.arena[**id].host.as_deref() == Some(laptop_id.as_str()))
+            .count()
+    };
+    let (zones, _) = last_load(&master.fake);
+    assert_eq!(
+        on_the_laptop(&zones),
+        1,
+        "the Dell shown here first: {zones}"
+    );
+
+    // The user shows the laptop on the Dell: its zone goes to the laptop, at once,
+    // and the choice is in the profile.
+    let loads_before = loads(&master.fake);
+    let chosen = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": dell_there,
+        }))
+        .await;
+    assert_eq!(chosen["Result"], Value::Null, "{chosen}");
+    // A running engine is told.
+    let (zones, desktop) = load_after(&master.fake, loads_before).await;
+    assert_eq!(on_the_laptop(&zones), 2, "{zones}");
+    assert_eq!(desktop, here, "the Dell is still an output of this desktop");
+    let remotes = [(laptop_id.as_str(), "laptop", screens)];
+    let reread = master_layout(tmp.path(), dell_here(), &remotes);
+    assert_eq!(
+        reread
+            .monitor(SHARED_DELL)
+            .unwrap()
+            .active_source
+            .as_deref(),
+        Some(dell_there.as_str())
+    );
+
+    // And back.
+    let loads_before = loads(&master.fake);
+    let back = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": SHARED_DELL,
+        }))
+        .await;
+    assert_eq!(back["Result"], Value::Null, "{back}");
+    assert_eq!(
+        on_the_laptop(&load_after(&master.fake, loads_before).await.0),
+        1
+    );
+
+    // Neither a source of another monitor nor a layout that is not the current one.
+    let panel = lbm_layout::remote::remote_source_id(&laptop_id, "eDP-1");
+    let foreign = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": panel,
+        }))
+        .await;
+    assert!(foreign["Error"].is_string(), "{foreign}");
+    let stale = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": alone_id,
+            "Monitor": SHARED_DELL,
+            "Source": SHARED_DELL,
+        }))
+        .await;
+    assert!(stale["Error"].is_string(), "{stale}");
+
+    // A document made without the laptop is not for this layout, even when the ids
+    // agree — as they would, had the laptop shared the Dell alone.
+    let mut alone = master_layout(tmp.path(), dell_here(), &[]);
+    alone.id = layout_id.clone();
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&alone)).unwrap();
+    let refused = master
+        .frontend
+        .ask(json!({ "Method": "SaveLayout", "LayoutId": layout_id, "Document": document }))
+        .await;
+    assert!(
+        refused["Error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("other machines"),
+        "{refused}"
+    );
+    drop(link);
+}
+
+#[tokio::test]
+async fn a_remote_that_shares_only_a_panel_keeps_the_layout_id_and_still_rebuilds() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Given(dell_here())).await;
+    let laptop_id = master.laptop_id();
+    let alone_id = master.alone["LayoutId"].as_str().unwrap().to_owned();
+    let before = master.alone["LayoutRevision"].as_u64().unwrap();
+
+    // Only the Dell, on its HDMI input: no monitor more, the same id and profile, so
+    // the engine stays on — yet the layout is rebuilt with the laptop's source in it.
+    let link = master.link_the_laptop().await;
+    link.sender()
+        .control(&lbm_net::wire::Control::Displays {
+            revision: 1,
+            displays: vec![laptop_screen("HDMI-1", Some(dell_edid("ABC123", 2)), 0)],
+        })
+        .await
+        .unwrap();
+    let together = master
+        .frontend
+        .state(|s| s["LayoutRevision"].as_u64().unwrap() > before)
+        .await;
+    assert_eq!(together["LayoutId"], alone_id.as_str());
+    assert_ne!(
+        together["DisplaySignature"],
+        master.alone["DisplaySignature"]
+    );
+    let dell_there = lbm_layout::remote::remote_source_id(&laptop_id, "HDMI-1");
+    let chosen = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": alone_id,
+            "Monitor": SHARED_DELL,
+            "Source": dell_there,
+        }))
+        .await;
+    assert_eq!(chosen["Result"], Value::Null, "{chosen}");
+    drop(link);
+}

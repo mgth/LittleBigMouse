@@ -269,10 +269,20 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
 - **Fonds d'écran d'un poste distant** (mode multi-PC, `docs/multi-pc.md`, « Wallpapers ») :
   le `Desktop` sait aussi dire ce que chaque sortie affiche (`shown`, en lecture seule, le
   lecteur partagé avec la fenêtre : `lbm_wallpaper::desktop`). Un agent distant le lit, tant
-  qu'un maître est relié, à la liaison et après chaque reconstruction — jamais sur minuterie
-  —, en dessine une vignette par écran (`peers::wallpapers`, 384 px de large, 96 Kio par
+  qu'un maître est relié, à la liaison, après chaque reconstruction et quand le bureau
+  signale que le fond a changé — jamais sur minuterie —, en dessine une vignette par écran (`peers::wallpapers`, 384 px de large, 96 Kio par
   écran, 512 Kio par message) et l'envoie (`Wallpapers`). Le maître garde la dernière, la
   signale par `WallpaperRevision` dans l'état `Peers` et la sert par `PeerWallpapers`.
+  Le signal du bureau (`Desktop::watch`, `wallpaper_watch.rs`) n'est que des événements, et
+  n'existe que tant qu'un maître est relié : inotify sur
+  `plasma-org.kde.plasma.desktop-appletsrc` sous Plasma (le signal D-Bus `wallpaperChanged`
+  de plasmashell n'est émis que par sa méthode `setWallpaper`, pas par le dialogue de
+  réglages) ; sous Windows la diffusion `WM_SETTINGCHANGE`/`SPI_SETDESKWALLPAPER` reçue par
+  la fenêtre de `winwatch` et un `RegNotifyChangeKeyValue` sur `HKCU\Control Panel\Desktop` ;
+  rien sur les autres bureaux. Une rafale d'événements ne fait qu'une lecture (400 ms de
+  calme, 2 s au plus), et une lecture qui redonne les mêmes images n'envoie rien. **Chemin
+  Windows compilé, jamais exécuté** ; diaporamas, Spotlight et fonds par bureau virtuel à
+  essayer sur une vraie machine.
 
 ## Suite
 

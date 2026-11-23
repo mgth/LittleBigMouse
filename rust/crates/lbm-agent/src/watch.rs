@@ -244,8 +244,11 @@ pub async fn watch_displays(inputs: UnboundedSender<Input>) {
 }
 
 /// The kernel's and the desktop's announcements, as nudges to check now.
+///
+/// Shared with the wallpaper watch (`wallpaper_watch`), which follows a file of the desktop
+/// the same way.
 #[cfg(target_os = "linux")]
-mod events {
+pub(crate) mod events {
     use std::collections::BTreeSet;
     use std::ffi::{CString, OsString};
     use std::io;
@@ -367,7 +370,7 @@ mod events {
         });
     }
 
-    fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
         // SAFETY: `buf` is valid for `buf.len()` bytes, `fd` is open for the call.
         let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
         if n < 0 {

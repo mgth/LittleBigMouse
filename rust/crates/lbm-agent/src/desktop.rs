@@ -24,6 +24,8 @@ use std::sync::Mutex;
 
 use lbm_store::wallpaper_settings::WallpaperStyle;
 
+use crate::wallpaper_watch::{Changes, Watching};
+
 /// What a [`Desktop`] answers, later: a desktop environment can take its time, or hang.
 pub type DesktopFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
@@ -39,6 +41,12 @@ pub trait Desktop: Send + Sync {
     /// What each output shows now, read without changing anything: what a remote draws
     /// for its master's map (`peers::wallpapers`).
     fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>>;
+    /// Says `changes` whenever what the outputs show may have changed, for as long as the
+    /// answer is held. `None`: this desktop has no way to say, and nothing was installed.
+    ///
+    /// By events only — a desktop that could only be asked again and again answers
+    /// `None`. Called from within the runtime.
+    fn watch(&self, changes: Changes) -> Option<Watching>;
 }
 
 /// What one output of the desktop shows (`lbm_wallpaper::desktop`'s reading, shared with
@@ -73,6 +81,9 @@ impl Desktop for NoDesktop {
     fn shown(&self) -> DesktopFuture<Result<Vec<Shown>, String>> {
         Box::pin(async { Err(NO_DESKTOP.into()) })
     }
+    fn watch(&self, _changes: Changes) -> Option<Watching> {
+        None
+    }
 }
 
 /// A desktop that records what it is asked to show, for the tests. Supported, and it
@@ -84,6 +95,9 @@ pub struct FakeDesktop {
     showing: Mutex<Option<Vec<Shown>>>,
     /// How many times it was asked what it shows.
     asked: std::sync::atomic::AtomicUsize,
+    /// The watches held on it, by the number each was given.
+    watches: std::sync::Arc<Mutex<Vec<(u64, Changes)>>>,
+    watched: std::sync::atomic::AtomicU64,
 }
 
 impl FakeDesktop {
@@ -100,6 +114,34 @@ impl FakeDesktop {
     /// How many times it was asked what it shows.
     pub fn asked(&self) -> usize {
         self.asked.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Says what a desktop says when its wallpaper is changed: one event, to every watch
+    /// held on it. What it shows is [`show`](Self::show)'s business.
+    pub fn change(&self) {
+        for (_, changes) in self.watches.lock().unwrap().iter() {
+            changes.changed();
+        }
+    }
+
+    /// How many watches are held on it now.
+    pub fn watching(&self) -> usize {
+        self.watches.lock().unwrap().len()
+    }
+}
+
+/// A watch on a [`FakeDesktop`]: gone from its list when dropped.
+struct FakeWatch {
+    id: u64,
+    watches: std::sync::Arc<Mutex<Vec<(u64, Changes)>>>,
+}
+
+impl Drop for FakeWatch {
+    fn drop(&mut self) {
+        self.watches
+            .lock()
+            .unwrap()
+            .retain(|(id, _)| *id != self.id);
     }
 }
 
@@ -120,6 +162,16 @@ impl Desktop for FakeDesktop {
         self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let shown = self.showing.lock().unwrap().clone();
         Box::pin(async move { shown.ok_or_else(|| "a fake desktop shows nothing".to_owned()) })
+    }
+    fn watch(&self, changes: Changes) -> Option<Watching> {
+        let id = self
+            .watched
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.watches.lock().unwrap().push((id, changes));
+        Some(Watching::new(FakeWatch {
+            id,
+            watches: self.watches.clone(),
+        }))
     }
 }
 
@@ -144,6 +196,37 @@ impl Desktop for SystemDesktop {
                 .map_err(|e| e.to_string())?
         })
     }
+    fn watch(&self, changes: Changes) -> Option<Watching> {
+        watch(changes)
+    }
+}
+
+/// [`Desktop::watch`] of this session: Plasma's configuration file, or the Windows
+/// shell's broadcast and registry key. See `wallpaper_watch`.
+#[cfg(target_os = "linux")]
+fn watch(changes: Changes) -> Option<Watching> {
+    // The file is Plasma's: where there is none, this is another desktop — one this
+    // agent cannot read the wallpapers of either — and nothing is installed.
+    let file = crate::wallpaper_watch::plasma_config().filter(|file| file.exists())?;
+    crate::wallpaper_watch::watch_file(&file, changes)
+        .inspect_err(|error| {
+            eprintln!(
+                "[lbm-agent] multi-PC: no watch on {}: {error}. A wallpaper changed here \
+                 reaches the master at the next link or display event.",
+                file.display()
+            )
+        })
+        .ok()
+}
+
+#[cfg(windows)]
+fn watch(changes: Changes) -> Option<Watching> {
+    Some(crate::winwatch::watch_wallpaper(changes))
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn watch(_changes: Changes) -> Option<Watching> {
+    None
 }
 
 /// What one screen should show. The position is how the screen is found: the desktop knows

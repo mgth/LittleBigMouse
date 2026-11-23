@@ -106,6 +106,12 @@ pub struct Agent<W> {
     /// Counts the reads of this machine's wallpapers for its masters: only the latest
     /// one's pictures are sent.
     wallpaper_reads: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Where the desktop's watch says the wallpapers may have changed, and the watch
+    /// itself: held only while a master is linked (`peers_changed`), so a machine nobody
+    /// looks at watches nothing.
+    wallpaper_changes: crate::wallpaper_watch::Changes,
+    wallpaper_changes_rx: Option<UnboundedReceiver<()>>,
+    wallpaper_watch: Option<crate::wallpaper_watch::Watching>,
     /// The property panel's monitor control, when this agent offers it
     /// (`with_monitor_control`); the lock is also the one DDC/CI bus of this machine, so
     /// the input switching holds it too, with or without a panel to serve.
@@ -141,6 +147,7 @@ impl<W: AgentWorld> Agent<W> {
         inputs: UnboundedSender<Input>,
     ) -> Self {
         let (vcp_events, vcp_events_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (wallpaper_changes, wallpaper_changes_rx) = crate::wallpaper_watch::channel();
         Agent {
             reconciler: Reconciler::new(timings),
             world,
@@ -164,6 +171,9 @@ impl<W: AgentWorld> Agent<W> {
             wallpaper_lock: Default::default(),
             desktop: std::sync::Arc::new(crate::desktop::NoDesktop),
             wallpaper_reads: Default::default(),
+            wallpaper_changes,
+            wallpaper_changes_rx: Some(wallpaper_changes_rx),
+            wallpaper_watch: None,
             vcp: Default::default(),
             remote: None,
             peers: None,
@@ -956,13 +966,33 @@ impl<W: AgentWorld> Agent<W> {
             self.read_inputs();
             self.read_wallpapers();
         }
+        self.watch_wallpapers();
+    }
+
+    /// Holds a watch on the desktop's wallpapers exactly while a master is linked: the
+    /// only one who would see a change. Taken down with the last master, and with the
+    /// mode — `has_master` is false then.
+    fn watch_wallpapers(&mut self) {
+        if !self.has_master {
+            if self.wallpaper_watch.take().is_some() {
+                eprintln!(
+                    "[lbm-agent] multi-PC: no master left: the wallpapers are no longer watched"
+                );
+            }
+        } else if self.wallpaper_watch.is_none() {
+            self.wallpaper_watch = self.desktop.watch(self.wallpaper_changes.clone());
+            if self.wallpaper_watch.is_some() {
+                eprintln!("[lbm-agent] multi-PC: watching the wallpapers for the master");
+            }
+        }
     }
 
     /// Reads what this machine's screens show and hands it, drawn small, to the masters
     /// it is a remote of (docs/multi-pc.md, "Wallpapers"). Away from the loop: the
     /// desktop can take its time and the drawing is work. Asked after a rebuild — a
-    /// display event — and when a master links; never on a timer, so a wallpaper changed
-    /// with no display event reaches the master at the next one.
+    /// display event —, when a master links, and when the desktop says its wallpapers
+    /// changed (`wallpaper_watch`); never on a timer, so on a desktop that cannot say, a
+    /// wallpaper changed with no display event reaches the master at the next one.
     ///
     /// Only while a master is linked: a machine nobody watches reads nothing.
     fn read_wallpapers(&mut self) {
@@ -1227,6 +1257,9 @@ impl<W: AgentWorld> Agent<W> {
         let mut sleep = self.sleep.take();
         let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
         let mut vcp_events = self.vcp_events_rx.take();
+        let mut wallpaper_changes = self.wallpaper_changes_rx.take();
+        // The events of one wallpaper change, read once. No event, no deadline.
+        let mut wallpaper_burst = crate::wallpaper_watch::Burst::default();
         loop {
             self.publish();
             if self.quitting {
@@ -1303,6 +1336,32 @@ impl<W: AgentWorld> Agent<W> {
                         }
                         None => vcp_events = None,
                     }
+                    continue;
+                },
+                change = async {
+                    match &mut wallpaper_changes {
+                        Some(changes) => changes.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match change {
+                        // What a watch said before it was let go of is nobody's any more.
+                        Some(()) if self.wallpaper_watch.is_some() => {
+                            wallpaper_burst.event(tokio::time::Instant::now())
+                        }
+                        Some(()) => {}
+                        None => wallpaper_changes = None,
+                    }
+                    continue;
+                },
+                _ = async {
+                    match wallpaper_burst.due() {
+                        Some(due) => tokio::time::sleep_until(due).await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    wallpaper_burst.clear();
+                    self.read_wallpapers();
                     continue;
                 },
                 signal = signals.recv() => match signal {

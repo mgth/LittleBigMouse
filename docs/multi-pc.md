@@ -53,7 +53,8 @@ screen), Windows as master, the portal and X11 backends as master.
   - `Displays { Revision, Displays: [PeerDisplay] }` — remote → master, at connection
     and on every display change
   - `Wallpapers { Revision, Wallpapers: [{ Display, Image | Color }] }` — remote →
-    master, at link-up and after every display change (see "Wallpapers"); added after
+    master, at link-up, after every display change and when the remote's desktop says
+    its wallpaper changed (see "Wallpapers"); added after
     protocol 1 without a new version, an older master ignores it as an unknown type
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
@@ -281,11 +282,33 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   screens make a message of 60–110 KB, base64 and JSON included, well within the 1 MiB of
   a control frame. They travel remote → master, against the input stream, so they never
   queue ahead of a click.
-- **When**: at link-up (what was last read, then a fresh reading) and after every display
-  change of the remote (its rebuild), under a new `Revision` only when the pictures
-  differ; and only while a master is linked — a machine nobody watches reads nothing.
-  **Never on a timer**: a wallpaper changed on the remote with no display event reaches
-  the master at the next link or display event.
+- **When**: at link-up (what was last read, then a fresh reading), after every display
+  change of the remote (its rebuild), and when the remote's desktop says its wallpaper
+  changed (below); under a new `Revision` only when the pictures differ; and only while
+  a master is linked — a machine nobody watches reads nothing. **Never on a timer.**
+- **The desktop saying so** (`lbm-agent/src/wallpaper_watch.rs`, `Desktop::watch`):
+  events only, installed when a master links and taken down when the last one leaves or
+  the mode is turned off — a machine with no master linked holds no descriptor, thread
+  or registration for this. An event only means "read again": the reading decides, and
+  the same pictures again are sent to nobody.
+  - **Plasma**: inotify on the directory of `plasma-org.kde.plasma.desktop-appletsrc`
+    (`$XDG_CONFIG_HOME`), which plasmashell replaces by a rename when a containment's
+    wallpaper is configured. plasmashell's `wallpaperChanged` D-Bus signal is not used:
+    it is emitted by its `setWallpaper` method only, not by the settings dialog. What
+    Plasma changes without writing its configuration — the next picture of a slide
+    show — is not seen, nor read: the reader reads that configuration.
+  - **Windows**: the `WM_SETTINGCHANGE` broadcast naming `SPI_SETDESKWALLPAPER`, on the
+    hidden window the agent already has (`winwatch.rs`), and a
+    `RegNotifyChangeKeyValue` on `HKCU\Control Panel\Desktop` for what changes the
+    wallpaper without a broadcast (a slide show does not send one). A thread asleep on
+    two handles while a master is linked; none otherwise. Per-virtual-desktop
+    wallpapers and Spotlight are not known to be covered.
+  - **Other desktops** (GNOME, a bare compositor): no watch. Their wallpapers are not
+    read either; were they, a change would follow at the next link or display event.
+  - **One reading per change**: a change is a burst of events (a write then a rename, a
+    broadcast and a registry write). The reading waits for 400 ms of quiet after the
+    last event, 2 s after the first at most — a delay armed by the event, not a timer
+    that runs.
 - **On the master**: the latest per remote (highest revision on the link) is kept and
   stamped with a counter of the master's own (`WallpaperRevision` in the `Peers` state,
   `0` while there is none); the same pictures again keep their stamp. The pictures are

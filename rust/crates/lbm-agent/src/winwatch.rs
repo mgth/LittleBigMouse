@@ -12,8 +12,15 @@
 //!
 //! Every one of them is an [`Input::DisplayChanged`]: the reconciler's debounce folds it
 //! with the hook's own report of the same change.
+//!
+//! The same window hears the wallpaper being set (`WM_SETTINGCHANGE` naming
+//! `SPI_SETDESKWALLPAPER`), which matters to nobody but a master of this machine: it is
+//! passed on only while a watch is held ([`watch_wallpaper`], `wallpaper_watch`), and a
+//! registry notification stands beside it for as long, for what changes the wallpaper
+//! without a broadcast.
 
 use std::cell::RefCell;
+use std::sync::Mutex;
 
 use tokio::sync::mpsc::UnboundedSender;
 use windows::core::{w, PCWSTR};
@@ -28,7 +35,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_DISPLAYCHANGE, WM_SETTINGCHANGE, WM_WTSSESSION_CHANGE, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
 };
 
+use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::System::Registry::{
+    RegCloseKey, RegNotifyChangeKeyValue, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_NOTIFY,
+    REG_NOTIFY_CHANGE_LAST_SET,
+};
+use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForMultipleObjects, INFINITE};
+
 use crate::reconcile::Input;
+use crate::wallpaper_watch::{is_wallpaper_message, Changes, Watching};
 
 const CLASS_NAME: PCWSTR = w!("LittleBigMouseAgentDisplayWatch");
 
@@ -40,6 +55,124 @@ const WTS_SESSION_UNLOCK: usize = 0x8;
 thread_local! {
     /// Where the window's messages go: the thread's own, read by its window procedure.
     static INPUTS: RefCell<Option<UnboundedSender<Input>>> = const { RefCell::new(None) };
+}
+
+/// Who is told the wallpaper was set, while somebody is: the one watch of the agent, and
+/// the number it was given — a watch let go of late must not take down its successor.
+/// Process-wide, not the window thread's: the watch is taken and dropped from the
+/// agent's loop.
+static WALLPAPER: Mutex<Option<(u64, Changes)>> = Mutex::new(None);
+static WATCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Where the shell keeps the wallpaper, under `HKEY_CURRENT_USER`: `WallPaper` and the
+/// `TranscodedImageCache` values are rewritten when the picture changes, slide shows
+/// included, with or without a broadcast.
+const WALLPAPER_KEY: PCWSTR = w!("Control Panel\\Desktop");
+
+/// Says `changes` when the wallpaper is set, until the watch is dropped: the window's
+/// broadcast, and a notification on the registry key — a thread asleep on two handles,
+/// woken by the system or by the drop, never by a clock.
+pub fn watch_wallpaper(changes: Changes) -> Watching {
+    let id = WATCHES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    *WALLPAPER.lock().unwrap() = Some((id, changes.clone()));
+    Watching::new(WallpaperWatch {
+        id,
+        registry: RegistryWatch::spawn(changes),
+    })
+}
+
+/// The broadcast came. Nobody to tell unless a master is linked: the message then just
+/// goes its way.
+fn wallpaper_was_set() {
+    if let Some((_, changes)) = WALLPAPER.lock().unwrap().as_ref() {
+        changes.changed();
+    }
+}
+
+struct WallpaperWatch {
+    id: u64,
+    #[allow(dead_code)]
+    registry: Option<RegistryWatch>,
+}
+
+impl Drop for WallpaperWatch {
+    fn drop(&mut self) {
+        let mut told = WALLPAPER.lock().unwrap();
+        if told.as_ref().is_some_and(|(id, _)| *id == self.id) {
+            *told = None;
+        }
+    }
+}
+
+/// A handle that may cross to the thread waiting on it: an event is the kernel's, and
+/// signalling or waiting on one is sound from any thread.
+#[derive(Clone, Copy)]
+struct Event(HANDLE);
+// SAFETY: see above; the handle is closed once, by `RegistryWatch::drop`, after the join.
+unsafe impl Send for Event {}
+unsafe impl Sync for Event {}
+
+/// The thread following [`WALLPAPER_KEY`], and what ends it.
+struct RegistryWatch {
+    stop: Event,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RegistryWatch {
+    fn spawn(changes: Changes) -> Option<Self> {
+        // SAFETY: a fresh, unnamed, auto-reset event, owned by the watch.
+        let stop = Event(unsafe { CreateEventW(None, false, false, None) }.ok()?);
+        let thread = std::thread::Builder::new()
+            .name("wallpaper-watch".to_owned())
+            .spawn(move || follow_registry(stop, changes))
+            .inspect_err(|error| eprintln!("[lbm-agent] no wallpaper registry watch: {error}"))
+            .ok();
+        if thread.is_none() {
+            // SAFETY: nobody else has the handle.
+            let _ = unsafe { CloseHandle(stop.0) };
+            return None;
+        }
+        Some(RegistryWatch { stop, thread })
+    }
+}
+
+impl Drop for RegistryWatch {
+    fn drop(&mut self) {
+        // SAFETY: the event is open until the line after the join.
+        unsafe {
+            let _ = SetEvent(self.stop.0);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+            let _ = CloseHandle(self.stop.0);
+        }
+    }
+}
+
+fn follow_registry(stop: Event, changes: Changes) {
+    // SAFETY: plain registry and event calls on handles this thread opens and closes;
+    // `stop` outlives the thread (its owner joins before closing it).
+    unsafe {
+        let mut key = HKEY::default();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, WALLPAPER_KEY, 0, KEY_NOTIFY, &mut key).is_err() {
+            eprintln!("[lbm-agent] no wallpaper registry watch: the key cannot be opened");
+            return;
+        }
+        if let Ok(changed) = CreateEventW(None, false, false, None) {
+            // One notification per registration: armed again after each.
+            while RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, changed, true)
+                .is_ok()
+            {
+                let woken = WaitForMultipleObjects(&[stop.0, changed], false, INFINITE);
+                // The stop, or a wait that failed: either way there is nothing to follow.
+                if woken.0 != WAIT_OBJECT_0.0 + 1 || !changes.changed() {
+                    break;
+                }
+            }
+            let _ = CloseHandle(changed);
+        }
+        let _ = RegCloseKey(key);
+    }
 }
 
 /// Which messages mean the displays may have changed.
@@ -130,6 +263,9 @@ unsafe extern "system" fn window_procedure(
         }
         return LRESULT(0);
     }
+    if is_wallpaper_message(msg, wparam.0) {
+        wallpaper_was_set();
+    }
     // SAFETY: the default procedure, with what the window was sent.
     unsafe { DefWindowProcW(window, msg, wparam, lparam) }
 }
@@ -157,6 +293,40 @@ mod tests {
         ));
         assert!(!is_display_message(WM_WTSSESSION_CHANGE, 0x7)); // WTS_SESSION_LOCK
         assert!(!is_display_message(WM_PAINT, 0));
+    }
+
+    /// The crate's numbers are the system's: the filter is written without the `windows`
+    /// crate so that it is tested everywhere, and this is what keeps it honest.
+    #[test]
+    fn the_wallpaper_filters_numbers_are_the_systems() {
+        assert_eq!(crate::wallpaper_watch::WM_SETTINGCHANGE, WM_SETTINGCHANGE);
+        assert_eq!(
+            crate::wallpaper_watch::SPI_SETDESKWALLPAPER,
+            SPI_SETDESKWALLPAPER.0 as usize
+        );
+        assert!(!is_display_message(
+            WM_SETTINGCHANGE,
+            SPI_SETDESKWALLPAPER.0 as usize
+        ));
+    }
+
+    /// The wallpaper being set is passed on while a watch is held, and to nobody once
+    /// it is let go of — what the window procedure does with the broadcast, without a
+    /// window: nothing is set on the runner's desktop.
+    #[test]
+    fn the_wallpaper_being_set_is_passed_on_only_while_a_watch_is_held() {
+        let (changes, mut said) = crate::wallpaper_watch::channel();
+        wallpaper_was_set();
+        assert!(said.try_recv().is_err(), "no watch yet");
+
+        let watching = watch_wallpaper(changes);
+        wallpaper_was_set();
+        assert!(said.try_recv().is_ok(), "the broadcast was not passed on");
+
+        drop(watching);
+        while said.try_recv().is_ok() {}
+        wallpaper_was_set();
+        assert!(said.try_recv().is_err(), "passed on with no watch held");
     }
 
     /// The real window, on the runner's desktop: a display change posted to it comes out

@@ -9,6 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request, Snapshot};
 use crate::hook::{HookClient, HookSignal};
+use crate::peers::{Answer, Notice, PeerRequest};
 use crate::reconcile::{Effect, EngineState, HookEvent, Input, Reconciler, Timings};
 use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
@@ -85,6 +86,8 @@ pub struct Agent<W> {
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
     vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
     remote: std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>,
+    /// The multi-PC mode, when this agent offers it.
+    peers: Option<crate::peers::Service>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -119,7 +122,14 @@ impl<W: AgentWorld> Agent<W> {
             wallpaper_lock: Default::default(),
             vcp: Default::default(),
             remote: Default::default(),
+            peers: None,
         }
+    }
+
+    /// Offers the multi-PC mode (see [`crate::peers`]).
+    pub fn with_peers(mut self, peers: crate::peers::Service) -> Self {
+        self.peers = Some(peers);
+        self
     }
 
     /// Follows system sleep from `signals` (Linux: `sleep::watch`).
@@ -577,11 +587,91 @@ impl<W: AgentWorld> Agent<W> {
                 }
             }
             Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
+            Request::Peers => return self.ask_peers(id, client, PeerRequest::State),
+            Request::SetMultiPc {
+                enabled,
+                port,
+                name,
+            } => {
+                return self.ask_peers(
+                    id,
+                    client,
+                    PeerRequest::Set {
+                        enabled,
+                        port,
+                        name,
+                    },
+                )
+            }
+            Request::PeerConnect { address } => {
+                return self.ask_peers(id, client, PeerRequest::Connect(address))
+            }
+            Request::PeerAccept { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Accept(machine_id))
+            }
+            Request::PeerRefuse { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Refuse(machine_id))
+            }
+            Request::PeerForget { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Forget(machine_id))
+            }
         };
         client.send(api::answer(id, result));
         if let Some(report) = report {
             self.forward("Probed", &report);
         }
+    }
+
+    /// A multi-PC request. What needs the network is answered from a task of its own,
+    /// as the TV remote's and the VCP's are: the loop never waits on another machine.
+    fn ask_peers(&mut self, id: u64, client: api::Client, request: PeerRequest) {
+        let turning_on = matches!(request, PeerRequest::Set { enabled: true, .. });
+        let Some(peers) = &mut self.peers else {
+            client.send(api::answer(
+                id,
+                Err("this agent does not offer the multi-PC mode".into()),
+            ));
+            return;
+        };
+        match peers.request(request) {
+            Answer::Now(result) => {
+                client.send(api::answer(id, result));
+            }
+            Answer::Later(result) => {
+                tokio::spawn(async move {
+                    client.send(api::answer(id, result.await));
+                });
+            }
+        }
+        // A manager just started has no screens to tell its masters yet.
+        if turning_on {
+            self.tell_peers_the_displays();
+        }
+    }
+
+    /// This machine's screens to the multi-PC manager, while the mode is on: they are
+    /// what a master is told this remote shows. Read again from the system only then,
+    /// so that an agent with the mode off pays nothing for it.
+    fn tell_peers_the_displays(&mut self) {
+        if !self.peers.as_ref().is_some_and(|p| p.enabled()) {
+            return;
+        }
+        let displays = self.world.peer_displays();
+        if let Some(peers) = &mut self.peers {
+            peers.local_displays(displays);
+        }
+    }
+
+    /// What the multi-PC manager reports changed: a machine paired, linked, left, or —
+    /// for a remote of this machine — reported its screens.
+    fn peers_changed(&mut self, state: crate::peers::PeersState) {
+        // LOT 5b PLUGS IN HERE: the remotes' screens (`state.peers[..].peer.displays`
+        // of the linked `Role::Remote` peers) are to be merged into the world, and a
+        // remote appearing, leaving or changing its screens becomes a display change
+        // for the reconciler (`Input::DisplayChanged`, docs/multi-pc.md "Model"). Until
+        // then they only reach the frontends.
+        let event = api::peers_event(&state);
+        self.subscribers.retain(|s| s.send(event.clone()));
     }
 
     /// A frontend's connection ended.
@@ -797,12 +887,17 @@ impl<W: AgentWorld> Agent<W> {
         tokio::pin!(shutdown);
         let mut calls = self.calls.take();
         let mut sleep = self.sleep.take();
+        let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
         loop {
             self.publish();
             if self.quitting {
                 // The Quit must reach the hook before the process goes.
                 let _ = tokio::time::timeout(std::time::Duration::from_secs(2), self.hook.flush())
                     .await;
+                // The other machines are told rather than left to notice the silence.
+                if let Some(peers) = &mut self.peers {
+                    peers.stop().await;
+                }
                 return;
             }
             let input = tokio::select! {
@@ -836,6 +931,18 @@ impl<W: AgentWorld> Agent<W> {
                             self.handle(Input::Hook(HookEvent::Resumed));
                         }
                         None => sleep = None,
+                    }
+                    continue;
+                },
+                notice = async {
+                    match &mut peer_notices {
+                        Some(notices) => notices.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match notice {
+                        Some(Notice::Peers(state)) => self.peers_changed(state),
+                        None => peer_notices = None,
                     }
                     continue;
                 },
@@ -934,9 +1041,15 @@ impl<W: AgentWorld> Agent<W> {
 
     /// One input through the reconciler, then its effects.
     pub fn handle(&mut self, input: Input) {
+        let rebuilds = self.reconciler.rebuild_count();
         let effects = self.reconciler.handle(input, &mut self.world);
         for effect in effects {
             self.apply(effect);
+        }
+        // Every rebuild is this machine's display change, decided by the reconciler:
+        // the masters it is a remote of hear of it from here, with no watcher of its own.
+        if self.reconciler.rebuild_count() != rebuilds {
+            self.tell_peers_the_displays();
         }
     }
 

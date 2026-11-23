@@ -14,6 +14,8 @@
 //! - [`runtime`]: the event loop tying them together.
 //! - [`instance`] and [`log`]: one agent per session, and its log over five runs.
 //! - [`api`]: the frontends' way in (JSON over a local socket or pipe, D6).
+//! - [`peers`]: the multi-PC mode — pairing, the links to the other machines, and the
+//!   input stream between them and the hook (docs/multi-pc.md).
 //! - `sleep` (Linux): system sleep from logind.
 //! - [`tray`] and [`icons`]: the tray, a frontend in process (Linux: `ksni`; Windows:
 //!   the notification area).
@@ -35,6 +37,7 @@ pub mod hook;
 #[cfg(any(target_os = "linux", windows))]
 pub mod icons;
 pub mod log;
+pub mod peers;
 pub mod probe;
 pub mod reconcile;
 pub mod runtime;

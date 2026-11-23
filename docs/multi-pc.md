@@ -99,6 +99,46 @@ protocol only gains what configures it (`Load` already carries the zones).
 - The app detects displays by itself, so the agent exposes the remotes' through its
   API (`Peers`), announced by the `MultiPc` capability.
 
+## Agent (lot 5a): `lbm-agent/src/peers`
+
+- **Settings**: `multi-pc.json` in the configuration directory,
+  `{ Enabled (false), Port (24817), Name (absent: the host name) }`, written atomically.
+  Off, the mode costs nothing: no listener, no task, no timer, and no identity is made
+  before it is first turned on.
+- **Roles on the wire**: the listener says `Remote` in its `Hello`, a node that dials
+  says `Master`; a link where both say the same is refused. The stored `Role` of a peer
+  is the one it stated.
+- **Pairing**: a fingerprint in `peers.json` is accepted at once; any other waits as
+  `Pending` (holding its connection, for as long as the link's pairing timeout) until
+  the user accepts (stored, then `Paired` is said) or refuses. A paired remote whose
+  address is known is called back while the mode is on: after 1 s, doubling, at most
+  30 s. A different fingerprint at that address is refused, not paired.
+- **Remote side**: `Displays` at link-up, then after every layout rebuild of the agent
+  (its display-change path; no watcher of its own), under a new `Revision` only when
+  the screens differ. `PeerDisplay` comes from the platform detection (`LinuxMonitor`
+  in logical pixels, the Win32 tree), raw EDID from sysfs or the registry; `InputSource`
+  is not read yet (lot 8). Input batches go to the hook's input endpoint, connected at
+  the first batch and again after a failure; with no connection they are dropped. The
+  end of the link closes that connection: the hook releases what is held.
+- **Master side**: the latest `Displays` per remote (highest revision) are kept and
+  shown through the API; the hook's batches go to the linked remote with `try_input`.
+  **One remote at a time**: the most recently linked one gets the stream until lot 6
+  routes by zone. `SelectInput` is logged and ignored (lot 8).
+- **API** (additive to protocol 3, capability `MultiPc`):
+  - `Peers` → `{ Enabled, Port, Name, MachineId (this machine's fingerprint, null before
+    the first use), ListenAddress, Error, Peers: [{ MachineId, Name, Address, Connected,
+    Displays, Role, State: "Paired" | "Pending" }] }`;
+  - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
+    everything is closed;
+  - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
+    once it said `Hello`;
+  - `PeerAccept`, `PeerRefuse`, `PeerForget` `{ MachineId }` → `null`;
+  - event `{ "Event": "Peers", "Peers": <state> }` to subscribers on every change.
+- **Lot 5b** plugs the remotes' screens into the world where the agent receives that
+  state (`Agent::peers_changed` in `runtime.rs`).
+- `cargo run -p lbm-agent --example peer_drive -- ADDR ID_DIR [script]` is a master
+  without a hook, for trying a remote by hand (see the example's header).
+
 ## A panel both machines know
 
 - If the panel is attached to one machine only, that source is active.

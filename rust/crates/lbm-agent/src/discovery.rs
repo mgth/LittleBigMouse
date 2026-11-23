@@ -62,6 +62,27 @@ impl Discovery {
         }
     }
 
+    /// This machine's screens as a remote reports them to its master (multi-PC), with
+    /// their raw EDIDs. Asked of the system again rather than taken from the layout:
+    /// the master maps what the detection read, not what this layout made of it.
+    pub fn peer_displays(&self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        match self {
+            #[cfg(windows)]
+            Discovery::Windows => match lbm_display::windows::discover() {
+                Ok(tree) => crate::peers::local::windows_displays(&tree),
+                Err(error) => {
+                    eprintln!("[lbm-agent] display discovery failed: {error}");
+                    Vec::new()
+                }
+            },
+            Discovery::Linux(_) => crate::peers::local::linux_displays(
+                &self.outputs(),
+                &lbm_display::linux::drm::read_all(),
+            ),
+            _ => Vec::new(),
+        }
+    }
+
     /// The Linux outputs (the KWin gaps move them); none elsewhere.
     pub fn outputs(&self) -> Vec<LinuxMonitor> {
         match self {

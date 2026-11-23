@@ -270,6 +270,9 @@ fn run(options: Options) -> ExitCode {
             }
         };
         eprintln!("[lbm-agent] hook endpoint: {endpoint}");
+        // The multi-PC stream goes through the endpoint beside the hook's: the fake
+        // hook serves none, so a scratch agent injects nothing and captures nothing.
+        let input_endpoint = lbm_ipc::input::input_endpoint_beside(&endpoint);
 
         let (hook, signals) = HookClient::spawn(endpoint);
         let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -292,7 +295,12 @@ fn run(options: Options) -> ExitCode {
         let (calls, calls_rx) = tokio::sync::mpsc::unbounded_channel();
         agent = agent
             .with_api(calls_rx)
-            .with_remote_config(config_dir.clone());
+            .with_remote_config(config_dir.clone())
+            // Off unless `multi-pc.json` says otherwise; then nothing listens or runs.
+            .with_peers(lbm_agent::peers::Service::new(
+                config_dir.clone(),
+                lbm_agent::peers::Setup::new(Some(input_endpoint)),
+            ));
 
         // The frontends' endpoint (the instance lock is held: any socket there is stale).
         #[cfg(unix)]

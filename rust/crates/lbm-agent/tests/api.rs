@@ -1488,3 +1488,220 @@ async fn network_remotes_load_associations_without_a_ddc_bus_and_reject_stale_co
         "reading does not rewrite associations"
     );
 }
+
+/// One monitor whose screens, as the multi-PC mode reports them, change with every
+/// rebuild: what a display change looks like from the remote's side.
+struct Screens {
+    state: Enabled,
+    rebuilds: i32,
+}
+
+impl World for Screens {
+    fn display_signature(&mut self) -> String {
+        "one-monitor".into()
+    }
+    fn rebuild_layout(&mut self) {
+        self.rebuilds += 1;
+        self.state.rebuild_layout();
+    }
+    fn layout(&self) -> Option<LayoutState> {
+        self.state.layout()
+    }
+    fn set_enabled(&mut self, enabled: bool) {
+        self.state.set_enabled(enabled);
+    }
+}
+
+impl AgentWorld for Screens {
+    fn zones(&self) -> Option<(String, bool)> {
+        self.state.zones()
+    }
+    fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop> {
+        self.state.desktop()
+    }
+    fn save_enabled(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn save_layout(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    fn layout_id(&self) -> Option<String> {
+        self.state.layout_id()
+    }
+    fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        vec![lbm_ipc::peer::PeerDisplay {
+            id: "DELA0B1_ABC123".into(),
+            connector: "DP-1".into(),
+            name: "DELL".into(),
+            edid: None,
+            x: 0,
+            y: 0,
+            width: 1920 + self.rebuilds,
+            height: 1080,
+            scale: 1.0,
+            effective_dpi: 96.0,
+            orientation: 0,
+            frequency: 60.0,
+            primary: true,
+            attached: true,
+            width_mm: 527.0,
+            height_mm: 296.0,
+            input_source: None,
+        }]
+    }
+}
+
+/// The widths of the screens in the next `Displays` a master receives.
+async fn displayed_widths(link: &mut lbm_net::link::Link) -> Vec<i32> {
+    use lbm_net::link::Event;
+    use lbm_net::wire::Control;
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(5), link.next())
+            .await
+            .expect("an event within 5 s");
+        match event {
+            Some(Event::Control(Control::Displays { displays, .. })) => {
+                return displays.iter().map(|d| d.width).collect()
+            }
+            Some(Event::Closed(reason)) => panic!("the link ended: {reason:?}"),
+            None => panic!("the link ended"),
+            Some(_) => {}
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_frontend_drives_the_multi_pc_mode_and_a_master_sees_the_screens_follow_a_rebuild() {
+    use lbm_net::wire::{Hello, Role};
+
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let config = dir.path().join("config");
+    // A master the user paired earlier.
+    let master = lbm_net::identity::Identity::load_or_create(&dir.path().join("master")).unwrap();
+    lbm_net::peers::PeerStore::load(&config)
+        .insert(lbm_net::peers::PairedPeer {
+            machine_id: master.fingerprint().to_owned(),
+            name: "desk".into(),
+            address: String::new(),
+            role: Role::Master,
+        })
+        .unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let peers = lbm_agent::peers::Service::new(
+        config.clone(),
+        lbm_agent::peers::Setup {
+            bind: "127.0.0.1".parse().unwrap(),
+            input_endpoint: None,
+            options: lbm_net::link::Options::default(),
+        },
+    );
+    tokio::spawn(async move {
+        let world = Screens {
+            state: Enabled(None),
+            rebuilds: 0,
+        };
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_peers(peers);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let hello = frontend.ask(json!({ "Method": "Hello" })).await;
+    assert_eq!(hello["Result"]["Protocol"], 3, "additive: no new version");
+    assert!(hello["Result"]["Capabilities"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("MultiPc")));
+    frontend.ask(json!({ "Method": "Subscribe" })).await;
+
+    // Off by default: no listener, no identity, the paired master listed.
+    let off = frontend.ask(json!({ "Method": "Peers" })).await["Result"].clone();
+    assert_eq!(off["Enabled"], false);
+    assert_eq!(off["ListenAddress"], Value::Null);
+    assert_eq!(off["MachineId"], Value::Null);
+    assert_eq!(off["Peers"][0]["MachineId"], master.fingerprint());
+    assert_eq!(off["Peers"][0]["State"], "Paired");
+    assert_eq!(off["Peers"][0]["Role"], "Master");
+    assert_eq!(off["Peers"][0]["Connected"], false);
+    let refused = frontend
+        .ask(json!({ "Method": "PeerConnect", "Address": "127.0.0.1:1" }))
+        .await;
+    assert!(refused["Error"].as_str().unwrap().contains("off"));
+
+    let on = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0, "Name": "tower" }))
+        .await["Result"]
+        .clone();
+    assert_eq!(on["Enabled"], true);
+    assert_eq!(on["Name"], "tower");
+    assert_eq!(on["MachineId"].as_str().unwrap().len(), 64);
+    let address = on["ListenAddress"].as_str().unwrap().to_owned();
+    assert!(config.join("multi-pc.json").exists());
+
+    // The master connects: accepted from the store, told the screens, seen linked.
+    let mut link = lbm_net::link::connect(
+        address.as_str(),
+        &master,
+        Hello::new("desk", "0", Role::Master),
+        lbm_net::link::Options::default(),
+    )
+    .await
+    .unwrap()
+    .accept()
+    .await
+    .unwrap();
+    // Built once at boot, so the screens are the first rebuild's.
+    while displayed_widths(&mut link).await != [1921] {}
+    loop {
+        let frame = frontend.receive().await;
+        if frame["Event"] == "Peers" && frame["Peers"]["Peers"][0]["Connected"] == true {
+            assert_eq!(frame["Peers"]["Peers"][0]["Role"], "Master");
+            break;
+        }
+    }
+
+    // A rebuild is a display change: the master hears of it.
+    frontend.ask(json!({ "Method": "Refresh" })).await;
+    assert_eq!(displayed_widths(&mut link).await, [1922]);
+
+    // Forgetting the master ends its link.
+    let forgotten = frontend
+        .ask(json!({ "Method": "PeerForget", "MachineId": master.fingerprint() }))
+        .await;
+    assert_eq!(forgotten["Result"], Value::Null, "{forgotten}");
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match link.next().await {
+                Some(lbm_net::link::Event::Closed(reason)) => return reason,
+                None => panic!("closed without a reason"),
+                Some(_) => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        matches!(ended, lbm_net::link::CloseReason::Bye(_)),
+        "{ended:?}"
+    );
+    let peers = frontend.ask(json!({ "Method": "Peers" })).await;
+    assert_eq!(peers["Result"]["Peers"], json!([]));
+    let unknown = frontend
+        .ask(json!({ "Method": "PeerAccept", "MachineId": "nobody" }))
+        .await;
+    assert!(unknown["Error"].is_string(), "{unknown}");
+
+    let off = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": false }))
+        .await["Result"]
+        .clone();
+    assert_eq!(off["Enabled"], false);
+    assert_eq!(off["ListenAddress"], Value::Null);
+    assert_eq!(off["Name"], "tower", "kept for the next time");
+}

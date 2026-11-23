@@ -155,6 +155,20 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   l'utilisateur seuls, aucun client distant ni d'une autre session ; étiqueté intégrité
   moyenne quand l'agent est élevé, sans quoi un frontend non élevé ne pourrait pas écrire.
   Les tests de l'API passent sur les deux plateformes (socket, tube).
+- Mode multi-PC (`peers`, lot 5a de `docs/multi-pc.md`, qui en décrit le détail) :
+  `multi-pc.json` dans le répertoire de configuration (`Enabled` faux par défaut, `Port`,
+  `Name`). Éteint, rien n'écoute et rien ne tourne : le service n'est qu'un fichier de
+  réglages et le magasin d'appairage, lus à la demande. Allumé, un gestionnaire (tâche à
+  part, pilotée par canaux : la boucle n'attend jamais le réseau) tient l'identité,
+  `peers.json`, l'écoute, les appairages en attente de l'utilisateur, les liens et les
+  rappels (1 s doublé jusqu'à 30 s). Distant : ses écrans partent à l'ouverture du lien puis
+  à chaque reconstruction de la mise en page (le chemin de changement d'écran du
+  réconciliateur, pas de surveillance en plus), les lots d'entrée vont au point de
+  terminaison d'entrée du hook, fermé à la fin du lien. Maître : derniers `Displays` gardés
+  par distant, lots du hook relayés au distant lié (un seul à la fois pour l'instant). API
+  additive (capacité `MultiPc`, protocole inchangé) : `Peers`, `SetMultiPc`, `PeerConnect`,
+  `PeerAccept`, `PeerRefuse`, `PeerForget`, événement `Peers`. Le point d'entrée du lot 5b
+  (écrans distants dans le monde) est `Agent::peers_changed`.
 - Élévation au démarrage sous Windows (`elevation`, C# `WindowsElevation`, #512/#400) :
   avant même le verrou d'instance, si `StartElevated` est demandé (store, ou registre 5.x
   tant que l'import n'a pas eu lieu) **et** que l'utilisateur peut élever (jeton filtré

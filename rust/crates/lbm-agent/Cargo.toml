@@ -14,6 +14,8 @@ lbm-display = { path = "../lbm-display" }
 lbm-engine = { path = "../lbm-engine" }
 lbm-ipc = { path = "../lbm-ipc" }
 lbm-layout = { path = "../lbm-layout" }
+# The multi-PC network (docs/multi-pc.md): identity, pairing store, links.
+lbm-net = { path = "../lbm-net" }
 lbm-store = { path = "../lbm-store" }
 # The document the hook reads, so the fake hook can decide a Load exactly as the
 # daemon does instead of guessing from the text (already in the graph via lbm-engine).

@@ -59,12 +59,17 @@ pub struct Edid {
     /// The 0xFF descriptor (serial number string), `""` when absent.
     pub serial_number: Option<String>,
     pub checksum: i32,
+    /// The block as it was read, whole. Not C#'s: the multi-PC mode sends it to the
+    /// master, which identifies the panel with its own parser rather than trusting
+    /// what this one made of it (docs/multi-pc.md, `PeerDisplay.Edid`).
+    pub raw: Vec<u8>,
 }
 
 /// C# `EdidParser.Parse(key, edid)`.
 pub fn parse(key: impl Into<String>, edid: &[u8]) -> Edid {
     let mut e = Edid {
         key: key.into(),
+        raw: edid.to_vec(),
         ..Default::default()
     };
     let len = edid.len();

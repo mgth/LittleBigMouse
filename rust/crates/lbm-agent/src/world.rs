@@ -53,6 +53,12 @@ pub trait AgentWorld: World {
     /// zones stop at the layout's edge. Only the agent enumerates the outputs.
     fn desktop(&self) -> Option<lbm_ipc::protocol::Desktop>;
 
+    /// This machine's screens as the multi-PC mode reports them to a master. Asked
+    /// only while the mode is on, after a rebuild: none by default.
+    fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        Vec::new()
+    }
+
     /// Persists the current layout's Enabled alone.
     fn save_enabled(&mut self) -> io::Result<()>;
 
@@ -323,6 +329,9 @@ impl<S: LayoutStore, P: PersistencePlatform> World for SystemWorld<S, P> {
 }
 
 impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
+    fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        self.discovery.peer_displays()
+    }
     fn vcp_target(&self, monitor: &str) -> Result<crate::vcp::Target, String> {
         crate::vcp::target(self.layout.as_ref().ok_or("No current layout.")?, monitor)
     }

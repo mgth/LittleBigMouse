@@ -1290,6 +1290,8 @@ mod tests {
 
     impl crate::remote::Injector for Nowhere {
         fn inject(&mut self, _: &[crate::remote::Injection]) {}
+        fn park(&mut self) {}
+        fn unpark(&mut self) {}
     }
 
     #[tokio::test]

@@ -60,6 +60,9 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     if ms.dwExtraInfo == crate::remote::windows::INJECTED {
         return false;
     }
+    // Anything else is this machine's own mouse, or someone's here: a pointer a
+    // multi-PC master parked out of sight is theirs again. One atomic load when none is.
+    crate::remote::windows::local_pointer_input((ms.pt.x, ms.pt.y));
     if let Some(handled) = super::touch_input::process(wparam.0 as u32, ms) {
         return handled;
     }

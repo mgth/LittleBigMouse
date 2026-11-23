@@ -31,7 +31,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, watch, Notify};
 
 use crate::ipc::transport;
-use crate::remote::{Injector, Session};
+use crate::remote::{deliver, Injector, Session};
 
 /// Batches waiting for the injector. A device report is one batch, so this is a few
 /// dozen milliseconds of a fast mouse — enough to ride out a slow system call, short
@@ -351,10 +351,10 @@ fn inject(mut inbox: mpsc::Receiver<Message>, mut injector: Box<dyn Injector>) {
             Message::Stop(done) => {
                 stopped = true;
                 current = None;
-                let injections = session.release_all();
-                if !injections.is_empty() {
-                    injector.inject(injections);
-                }
+                deliver(injector.as_mut(), session.release_all());
+                // The hook is leaving: whatever the session's end parked must not stay
+                // hidden after it.
+                injector.unpark();
                 let _ = done.send(());
                 continue;
             }
@@ -371,9 +371,7 @@ fn inject(mut inbox: mpsc::Receiver<Message>, mut injector: Box<dyn Injector>) {
             // A replaced client's last words, or its end: already released.
             Message::Batch(..) | Message::End(_) => continue,
         };
-        if !injections.is_empty() {
-            injector.inject(injections);
-        }
+        deliver(injector.as_mut(), injections);
     }
 }
 
@@ -392,13 +390,26 @@ mod tests {
     const LEFT_CTRL: u16 = 29;
     const BTN_LEFT: u16 = 0x110;
 
-    /// Everything the server would have put into the system, in order.
+    /// Everything the server would have put into the system, in order, its parkings
+    /// and unparkings included at their place.
     #[derive(Clone, Default)]
     struct Recording(Arc<Mutex<Vec<Injection>>>);
 
     impl Injector for Recording {
         fn inject(&mut self, batch: &[Injection]) {
+            assert!(
+                !batch
+                    .iter()
+                    .any(|i| matches!(i, Injection::Park | Injection::Unpark)),
+                "a parking reached inject: {batch:?}"
+            );
             self.0.lock().unwrap().extend_from_slice(batch);
+        }
+        fn park(&mut self) {
+            self.0.lock().unwrap().push(Injection::Park);
+        }
+        fn unpark(&mut self) {
+            self.0.lock().unwrap().push(Injection::Unpark);
         }
     }
 
@@ -417,6 +428,14 @@ mod tests {
                 );
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
+        }
+
+        /// Waits until `count` injections were made, lets the server run on a little,
+        /// and returns them all: anything made after the first `count` is there too.
+        async fn settled(&self, count: usize) -> Vec<Injection> {
+            self.until(count).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.0.lock().unwrap().clone()
         }
     }
 
@@ -490,8 +509,9 @@ mod tests {
         )
         .await;
         assert_eq!(
-            recording.until(6).await,
+            recording.until(7).await,
             [
+                Injection::Unpark,
                 Injection::MoveTo { x: -1920, y: 40 },
                 Injection::MoveTo { x: -1900, y: 50 },
                 Injection::Button {
@@ -537,7 +557,10 @@ mod tests {
         // Same connection, so this arrives after the rest: if anything above had been
         // injected, it would come first.
         send(&mut agent, &[InputEvent::Enter { x: 7, y: 8 }]).await;
-        assert_eq!(recording.until(1).await, [Injection::MoveTo { x: 7, y: 8 }]);
+        assert_eq!(
+            recording.until(2).await,
+            [Injection::Unpark, Injection::MoveTo { x: 7, y: 8 }]
+        );
     }
 
     #[tokio::test]
@@ -573,8 +596,9 @@ mod tests {
         )
         .await;
         assert_eq!(
-            recording.until(8).await,
+            recording.until(11).await,
             [
+                Injection::Unpark,
                 Injection::MoveTo { x: 0, y: 0 },
                 key(LEFT_CTRL, true),
                 key(C, true),
@@ -588,6 +612,8 @@ mod tests {
                 },
                 key(C, false),
                 key(LEFT_CTRL, false),
+                Injection::Park,
+                Injection::Unpark,
                 Injection::MoveTo { x: 9, y: 9 },
             ]
         );
@@ -608,9 +634,12 @@ mod tests {
             ],
         )
         .await;
-        recording.until(2).await;
+        recording.until(3).await;
         drop(agent);
-        assert_eq!(recording.until(3).await[2], key(C, false));
+        assert_eq!(
+            recording.settled(5).await[3..],
+            [key(C, false), Injection::Park]
+        );
     }
 
     #[tokio::test]
@@ -628,10 +657,13 @@ mod tests {
             ],
         )
         .await;
-        recording.until(2).await;
+        recording.until(3).await;
 
         let mut second = client(&endpoint).await;
-        assert_eq!(recording.until(3).await[2], key(C, false));
+        assert_eq!(
+            recording.until(5).await[3..],
+            [key(C, false), Injection::Park]
+        );
         closed(&mut first).await;
 
         // The newcomer starts undriven, like any client: its own Enter is needed.
@@ -646,12 +678,16 @@ mod tests {
             ],
         )
         .await;
+        // Parked once: the replaced client's own end, which follows, parks nothing.
         assert_eq!(
-            recording.until(4).await,
+            recording.settled(7).await,
             [
+                Injection::Unpark,
                 Injection::MoveTo { x: 0, y: 0 },
                 key(C, true),
                 key(C, false),
+                Injection::Park,
+                Injection::Unpark,
                 Injection::MoveTo { x: 4, y: 5 },
             ]
         );
@@ -672,16 +708,19 @@ mod tests {
             ],
         )
         .await;
-        recording.until(2).await;
+        recording.until(3).await;
         // An unknown event tag.
         write_batch(&mut agent, &[200, 1, 2]).await.expect("sent");
         closed(&mut agent).await;
         assert_eq!(
-            recording.until(3).await[2],
-            Injection::Button {
-                code: BTN_LEFT,
-                pressed: false
-            }
+            recording.settled(5).await[3..],
+            [
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+                Injection::Park,
+            ]
         );
     }
 
@@ -700,14 +739,17 @@ mod tests {
             ],
         )
         .await;
-        recording.until(2).await;
+        recording.until(3).await;
         use tokio::io::AsyncWriteExt;
         agent
             .write_all(&u32::MAX.to_le_bytes())
             .await
             .expect("sent");
         closed(&mut agent).await;
-        assert_eq!(recording.until(3).await[2], key(C, false));
+        assert_eq!(
+            recording.settled(5).await[3..],
+            [key(C, false), Injection::Park]
+        );
     }
 
     /// A driver that has caught up with `outlet`'s current client, or the test fails.
@@ -821,14 +863,53 @@ mod tests {
             ],
         )
         .await;
-        recording.until(2).await;
+        recording.until(3).await;
         tokio::task::spawn_blocking(move || server.stop())
             .await
             .expect("stops");
-        assert_eq!(recording.until(3).await[2], key(C, false));
+        // Parked as any session's end is, then given back: the hook is leaving, and
+        // nothing it hid may stay hidden.
+        assert_eq!(
+            recording.until(6).await[3..],
+            [key(C, false), Injection::Park, Injection::Unpark]
+        );
 
         send(&mut agent, &[InputEvent::Enter { x: 1, y: 1 }]).await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        assert_eq!(recording.until(3).await.len(), 3);
+        assert_eq!(recording.settled(6).await.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn a_client_that_goes_away_after_its_leave_is_parked_only_once() {
+        let (_server, endpoint, recording) = serve();
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, InputEvent::Leave],
+        )
+        .await;
+        recording.until(3).await;
+        drop(agent);
+        assert_eq!(
+            recording.settled(3).await,
+            [
+                Injection::Unpark,
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Park
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_client_that_never_entered_is_never_parked() {
+        let (server, endpoint, recording) = serve();
+        let agent = client(&endpoint).await;
+        let second = client(&endpoint).await;
+        drop(agent);
+        drop(second);
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        // Only the unpark of the hook's way out, harmless with nothing parked.
+        assert_eq!(recording.settled(1).await, [Injection::Unpark]);
     }
 }

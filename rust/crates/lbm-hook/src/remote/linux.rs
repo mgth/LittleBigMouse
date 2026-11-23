@@ -279,6 +279,8 @@ impl Injector for UinputInjector {
                 Injection::Key { code, pressed } => {
                     self.queue_keyboard(InputEvent::new(EventType::KEY.0, code, pressed as i32));
                 }
+                // Delivered through park/unpark (super::deliver), never in a batch.
+                Injection::Park | Injection::Unpark => {}
             }
         }
         flush(
@@ -287,4 +289,14 @@ impl Injector for UinputInjector {
         );
         flush(&mut self.keyboard_frame, self.keyboard.as_mut());
     }
+
+    /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
+    /// it, and there is no portable way to: a Wayland client chooses the cursor only
+    /// over its own surfaces, and the Windows trick of a one-pixel window under the
+    /// pointer would need a topmost, input-taking surface no portable protocol offers.
+    /// Moving it away instead — a corner, an edge — is what sets off hot corners and
+    /// edge actions. The pointer stays where the master left it.
+    fn park(&mut self) {}
+
+    fn unpark(&mut self) {}
 }

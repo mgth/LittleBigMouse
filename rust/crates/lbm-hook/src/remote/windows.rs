@@ -4,6 +4,12 @@
 //! LittleBigMouse hook sees those events go by in `mouse_proc` and lets them through
 //! untouched: the master's engine already routed that pointer over the whole layout,
 //! and routing it a second time here would put back the walls the master took away.
+//!
+//! Between sessions the pointer is parked out of sight ([`hider`]).
+
+mod hider;
+
+pub use hider::local_pointer_input;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -39,12 +45,14 @@ const BTN_BACK: u16 = 0x116;
 
 pub struct SendInputInjector {
     inputs: Vec<INPUT>,
+    hider: hider::Hider,
 }
 
 impl SendInputInjector {
     pub fn new() -> Self {
         Self {
             inputs: Vec::with_capacity(16),
+            hider: hider::Hider::default(),
         }
     }
 
@@ -175,6 +183,8 @@ impl Injector for SendInputInjector {
                         None => {}
                     }
                 }
+                // Delivered through park/unpark (super::deliver), never in a batch.
+                Injection::Park | Injection::Unpark => {}
             }
         }
         if self.inputs.is_empty() {
@@ -193,5 +203,13 @@ impl Injector for SendInputInjector {
                 self.inputs.len()
             );
         }
+    }
+
+    fn park(&mut self) {
+        self.hider.park();
+    }
+
+    fn unpark(&mut self) {
+        self.hider.unpark();
     }
 }

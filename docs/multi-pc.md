@@ -91,6 +91,29 @@ On the master (lot 6, evdev backend only; the details are in
 - One remote: batches carry no destination; the agent merges and drives only the
   selected remote (lot 5a).
 
+On a remote (`lbm-hook/src/remote`):
+
+- A **session** runs from an `Enter` to its end: a `Leave`, the end of the stream
+  (the agent went away or sent garbage), a newer client taking the endpoint, or the
+  hook stopping. Before the `Enter` nothing is injected; at the end, every key and
+  button the stream left pressed is released.
+- A machine nobody drives shows no pointer, as with Synergy/Deskflow: at the end of
+  a session, after the releases, the pointer is **parked** — once per session — and
+  an `Enter` **unparks** it before its first motion.
+- Windows: a parked pointer is moved to the centre of the monitor it was on and put
+  on a one-pixel window of the hook's — topmost, almost transparent, never activated,
+  in neither Alt-Tab nor the taskbar — over which there is no cursor. Not left where
+  the master left it: that is always an edge, often a corner, where hot corners, the
+  auto-hidden taskbar and the Start button react to a pointer resting. The centre of
+  its own monitor is on a real screen whatever the monitors' arrangement. Nothing
+  global changes, so a crash cannot leave the cursor hidden. The pointer is given
+  back at once when the remote's own mouse moves (it leaves the window's one pixel,
+  and the window sees it go), clicks or turns its wheel there, when a master enters
+  again, and when the hook stops.
+- Linux: parking does nothing visible. A uinput device cannot hide the compositor's
+  cursor and there is no portable way to, and moving the pointer to a corner instead
+  would set off hot corners.
+
 ## Model
 
 - **Cross-machine identity** of a panel: EDID manufacturer code + product code +

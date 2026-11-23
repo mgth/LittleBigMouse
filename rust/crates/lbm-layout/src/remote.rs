@@ -5,9 +5,10 @@
 //!
 //! A remote display whose panel this layout already knows ([`crate::model::panel_key`])
 //! becomes a second source of that monitor; any other becomes a monitor of its own with
-//! one source. Either way the source carries the machine id as its host. Nothing is
-//! ever removed: a machine that left is dropped by rebuilding the layout without it, as
-//! a display that left is.
+//! one source, named by its panel key when it has one ([`remote_monitor_id`]). Either
+//! way the source carries the machine id as its host. Nothing is ever removed: a
+//! machine that left is dropped by rebuilding the layout without it, as a display that
+//! left is.
 
 use crate::geo::{Point, Rect, Size};
 use crate::model::{
@@ -56,13 +57,36 @@ pub struct RemoteMonitor {
 /// (every monitor id, joined) under the store's 255 characters as long as it can.
 const HOST_ID_LENGTH: usize = 8;
 
-/// The source id a remote display gets here, also the id of the monitor made for it
-/// when the panel is not one of ours: its id on the remote, then `@` and the start of
-/// the machine id — the way an id already taken on Linux gets `@` and its connector.
-/// Stable as long as the remote's id is, and never one of this machine's ids.
+/// The source id a remote display gets here: its id on the remote, then `@` and the
+/// start of the machine id — the way an id already taken on Linux gets `@` and its
+/// connector. Stable as long as the remote's id is, and never one of this machine's ids.
+/// It is also the id of the monitor made for a display without a panel key
+/// ([`remote_monitor_id`]).
 pub fn remote_source_id(machine_id: &str, display_id: &str) -> String {
     let short: String = machine_id.chars().take(HOST_ID_LENGTH).collect();
     format!("{display_id}@{short}")
+}
+
+/// The id of the monitor made for a remote display that no monitor of the layout
+/// already shows: its panel key when it has one and no monitor holds that id yet, else
+/// its source id.
+///
+/// The panel key, because a hardware KVM moves a panel from one machine to the other:
+/// this machine stops detecting it and the remote starts publishing it. Linux names a
+/// local monitor `{pnp}_{serial}`, which is exactly that key, so the panel keeps one id
+/// whichever machine shows it, and with it the layout id, the profile and everything
+/// stored for it (placement, borders, resistance).
+///
+/// An id already taken falls back to the source id, which no local monitor can have:
+/// a twin of a panel already in the layout (two monitors reporting the same serial, the
+/// case Linux tells apart with `@{connector}`), or, on Windows, whose local ids have
+/// another form, a coincidence. Which twin gets the key then follows the remote's
+/// order, as it follows the connectors' on Linux.
+pub fn remote_monitor_id(layout: &Layout, source_id: &str, panel_key: Option<&str>) -> String {
+    match panel_key {
+        Some(key) if layout.monitor(key).is_none() => key.to_owned(),
+        _ => source_id.to_owned(),
+    }
 }
 
 /// Merges one remote machine's displays into `layout`: a shared panel gains a source,
@@ -131,7 +155,15 @@ fn add_remote_monitor(
         return;
     }
 
-    let monitor_id = source_id.clone();
+    // Merged before: the monitor this source already has, whatever it is named.
+    let monitor_id = layout
+        .monitors()
+        .iter()
+        .find(|m| m.sources.contains(&source_id))
+        .map_or_else(
+            || remote_monitor_id(layout, &source_id, display.panel_key.as_deref()),
+            |m| m.id.clone(),
+        );
     let pnp_code = display
         .pnp_code
         .clone()

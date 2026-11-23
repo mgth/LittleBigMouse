@@ -567,6 +567,36 @@ pub fn to_monitor_dto(layout: &Layout, monitor: &Monitor) -> MonitorDto {
     }
 }
 
+/// Puts back into `dto`, about to replace `stored`, the stored sources of its monitors
+/// that the layout does not hold at all and that remember an input value
+/// (docs/multi-pc.md, "Input switching").
+///
+/// A panel a hardware KVM moves between machines keeps its monitor id, hence its
+/// profile, but only the machine showing it now reports it: a save made then would
+/// drop what the other machine's source learnt, and the next switch would find it
+/// gone. A source the layout holds is written as it is now, or left out on purpose
+/// (detached, nothing remembered), and is never taken from the old file.
+pub fn keep_absent_sources(layout: &Layout, dto: &mut LayoutDto, stored: &LayoutDto) {
+    for (id, monitor) in &mut dto.monitors {
+        let (Some(live), Some(old)) = (
+            layout.monitor(id),
+            stored.monitors.get(id).and_then(|m| m.sources.as_ref()),
+        ) else {
+            continue;
+        };
+        for (source_id, source) in old {
+            if source.input_source.is_none() || live.sources.contains(source_id) {
+                continue;
+            }
+            monitor
+                .sources
+                .get_or_insert_with(IndexMap::new)
+                .entry(source_id.clone())
+                .or_insert_with(|| source.clone());
+        }
+    }
+}
+
 /// C# `ToDto(PhysicalMonitorModel)`: a model's size, borders and name.
 pub fn to_model_dto(model: &MonitorModel) -> ModelDto {
     let size = &model.physical_size;

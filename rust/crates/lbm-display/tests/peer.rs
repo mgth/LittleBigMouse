@@ -16,15 +16,35 @@ const LAPTOP: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d
 /// descriptors. `interface` is the low nibble of byte 20 (5: DisplayPort, 2: HDMI) —
 /// what differs between two inputs of one monitor, with the checksum.
 fn edid_block(serial_string: &str, interface: u8) -> Vec<u8> {
+    edid_block_of(
+        "DEL",
+        0x4065,
+        [0x01, 0x02, 0x03, 0x04],
+        serial_string,
+        interface,
+    )
+}
+
+/// [`edid_block`] of any make: a three-letter manufacturer, a product code, and the
+/// binary serial's bytes as they sit in the block.
+fn edid_block_of(
+    manufacturer: &str,
+    product: u16,
+    binary_serial: [u8; 4],
+    serial_string: &str,
+    interface: u8,
+) -> Vec<u8> {
     let mut b = vec![0u8; 128];
     b[..8].copy_from_slice(&[0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0]);
-    // "DEL": D=4, E=5, L=12 in five-bit letters.
-    let letters = (4u16 << 10) | (5 << 5) | 12;
+    // Five-bit letters, A = 1.
+    let letters = manufacturer
+        .bytes()
+        .fold(0u16, |acc, c| (acc << 5) | u16::from(c - b'A' + 1));
     b[8] = (letters >> 8) as u8;
     b[9] = letters as u8;
-    b[10] = 0x65;
-    b[11] = 0x40;
-    b[12..16].copy_from_slice(&[0x01, 0x02, 0x03, 0x04]);
+    b[10] = product as u8;
+    b[11] = (product >> 8) as u8;
+    b[12..16].copy_from_slice(&binary_serial);
     b[16] = 12;
     b[17] = 30;
     b[18] = 1;
@@ -150,7 +170,61 @@ fn merging_a_peer_makes_its_view_of_our_panel_a_second_source() {
     assert_eq!(dell.sources.len(), 2);
     assert_eq!(dell.sources[1], remote_source_id(LAPTOP, "A"));
     assert_eq!(layout.monitors().len(), 2);
-    assert_eq!(layout.monitors()[1].id, remote_source_id(LAPTOP, "B"));
+    assert_eq!(
+        layout.monitors()[1].id,
+        "DEL4065_OTHER",
+        "a panel only the peer has is named by its key"
+    );
+    assert_eq!(
+        layout.monitors()[1].sources,
+        vec![remote_source_id(LAPTOP, "B")]
+    );
     // The remote says it is primary there; here the primary is still this machine's.
     assert_eq!(layout.primary_monitor().unwrap().id, dell.id);
+}
+
+#[test]
+fn the_layout_id_is_the_same_whichever_machine_shows_a_kvm_switched_panel() {
+    // The maintainer's Samsung behind a hardware KVM: serial string H1AK500000, binary
+    // serial 0, here on HDMI, there (Windows) under its device id.
+    let samsung = edid_block_of("SAM", 0xE035, [0; 4], "H1AK500000", 2);
+    let dell = edid_block("ABC123", 5);
+    let output = |connector: &str, x: f64, edid: &[u8]| LinuxMonitor {
+        connector_name: connector.to_owned(),
+        logical_x: x,
+        logical_y: 0.0,
+        logical_width: 2560.0,
+        logical_height: 1440.0,
+        pixel_width: 2560,
+        pixel_height: 1440,
+        scale: 1.0,
+        width_mm: 597.0,
+        height_mm: 336.0,
+        primary: x == 0.0,
+        enabled: true,
+        orientation: 0,
+        frequency: 60,
+        edid: Some(edid::parse(format!("card0-{connector}"), edid).to_linux()),
+    };
+
+    let mut here = Layout::new(LayoutOptions::default());
+    add_monitor(&mut here, &output("DP-1", 0.0, &dell));
+    add_monitor(&mut here, &output("HDMI-A-1", 2560.0, &samsung));
+
+    let mut there = Layout::new(LayoutOptions::default());
+    add_monitor(&mut there, &output("DP-1", 0.0, &dell));
+    let device = r"MONITOR\SAME035\{4d36e96e-e325-11ce-bfc1-08002be10318}\0010";
+    let shown_there = peer_display(device, r"\\.\DISPLAY1", Some(&samsung), 0);
+    assert_eq!(
+        panel_key(&shown_there).as_deref(),
+        Some("SAME035_H1AK500000")
+    );
+    merge_peer(&mut there, LAPTOP, "windows", &[shown_there]);
+
+    assert_eq!(here.compute_id(), "DEL4065_ABC123+SAME035_H1AK500000");
+    assert_eq!(there.compute_id(), here.compute_id());
+    assert_eq!(
+        there.monitor("SAME035_H1AK500000").unwrap().sources,
+        vec![remote_source_id(LAPTOP, device)]
+    );
 }

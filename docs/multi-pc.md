@@ -96,6 +96,23 @@ On the master (lot 6, evdev backend only; the details are in
   serial (the serial string, else the binary serial). Never the checksum or the
   interface, which differ per input. Two displays from two machines with the same
   key are **one `Monitor` with two sources**.
+- **Ids of a remote display** (`lbm_layout::remote`): its source is
+  `{id on the remote}@{first 8 characters of the machine id}`, never one of this
+  machine's ids. A display no monitor of the layout already shows becomes a monitor of
+  its own, named by its **panel key** when it has one, else by its source id. The key,
+  because a hardware KVM moves a panel between machines (this one stops detecting it,
+  the remote starts publishing it), and Linux already names a local monitor
+  `{pnp}_{serial}`, which is that key: the panel keeps one monitor id whichever machine
+  shows it, so the layout id, the profile, its placement in millimetres, its borders
+  and resistance carry over. When that id is already taken — a twin of a panel already
+  in the layout (same serial; Linux tells local twins apart with `@{connector}`) — the
+  monitor takes its source id instead. Windows names its local monitors otherwise
+  (`{pnp}{serial}_{week}_{year}_{checksum}`), so a Windows master does not get that
+  carry-over.
+- **One profile file across a KVM switch**: a stored `ActiveSource` naming a source
+  the layout does not hold now is ignored (the merge's choice stands), and a save keeps
+  the stored sources of a monitor that the layout does not hold now when they remember
+  an `InputSource`, so alternating saves on either side lose neither machine's value.
 - **The machine is carried by the source** (`DisplaySource.host: Option<String>`,
   the machine id; `None` is this machine), persisted as `Host` on `SourceDto`.
   `Monitor.sources` / `active_source` already exist.

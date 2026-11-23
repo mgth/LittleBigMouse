@@ -208,9 +208,14 @@ impl<S: LayoutStore, P: PersistencePlatform> LayoutPersistence<S, P> {
         self.align_autostart(layout);
 
         let global = self.save_global_options(&layout.options);
-        let document = self
-            .store
-            .write_layout(&layout.id, &mapper::to_layout_dto(layout));
+        let mut dto = mapper::to_layout_dto(layout);
+        // What another machine's source of a shared panel remembers survives a save
+        // made while that machine does not report the panel. A store that cannot be
+        // read only loses that: the save itself goes on.
+        if let Ok(Some(stored)) = self.store.read(&layout.id, &[]).map(|d| d.layout) {
+            mapper::keep_absent_sources(layout, &mut dto, &stored);
+        }
+        let document = self.store.write_layout(&layout.id, &dto);
         let models = self.store.write_models(&mapper::to_model_dtos(layout));
         global.and(document).and(models)?;
 

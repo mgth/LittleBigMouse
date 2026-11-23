@@ -121,6 +121,14 @@ fn shared_id() -> &'static str {
     "DEL4065_ABC123"
 }
 
+/// The laptop's own panel: a monitor named by its panel key, shown through a source
+/// named after the laptop.
+const PANEL: &str = "LEN40A0_7";
+
+fn panel_source() -> String {
+    remote_source_id(LAPTOP, "LEN40A0_7")
+}
+
 fn zone_summary(zones: &ZonesLayout) -> Vec<(String, Option<String>, Rect)> {
     zones
         .main_zones
@@ -183,10 +191,17 @@ fn a_shared_panel_gains_a_source_and_a_remote_only_panel_gets_a_monitor() {
         Some(0x11)
     );
 
-    let panel_id = remote_source_id(LAPTOP, "LEN40A0_7");
-    let panel = layout.monitor(&panel_id).unwrap();
-    assert_eq!(panel.sources, vec![panel_id.clone()]);
-    assert_eq!(panel.active_source.as_deref(), Some(panel_id.as_str()));
+    let panel = layout.monitor(PANEL).unwrap();
+    assert_eq!(panel.sources, vec![panel_source()]);
+    assert_eq!(
+        panel.active_source.as_deref(),
+        Some(panel_source().as_str())
+    );
+    assert_eq!(
+        layout.source(&panel_source()).unwrap().monitor,
+        PANEL,
+        "the source knows its monitor by the monitor's id, not its own"
+    );
     assert_eq!(layout.monitors().len(), 3);
 }
 
@@ -327,7 +342,7 @@ fn the_profile_key_changes_with_a_remote_that_brings_a_panel_and_back_without_it
     let id_together = together.compute_id();
     assert_eq!(id_alone, "DEL4065_ABC123+SAM1234_XYZ");
     assert_eq!(
-        id_together, "DEL4065_ABC123+LEN40A0_7@a1b2c3d4+SAM1234_XYZ",
+        id_together, "DEL4065_ABC123+LEN40A0_7+SAM1234_XYZ",
         "the remote-only panel is a monitor of the set; the shared one already was"
     );
 
@@ -349,9 +364,9 @@ fn merging_a_machine_again_updates_its_sources_in_place() {
     let mut again = laptop();
     again[0].width = 2560;
     merge_remote(&mut layout, LAPTOP, "laptop", &again);
-    let panel = remote_source_id(LAPTOP, "LEN40A0_7");
+    let panel = panel_source();
     assert_eq!(layout.monitors().len(), 3);
-    assert_eq!(layout.monitor(&panel).unwrap().sources, vec![panel.clone()]);
+    assert_eq!(layout.monitor(PANEL).unwrap().sources, vec![panel.clone()]);
     assert_eq!(layout.source(&panel).unwrap().source.in_pixel.width, 2560.0);
     assert_eq!(layout.monitor(shared_id()).unwrap().sources.len(), 2);
 }
@@ -370,7 +385,9 @@ fn a_remotes_primary_and_pixels_stay_out_of_the_local_desktop() {
         Some(Rect::new(0.0, 0.0, 4480.0, 1440.0))
     );
     let placements = layout.compute_pixel_locations_from_physical(false);
-    assert!(placements.iter().all(|(id, _)| !id.contains('@')));
+    let mut placed: Vec<&str> = placements.iter().map(|(id, _)| id.as_str()).collect();
+    placed.sort_unstable();
+    assert_eq!(placed, vec![shared_id(), "SAM1234_XYZ"]);
 }
 
 #[test]
@@ -381,9 +398,7 @@ fn a_remote_monitor_never_placed_goes_right_of_the_others_top_aligned() {
 
     let samsung = layout.monitor("SAM1234_XYZ").unwrap();
     let samsung = layout.depth_projection(samsung).unwrap().outside_bounds();
-    let panel = layout
-        .monitor(&remote_source_id(LAPTOP, "LEN40A0_7"))
-        .unwrap();
+    let panel = layout.monitor(PANEL).unwrap();
     let projection = layout.depth_projection(panel).unwrap();
     let outside = projection.outside_bounds();
     assert!((outside.left() - samsung.right()).abs() < 1e-9);
@@ -396,11 +411,10 @@ fn a_remote_monitor_never_placed_goes_right_of_the_others_top_aligned() {
 fn compaction_moves_remote_monitors_with_the_rest() {
     let mut layout = with_laptop();
     layout.set_locations_from_system_configuration(false);
-    let panel = remote_source_id(LAPTOP, "LEN40A0_7");
-    let before = layout.monitor(&panel).unwrap().location();
-    layout.set_location(&panel, before.offset(500.0, 0.0));
+    let before = layout.monitor(PANEL).unwrap().location();
+    layout.set_location(PANEL, before.offset(500.0, 0.0));
     layout.force_compact();
-    let after = layout.monitor(&panel).unwrap().location();
+    let after = layout.monitor(PANEL).unwrap().location();
     assert!(
         (after.x - before.x).abs() < 1e-6,
         "the gap closed: {after:?} against {before:?}"
@@ -491,4 +505,181 @@ fn the_hook_reads_back_which_machine_a_point_is_on_and_where_on_it() {
     assert!(zones
         .host_point(lbm_geom::Point::new(4480 + 10, 0))
         .is_none());
+}
+
+/// The maintainer's desk: a Dell, a Philips, and a Samsung behind a hardware KVM,
+/// which this machine stops detecting when the KVM points at the Windows remote.
+fn desk(with_samsung: bool) -> Layout {
+    let mut layout = Layout::new(design_options());
+    add_monitor(
+        &mut layout,
+        &output(
+            "DP-1",
+            0.0,
+            2560.0,
+            1440.0,
+            edid("DEL", "A0BE", "7XK1R83", 597.0, 336.0),
+        ),
+    );
+    add_monitor(
+        &mut layout,
+        &output(
+            "DP-2",
+            2560.0,
+            1920.0,
+            1080.0,
+            edid("PHL", "0927", "UK02113005123", 527.0, 296.0),
+        ),
+    );
+    if with_samsung {
+        add_monitor(
+            &mut layout,
+            &output(
+                "HDMI-A-1",
+                4480.0,
+                3840.0,
+                2160.0,
+                edid("SAM", "E035", "H1AK500000", 698.0, 393.0),
+            ),
+        );
+    }
+    layout
+}
+
+/// The Samsung as the Windows remote reports it: its device id there, and the panel
+/// key of its EDID (serial string `H1AK500000`, binary serial 0).
+fn windows_samsung() -> RemoteMonitor {
+    remote(
+        r"MONITOR\SAME035\{4d36e96e-e325-11ce-bfc1-08002be10318}\0010",
+        r"\\.\DISPLAY1",
+        Some("SAME035_H1AK500000"),
+        0,
+        3840,
+        2160,
+    )
+}
+
+#[test]
+fn the_layout_id_is_the_same_whichever_machine_shows_a_kvm_switched_panel() {
+    let here = desk(true);
+    assert_eq!(
+        here.monitor("SAME035_H1AK500000")
+            .unwrap()
+            .panel_key
+            .as_deref(),
+        Some("SAME035_H1AK500000"),
+        "on Linux the local id is the panel key"
+    );
+
+    let mut there = desk(false);
+    merge_remote(&mut there, LAPTOP, "windows", &[windows_samsung()]);
+
+    assert_eq!(
+        there.compute_id(),
+        "DELA0BE_7XK1R83+PHL0927_UK02113005123+SAME035_H1AK500000"
+    );
+    assert_eq!(there.compute_id(), here.compute_id());
+    let samsung = there.monitor("SAME035_H1AK500000").unwrap();
+    let source = remote_source_id(LAPTOP, &windows_samsung().id);
+    assert_eq!(samsung.sources, vec![source.clone()]);
+    assert_eq!(samsung.active_source.as_deref(), Some(source.as_str()));
+    assert_eq!(
+        samsung.model, "SAME035",
+        "the same model as here, so its stored size applies too"
+    );
+}
+
+#[test]
+fn a_remote_display_without_a_panel_key_keeps_its_source_id_as_monitor_id() {
+    let mut layout = local();
+    merge_remote(
+        &mut layout,
+        LAPTOP,
+        "laptop",
+        &[remote("eDP-1", "eDP-1", None, 0, 1920, 1080)],
+    );
+    let id = remote_source_id(LAPTOP, "eDP-1");
+    assert_eq!(layout.monitor(&id).unwrap().sources, vec![id.clone()]);
+}
+
+#[test]
+fn identical_twins_of_a_remote_get_the_panel_key_once_and_their_source_id_after() {
+    // Two panels reporting the same serial, on the remote only.
+    let twins = vec![
+        remote(
+            "TWIN-A",
+            "DP-1",
+            Some("ACR0620_FAKE24000001"),
+            0,
+            1920,
+            1080,
+        ),
+        remote(
+            "TWIN-B",
+            "DP-2",
+            Some("ACR0620_FAKE24000001"),
+            1920,
+            1920,
+            1080,
+        ),
+    ];
+    let mut layout = local();
+    merge_remote(&mut layout, LAPTOP, "laptop", &twins);
+
+    let first = layout.monitor("ACR0620_FAKE24000001").unwrap();
+    assert_eq!(first.sources, vec![remote_source_id(LAPTOP, "TWIN-A")]);
+    let second = remote_source_id(LAPTOP, "TWIN-B");
+    assert_eq!(
+        layout.monitor(&second).unwrap().sources,
+        vec![second.clone()]
+    );
+    assert_eq!(layout.monitors().len(), 4);
+
+    // Merged again: each keeps its monitor, neither becomes a source of the other.
+    merge_remote(&mut layout, LAPTOP, "laptop", &twins);
+    assert_eq!(layout.monitors().len(), 4);
+    assert_eq!(
+        layout.monitor("ACR0620_FAKE24000001").unwrap().sources,
+        vec![remote_source_id(LAPTOP, "TWIN-A")]
+    );
+    assert_eq!(
+        layout.monitor(&second).unwrap().sources,
+        vec![second.clone()]
+    );
+}
+
+#[test]
+fn a_remote_twin_of_a_local_panel_never_takes_the_local_monitors_id() {
+    // The Dell's key is taken here, and the laptop has two panels reporting it.
+    let mut layout = local();
+    let twins = vec![
+        remote("A", "HDMI-1", Some(shared_id()), 0, 1920, 1080),
+        remote("B", "HDMI-2", Some(shared_id()), 1920, 1920, 1080),
+    ];
+    merge_remote(&mut layout, LAPTOP, "laptop", &twins);
+
+    assert_eq!(
+        layout.monitor(shared_id()).unwrap().sources,
+        vec![shared_id().to_owned(), remote_source_id(LAPTOP, "A")],
+        "the first one is the shared panel"
+    );
+    let b = remote_source_id(LAPTOP, "B");
+    assert_eq!(layout.monitor(&b).unwrap().sources, vec![b.clone()]);
+    assert_eq!(layout.monitors().len(), 3);
+}
+
+#[test]
+fn a_panel_two_remotes_report_is_one_monitor_named_by_its_key() {
+    let mut layout = local();
+    merge_remote(&mut layout, DESKTOP, "tower", &[windows_samsung()]);
+    merge_remote(&mut layout, LAPTOP, "laptop", &[windows_samsung()]);
+    let samsung = layout.monitor("SAME035_H1AK500000").unwrap();
+    assert_eq!(
+        samsung.sources,
+        vec![
+            remote_source_id(DESKTOP, &windows_samsung().id),
+            remote_source_id(LAPTOP, &windows_samsung().id)
+        ]
+    );
+    assert_eq!(layout.monitors().len(), 3);
 }

@@ -56,6 +56,7 @@ zbus = { version = "5", default-features = false, features = ["async-io"] }
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [
+    "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Security",

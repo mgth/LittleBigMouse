@@ -140,6 +140,15 @@ impl PeersState {
 pub enum Notice {
     /// The state changed (a machine connected, paired, left, or reported its screens).
     Peers(PeersState),
+    /// This machine's master asks for its monitor `display` (this machine's id of it, as
+    /// sent in `Displays`) to be switched to the input `value` (docs/multi-pc.md, "Input
+    /// switching"). Only a paired machine linked as this one's master is heard: the
+    /// agent still checks the display is one of its own.
+    SelectInput {
+        from: String,
+        display: String,
+        value: u16,
+    },
 }
 
 /// A frontend's request, as far as the multi-PC mode goes.
@@ -253,6 +262,24 @@ impl Service {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::LocalDisplays(displays));
         }
+    }
+
+    /// Asks the remote `machine_id` to switch its monitor `display` to the input `value`
+    /// (`SelectInput`), when it is linked as a remote of this machine. Sent and
+    /// forgotten: the remote does not answer it, and what it shows next is the display
+    /// change that follows. Whether it could be handed to the manager.
+    pub fn select_input(&mut self, machine_id: &str, display: &str, value: u16) -> bool {
+        let Some(running) = &self.running else {
+            return false;
+        };
+        running
+            .commands
+            .send(Command::SelectInput {
+                machine_id: machine_id.to_owned(),
+                display: display.to_owned(),
+                value,
+            })
+            .is_ok()
     }
 
     /// Turns the mode off for the agent's way out: the peers get `Bye`.

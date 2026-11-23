@@ -151,13 +151,18 @@ On the master (lot 6, evdev backend only; the details are in
   (its display-change path; no watcher of its own), under a new `Revision` only when
   the screens differ. `PeerDisplay` comes from the platform detection (`LinuxMonitor`
   in logical pixels, the Win32 tree), raw EDID from sysfs or the registry; `InputSource`
-  is not read yet (lot 8). Input batches go to the hook's input endpoint, connected at
+  is what this machine last read of that panel's VCP 0x60 (see "Input switching"),
+  absent when unread or unreadable. Input batches go to the hook's input endpoint, connected at
   the first batch and again after a failure; with no connection they are dropped. The
   end of the link closes that connection: the hook releases what is held.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the linked remote with `try_input`.
   **One remote at a time**: the most recently linked one gets the stream until lot 6
-  routes by zone. `SelectInput` is logged and ignored (lot 8).
+  routes by zone.
+- **`SelectInput`** is heard only from a paired machine linked as this one's master, and
+  only for a display this machine has (its id in `Displays`, a monitor wired here); from
+  anyone else it is logged and ignored. The master sends it only to a machine linked as
+  its remote.
 - **API** (additive to protocol 3, capability `MultiPc`):
   - `Peers` → `{ Enabled, Port, Name, MachineId (this machine's fingerprint, null before
     the first use), ListenAddress, Error, Peers: [{ MachineId, Name, Address, Connected,
@@ -203,9 +208,10 @@ On the master (lot 6, evdev backend only; the details are in
   same `LayoutId`: an edit made with a remote linked is not applied to the layout made
   after it left, nor the other way round.
 - **`SetActiveSource { LayoutId, Monitor, Source }`** (API, `MultiPc`): shows `Source` (one
-  of the monitor's sources, attached to its machine's desktop) on the panel, saves, and
-  hands a running engine the new zones; answered `null`. The VCP 0x60 write of input
-  switching (lot 8) plugs in where the runtime handles it.
+  of the monitor's sources, attached to its machine's desktop — or not attached but with
+  a known input value, which the switch is to bring there) on the panel, saves, and
+  hands a running engine the new zones; answered `null` at once. The input switch it
+  may ask for (below) runs afterwards and is never waited for.
 
 ## A panel both machines know
 
@@ -223,6 +229,50 @@ reading 0x60 on the machine currently shown, on display events — never polled)
 The write is done by the master when it can reach the monitor over DDC, else it is
 asked of the remote with `SelectInput`. With a hardware KVM on a single input
 there is no value to write and only the active source changes.
+
+What lot 8 does (`lbm-agent/src/input_switch.rs`, `vcp.rs`):
+
+- **Opt-in**: nothing is read from or written to a monitor unless VCP control is enabled
+  in that machine's layout (Settings), as for the property panel; each machine decides
+  for its own monitors. Off — the default — a shared panel switches routing only.
+- **DDC/CI**: Linux through `ddcutil`, Windows through dxva2 (the monitor of the layout
+  found by its device id below its adapter source, then the `HMONITOR` showing that
+  source and its physical monitor). Every request runs outside the agent's loop, one at
+  a time with the property panel's, under a deadline.
+- **Learning**, after every rebuild (a display event) and when a master links — never on
+  a timer: a machine reads 0x60 of its panels, and a reading is the value of **the source
+  shown**. A monitor that keeps both inputs alive is attached to both machines whatever
+  it shows, so a machine cannot tell its own input from the other's by being attached:
+  - a panel two machines know is read only while this machine's source is the active
+    one, and the value goes to that source;
+  - a remote reads every panel it has while a master is linked (it cannot know which
+    are shared) and publishes the readings as `InputSource`; its master merges the
+    remotes' screens **without** those values and adopts one only for a remote source
+    its panel shows (active and attached);
+  - a learnt value is saved at once (`InputSource` on the source in the store): it is
+    needed precisely when its source is not shown and cannot be read. A failed read
+    (no DDC/CI, a KVM, no ddcutil) leaves the learnt value as it was and publishes
+    none, with one log line per monitor and error.
+- **Switching**, on `SetActiveSource` only. Nothing is written when the chosen source
+  has no known value. Otherwise, on the machine that tries, 0x60 is read first and
+  written only when it differs (two sources on one input — a KVM — write nothing):
+
+  | The master's own DDC link to the panel | Who writes |
+  |---|---|
+  | answers, already showing the value | nobody |
+  | answers, other input | the master |
+  | none (no local source, VCP control off), does not answer, or the write fails | the remote, asked with `SelectInput`: the machine the panel showed, else the one chosen, else any other with a source on it |
+  | as above, and no remote linked for that panel | nobody: logged; a choice of a source not attached is given up for the rule's |
+
+  The remote does the same read-then-write on its side; it does not answer, and the
+  master learns the result from the display events that follow.
+- **No fight with the attachment rule**: a write is only ever caused by `SetActiveSource`,
+  never by a display event. A source chosen while not attached is kept as the choice
+  across the rebuilds the switch sets off (the panel detaching here before the other
+  machine reports it), until it is attached — then the rule keeps it — or the user
+  chooses again, or nobody could switch.
+- **The frontend** is not told of a failed switch, beyond the panel not changing: there
+  is no channel for such a note yet; the agent's log says why.
 
 ## Lots
 

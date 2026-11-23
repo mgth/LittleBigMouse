@@ -9,7 +9,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request, Snapshot};
 use crate::hook::{HookClient, HookSignal};
-use crate::peers::{Answer, Notice, PeerRequest};
+use crate::input_switch::{self, InputRead, InputSwitch, Outcome};
+use crate::peers::{Answer, Notice, PeerRequest, PeerState};
 use crate::reconcile::{Effect, EngineState, HookEvent, Input, Reconciler, Timings};
 use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
@@ -50,6 +51,20 @@ fn hook_event(message: Event) -> HookEvent {
     }
 }
 
+/// What the monitor work done away from the loop (`input_switch`) reports back to it.
+enum VcpEvent {
+    /// The inputs read after the rebuild `rebuild`.
+    Read {
+        rebuild: u64,
+        results: Vec<(InputRead, Result<u16, String>)>,
+    },
+    /// A switch this machine attempted.
+    Switched {
+        switch: Box<InputSwitch>,
+        outcome: Outcome,
+    },
+}
+
 /// The agent: the reconciler, the world it acts on, the hook it drives.
 pub struct Agent<W> {
     reconciler: Reconciler,
@@ -88,6 +103,19 @@ pub struct Agent<W> {
     remote: std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>,
     /// The multi-PC mode, when this agent offers it.
     peers: Option<crate::peers::Service>,
+    /// The monitors' input, read and written for the multi-PC mode (`input_switch`).
+    ddc: std::sync::Arc<dyn crate::vcp::Ddc>,
+    vcp_events: UnboundedSender<VcpEvent>,
+    vcp_events_rx: Option<UnboundedReceiver<VcpEvent>>,
+    /// This machine's monitors' inputs, as last read, by monitor id: what a master is
+    /// told selects this machine on each.
+    readings: std::collections::HashMap<String, u16>,
+    /// Why a monitor's input could not be read, as last said: said again only when it
+    /// changes, not at every display event.
+    read_failures: std::collections::HashMap<String, String>,
+    /// Whether a master is linked: only then are the panels this machine alone has
+    /// read, to tell it what selects this machine on them.
+    has_master: bool,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -99,6 +127,7 @@ impl<W: AgentWorld> Agent<W> {
         hook: HookClient,
         inputs: UnboundedSender<Input>,
     ) -> Self {
+        let (vcp_events, vcp_events_rx) = tokio::sync::mpsc::unbounded_channel();
         Agent {
             reconciler: Reconciler::new(timings),
             world,
@@ -123,7 +152,20 @@ impl<W: AgentWorld> Agent<W> {
             vcp: Default::default(),
             remote: Default::default(),
             peers: None,
+            ddc: std::sync::Arc::new(crate::vcp::SystemDdc::default()),
+            vcp_events,
+            vcp_events_rx: Some(vcp_events_rx),
+            readings: Default::default(),
+            read_failures: Default::default(),
+            has_master: false,
         }
+    }
+
+    /// Reads and writes the monitors' input through `ddc` rather than the system's
+    /// DDC/CI: the tests' recording double.
+    pub fn with_ddc(mut self, ddc: std::sync::Arc<dyn crate::vcp::Ddc>) -> Self {
+        self.ddc = ddc;
+        self
     }
 
     /// Offers the multi-PC mode (see [`crate::peers`]).
@@ -622,15 +664,15 @@ impl<W: AgentWorld> Agent<W> {
             } => self
                 .world
                 .set_active_source(&layout_id, &monitor, &source)
-                .map(|()| {
+                .map(|switch| {
                     eprintln!("[lbm-agent] {monitor} now shows {source}");
-                    // LOT 8 PLUGS IN HERE: a panel wired to both machines on two inputs
-                    // is switched by writing VCP 0x60 with the chosen source's
-                    // `InputSource` — here when this machine reaches it over DDC, else
-                    // asked of its machine with `SelectInput` (docs/multi-pc.md,
-                    // "Input switching"). Until then only the routing follows the
-                    // choice, which is all a hardware KVM needs.
-                    //
+                    // A panel wired to both machines on two inputs is switched too, away
+                    // from the loop: the answer never waits on a monitor. Without a known
+                    // input value only the routing follows the choice, which is all a
+                    // hardware KVM needs.
+                    if let Some(switch) = switch {
+                        self.switch_input(switch);
+                    }
                     // The zone of the panel has changed hands: a running engine must
                     // route it to the machine now shown.
                     self.reload_changed_zones();
@@ -677,10 +719,165 @@ impl<W: AgentWorld> Agent<W> {
         if !self.peers.as_ref().is_some_and(|p| p.enabled()) {
             return;
         }
-        let displays = self.world.peer_displays();
+        let mut displays = self.world.peer_displays();
+        for display in &mut displays {
+            display.input_source = self
+                .world
+                .display_monitor(&display.id)
+                .and_then(|monitor| self.readings.get(&monitor))
+                .copied();
+        }
         if let Some(peers) = &mut self.peers {
             peers.local_displays(displays);
         }
+    }
+
+    /// Reads the input of the panels this machine shows (`input_switch::reads`), away
+    /// from the loop. Asked after a rebuild — a display event — and when a master links;
+    /// never on a timer.
+    fn read_inputs(&mut self) {
+        if !self.peers.as_ref().is_some_and(|p| p.enabled()) {
+            return;
+        }
+        let reads = self.world.input_reads(self.has_master);
+        if reads.is_empty() {
+            if !self.readings.is_empty() {
+                self.readings.clear();
+                self.tell_peers_the_displays();
+            }
+            return;
+        }
+        let rebuild = self.reconciler.rebuild_count();
+        let (ddc, bus, events) = (self.ddc.clone(), self.vcp.clone(), self.vcp_events.clone());
+        tokio::spawn(async move {
+            // One request at a time on the monitors, the property panel's included.
+            let _bus = bus.lock_owned().await;
+            let mut results = Vec::with_capacity(reads.len());
+            for read in reads {
+                let result = ddc.read(read.target.clone(), crate::vcp::INPUT).await;
+                results.push((read, result));
+            }
+            let _ = events.send(VcpEvent::Read { rebuild, results });
+        });
+    }
+
+    /// What the reads found: remembered on the sources shown, and told to the masters.
+    fn inputs_read(&mut self, rebuild: u64, results: Vec<(InputRead, Result<u16, String>)>) {
+        // A newer rebuild has read, or is reading, the panels as they are now.
+        if rebuild != self.reconciler.rebuild_count() {
+            return;
+        }
+        let mut learnt = Vec::new();
+        let mut readings = std::collections::HashMap::new();
+        for (read, result) in results {
+            match result {
+                Ok(value) => {
+                    self.read_failures.remove(&read.monitor);
+                    readings.insert(read.monitor.clone(), value);
+                    learnt.push((read, value));
+                }
+                // A monitor without DDC/CI, behind a KVM, or a machine without ddcutil:
+                // its input stays unknown, which only means it is never switched.
+                Err(error) => {
+                    if self.read_failures.get(&read.monitor) != Some(&error) {
+                        eprintln!(
+                            "[lbm-agent] the input of {} could not be read: {error}",
+                            read.monitor
+                        );
+                        self.read_failures.insert(read.monitor.clone(), error);
+                    }
+                }
+            }
+        }
+        for (read, value) in &learnt {
+            if self.readings.get(&read.monitor) != Some(value) {
+                eprintln!("[lbm-agent] {} shows input {value:#04x}", read.monitor);
+            }
+        }
+        self.world.learn_inputs(&learnt);
+        if readings != self.readings {
+            self.readings = readings;
+            self.tell_peers_the_displays();
+        }
+    }
+
+    /// Switches a panel's input for the user's choice, away from the loop.
+    fn switch_input(&mut self, switch: InputSwitch) {
+        eprintln!(
+            "[lbm-agent] switching {} to input {:#04x}",
+            switch.monitor, switch.value
+        );
+        let (ddc, bus, events) = (self.ddc.clone(), self.vcp.clone(), self.vcp_events.clone());
+        tokio::spawn(async move {
+            let mut service = bus.lock_owned().await;
+            let outcome = input_switch::execute(&*ddc, &switch).await;
+            // Whatever the property panel read of that monitor may be wrong now.
+            service.forget();
+            let _ = events.send(VcpEvent::Switched {
+                switch: Box::new(switch),
+                outcome,
+            });
+        });
+    }
+
+    fn input_switched(&mut self, switch: InputSwitch, outcome: Outcome) {
+        let (monitor, value) = (&switch.monitor, switch.value);
+        match outcome {
+            Outcome::AlreadyShown => {
+                eprintln!("[lbm-agent] {monitor} already shows input {value:#04x}")
+            }
+            Outcome::Written => eprintln!("[lbm-agent] {monitor} switched to input {value:#04x}"),
+            Outcome::Ask(ask, why) => {
+                eprintln!(
+                    "[lbm-agent] {monitor} cannot be switched from here ({why}): asking {}",
+                    ask.machine_id
+                );
+                let sent = self
+                    .peers
+                    .as_mut()
+                    .is_some_and(|p| p.select_input(&ask.machine_id, &ask.display, value));
+                if !sent {
+                    self.switch_given_up(&switch, "the multi-PC mode is off");
+                }
+            }
+            Outcome::Failed(why) => self.switch_given_up(&switch, &why),
+        }
+    }
+
+    /// Nobody could switch the panel: said, and a choice that only the switch could
+    /// have made good is given up.
+    fn switch_given_up(&mut self, switch: &InputSwitch, why: &str) {
+        eprintln!(
+            "[lbm-agent] {} could not be switched to input {:#04x}: {why}",
+            switch.monitor, switch.value
+        );
+        if self.world.switch_failed(&switch.monitor, &switch.source) {
+            self.reload_changed_zones();
+        }
+    }
+
+    /// This machine's master asks for one of its monitors to be switched.
+    fn select_input(&mut self, from: String, display: String, value: u16) {
+        let target = match self.world.select_input_target(&display) {
+            Ok(target) => target,
+            Err(error) => {
+                eprintln!("[lbm-agent] {from} asked to switch {display}: {error}");
+                return;
+            }
+        };
+        let (ddc, bus) = (self.ddc.clone(), self.vcp.clone());
+        tokio::spawn(async move {
+            let mut service = bus.lock_owned().await;
+            let result = input_switch::switch_locally(&*ddc, target, value).await;
+            service.forget();
+            match result {
+                Ok(true) => eprintln!("[lbm-agent] {display} switched to input {value:#04x}"),
+                Ok(false) => eprintln!("[lbm-agent] {display} already shows input {value:#04x}"),
+                Err(error) => eprintln!(
+                    "[lbm-agent] {display} could not be switched to input {value:#04x}: {error}"
+                ),
+            }
+        });
     }
 
     /// What the multi-PC manager reports changed: a machine paired, linked, left, or —
@@ -695,9 +892,22 @@ impl<W: AgentWorld> Agent<W> {
     fn peers_changed(&mut self, state: crate::peers::PeersState) {
         let event = api::peers_event(&state);
         self.subscribers.retain(|s| s.send(event.clone()));
+        let has_master = state.enabled
+            && state.peers.iter().any(|p| {
+                p.state == PeerState::Paired
+                    && p.role == lbm_net::wire::Role::Master
+                    && p.peer.connected
+            });
+        let master_linked = has_master && !self.has_master;
+        self.has_master = has_master;
         if self.world.set_remote_screens(state.remote_screens()) {
             eprintln!("[lbm-agent] the remote machines' screens changed");
             self.handle(Input::DisplayChanged);
+        }
+        // A master that links needs what selects this machine on its panels, which a
+        // machine without a master does not read.
+        if master_linked {
+            self.read_inputs();
         }
     }
 
@@ -916,6 +1126,7 @@ impl<W: AgentWorld> Agent<W> {
         let mut calls = self.calls.take();
         let mut sleep = self.sleep.take();
         let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
+        let mut vcp_events = self.vcp_events_rx.take();
         loop {
             self.publish();
             if self.quitting {
@@ -970,7 +1181,27 @@ impl<W: AgentWorld> Agent<W> {
                 } => {
                     match notice {
                         Some(Notice::Peers(state)) => self.peers_changed(state),
+                        Some(Notice::SelectInput { from, display, value }) => {
+                            self.select_input(from, display, value)
+                        }
                         None => peer_notices = None,
+                    }
+                    continue;
+                },
+                event = async {
+                    match &mut vcp_events {
+                        Some(events) => events.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match event {
+                        Some(VcpEvent::Read { rebuild, results }) => {
+                            self.inputs_read(rebuild, results)
+                        }
+                        Some(VcpEvent::Switched { switch, outcome }) => {
+                            self.input_switched(*switch, outcome)
+                        }
+                        None => vcp_events = None,
                     }
                     continue;
                 },
@@ -1078,6 +1309,9 @@ impl<W: AgentWorld> Agent<W> {
         // the masters it is a remote of hear of it from here, with no watcher of its own.
         if self.reconciler.rebuild_count() != rebuilds {
             self.tell_peers_the_displays();
+            // The panels' inputs as they are after this display change; what is read
+            // only ever reaches the layout and the masters, never a monitor.
+            self.read_inputs();
         }
     }
 

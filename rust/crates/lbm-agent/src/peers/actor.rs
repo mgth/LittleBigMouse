@@ -52,6 +52,12 @@ pub(super) enum Command {
     },
     /// This machine's screens changed (or are known for the first time).
     LocalDisplays(Vec<PeerDisplay>),
+    /// `SelectInput` to a remote of this machine.
+    SelectInput {
+        machine_id: String,
+        display: String,
+        value: u16,
+    },
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
 }
@@ -345,6 +351,11 @@ impl Actor {
                 let _ = reply.send(self.forget(&machine_id));
             }
             Command::LocalDisplays(displays) => self.local_displays(displays),
+            Command::SelectInput {
+                machine_id,
+                display,
+                value,
+            } => self.select_input(&machine_id, display, value),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -744,9 +755,22 @@ impl Actor {
                     live.displays = Some((revision, displays));
                 }
             }
-            Control::SelectInput { display, value } => {
+            // Only this machine's master may switch its monitors: a remote of this
+            // machine has no say over them, and an unpaired machine never gets a link.
+            Control::SelectInput { display, value } if live.info.hello.role == Role::Master => {
                 eprintln!(
-                    "[lbm-agent] multi-PC: {} asks for input {value:#04x} on {display}: not implemented yet",
+                    "[lbm-agent] multi-PC: {} asks for input {value:#04x} on {display}",
+                    live.info.hello.name
+                );
+                let _ = self.notices.send(Notice::SelectInput {
+                    from: machine_id.to_owned(),
+                    display,
+                    value,
+                });
+            }
+            Control::SelectInput { display, .. } => {
+                eprintln!(
+                    "[lbm-agent] multi-PC: {} is not this machine's master: its input switch on {display} is ignored",
                     live.info.hello.name
                 );
             }
@@ -799,6 +823,26 @@ impl Actor {
         } else {
             Err(format!("no machine {machine_id} is known"))
         }
+    }
+
+    /// Sends `SelectInput` to `machine_id`, if it is linked as a remote of this machine.
+    /// Queued in a task of its own, as `Displays` is.
+    fn select_input(&mut self, machine_id: &str, display: String, value: u16) {
+        let Some(live) = self
+            .links
+            .get(machine_id)
+            .filter(|live| live.info.hello.role == Role::Remote)
+        else {
+            eprintln!(
+                "[lbm-agent] multi-PC: {machine_id} is not linked as a remote: cannot ask it to switch {display}"
+            );
+            return;
+        };
+        let sender = live.sender.clone();
+        let message = Control::SelectInput { display, value };
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
     }
 
     /// This machine's screens changed: every master this machine is the remote of is

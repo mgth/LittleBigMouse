@@ -102,7 +102,9 @@ impl Node {
         }
         tokio::time::timeout(PATIENCE, async {
             loop {
-                let Notice::Peers(state) = self.notices.recv().await.expect("notices");
+                let Notice::Peers(state) = self.notices.recv().await.expect("notices") else {
+                    continue;
+                };
                 if want(&state) {
                     return state;
                 }
@@ -486,4 +488,109 @@ async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends(
     assert_eq!(tower_hook.next().await, None);
     assert_eq!(desk_hook.next().await, None);
     tower.until(|s| !linked(s, &desk_id)).await;
+}
+
+/// The next `SelectInput` the manager passes on to its agent, if one comes `within`.
+async fn select_input(node: &mut Node, within: Duration) -> Option<(String, String, u16)> {
+    tokio::time::timeout(within, async {
+        loop {
+            if let Notice::SelectInput {
+                from,
+                display,
+                value,
+            } = node.notices.recv().await.expect("notices")
+            {
+                return (from, display, value);
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+#[tokio::test]
+async fn only_this_machines_master_may_switch_its_monitors() {
+    // The tower's master asks for an input: the tower's agent hears of it.
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let mut tower = Node::new(tower_dir.path(), None);
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    link.sender()
+        .control(&Control::SelectInput {
+            display: "DEL4065_ABC123".into(),
+            value: 0x11,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        select_input(&mut tower, PATIENCE).await,
+        Some((
+            master.fingerprint().to_owned(),
+            "DEL4065_ABC123".to_owned(),
+            0x11
+        ))
+    );
+
+    // The desk's remote asks the same of the desk: a remote has no say over its
+    // master's monitors, and the desk's agent hears nothing.
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    laptop_link
+        .sender()
+        .control(&Control::SelectInput {
+            display: "DP-1".into(),
+            value: 0x0f,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        select_input(&mut desk, Duration::from_millis(500)).await,
+        None
+    );
+
+    // The other way round is the desk's to ask: the laptop is told.
+    assert!(desk
+        .service
+        .select_input(laptop.fingerprint(), "HDMI-1", 0x11));
+    assert_eq!(
+        next_control(&mut laptop_link).await,
+        Control::SelectInput {
+            display: "HDMI-1".into(),
+            value: 0x11
+        }
+    );
+    drop(link);
 }

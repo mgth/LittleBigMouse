@@ -1,6 +1,126 @@
 //! Serialized monitor I/O, independent from the agent event loop.
+//!
+//! Two users of DDC/CI: the property panel ([`Service`]: a probe of every allowed
+//! control, then writes against it), and the input switching of the multi-PC mode
+//! ([`Ddc`]: one code read or written on its own, `crate::input_switch`). Linux goes
+//! through the `ddcutil` command, Windows through dxva2; both run outside the agent's
+//! loop and under a deadline, since a monitor that does not answer can hold a request
+//! for seconds.
+use std::future::Future;
+use std::pin::Pin;
+
 use lbm_ipc::vcp::{Monitor, Write};
 use lbm_layout::model::Layout;
+
+mod common;
+mod mccs;
+mod winmap;
+
+/// VCP 0x60, the monitor's input source.
+pub const INPUT: u8 = 0x60;
+
+/// What a [`Ddc`] request comes back with, later.
+pub type DdcFuture<T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send>>;
+
+/// One VCP code read or written on one monitor, on its own. Behind a trait so that the
+/// input switching is exercised against a recording double: a real 0x60 write changes
+/// what the user's screens show.
+pub trait Ddc: Send + Sync {
+    fn read(&self, target: Target, code: u8) -> DdcFuture<u16>;
+    fn write(&self, target: Target, code: u8, value: u16) -> DdcFuture<()>;
+}
+
+/// A request a [`FakeDdc`] was given.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DdcCall {
+    Read {
+        connector: String,
+        code: u8,
+    },
+    Write {
+        connector: String,
+        code: u8,
+        value: u16,
+    },
+}
+
+/// A monitor bus that touches no monitor: what each connector's codes hold, which
+/// connectors do not answer, and every request, for the tests.
+#[derive(Debug, Default)]
+pub struct FakeDdc {
+    state: std::sync::Mutex<FakeState>,
+}
+
+#[derive(Debug, Default)]
+struct FakeState {
+    values: std::collections::HashMap<(String, u8), u16>,
+    silent: std::collections::HashSet<String>,
+    calls: Vec<DdcCall>,
+}
+
+impl FakeDdc {
+    /// `connector` answers `value` for `code`.
+    pub fn set(&self, connector: &str, code: u8, value: u16) {
+        let mut state = self.state.lock().unwrap();
+        state.values.insert((connector.to_owned(), code), value);
+    }
+
+    /// `connector` answers nothing, read or write.
+    pub fn silence(&self, connector: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .silent
+            .insert(connector.to_owned());
+    }
+
+    pub fn calls(&self) -> Vec<DdcCall> {
+        self.state.lock().unwrap().calls.clone()
+    }
+
+    pub fn writes(&self) -> Vec<DdcCall> {
+        self.calls()
+            .into_iter()
+            .filter(|c| matches!(c, DdcCall::Write { .. }))
+            .collect()
+    }
+}
+
+impl Ddc for FakeDdc {
+    fn read(&self, target: Target, code: u8) -> DdcFuture<u16> {
+        let mut state = self.state.lock().unwrap();
+        state.calls.push(DdcCall::Read {
+            connector: target.connector.clone(),
+            code,
+        });
+        let result = if state.silent.contains(&target.connector) {
+            Err(format!("no DDC/CI answer from {}", target.connector))
+        } else {
+            state
+                .values
+                .get(&(target.connector.clone(), code))
+                .copied()
+                .ok_or_else(|| format!("{} does not support {code:#04x}", target.connector))
+        };
+        Box::pin(async move { result })
+    }
+
+    fn write(&self, target: Target, code: u8, value: u16) -> DdcFuture<()> {
+        let mut state = self.state.lock().unwrap();
+        state.calls.push(DdcCall::Write {
+            connector: target.connector.clone(),
+            code,
+            value,
+        });
+        let result = if state.silent.contains(&target.connector) {
+            Err(format!("no DDC/CI answer from {}", target.connector))
+        } else {
+            state.values.insert((target.connector, code), value);
+            Ok(())
+        };
+        Box::pin(async move { result })
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
@@ -87,14 +207,36 @@ mod tests {
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::Service;
+pub use linux::{Service, SystemDdc};
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+mod dxva2;
+#[cfg(windows)]
+pub use dxva2::{Service, SystemDdc};
+
+#[cfg(not(any(target_os = "linux", windows)))]
+const UNSUPPORTED: &str = "VCP hardware control is available on Linux with ddcutil and on Windows.";
+
+#[cfg(not(any(target_os = "linux", windows)))]
 #[derive(Default)]
 pub struct Service;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", windows)))]
 impl Service {
     pub async fn execute(&mut self, _: Target, _: Option<Write>) -> Result<Monitor, String> {
-        Err("VCP hardware control is currently available on Linux with ddcutil.".into())
+        Err(UNSUPPORTED.into())
+    }
+    pub fn forget(&mut self) {}
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+#[derive(Default)]
+pub struct SystemDdc(());
+#[cfg(not(any(target_os = "linux", windows)))]
+impl Ddc for SystemDdc {
+    fn read(&self, _: Target, _: u8) -> DdcFuture<u16> {
+        Box::pin(async { Err(UNSUPPORTED.into()) })
+    }
+    fn write(&self, _: Target, _: u8, _: u16) -> DdcFuture<()> {
+        Box::pin(async { Err(UNSUPPORTED.into()) })
     }
 }

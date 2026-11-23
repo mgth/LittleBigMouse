@@ -1842,6 +1842,8 @@ struct Master {
     listener: lbm_net::link::Listener,
     /// The layout of this machine alone, running.
     alone: Value,
+    /// The monitors' DDC/CI as the agent sees it: no real monitor is ever reached.
+    ddc: std::sync::Arc<lbm_agent::vcp::FakeDdc>,
 }
 
 impl Master {
@@ -1882,11 +1884,14 @@ impl Master {
             },
         );
         let world = lbm_agent::world::SystemWorld::new(discovery, persistence(dir));
+        let ddc = std::sync::Arc::new(lbm_agent::vcp::FakeDdc::default());
+        let bus = ddc.clone();
         tokio::spawn(async move {
             let _listening = listening;
             let mut agent = Agent::new(world, Timings::default(), hook, inputs)
                 .with_api(calls)
-                .with_peers(peers);
+                .with_peers(peers)
+                .with_ddc(bus);
             agent.run(signals, inputs_rx, std::future::pending()).await;
         });
 
@@ -1900,6 +1905,7 @@ impl Master {
             laptop,
             listener,
             alone,
+            ddc,
         }
     }
 
@@ -2074,13 +2080,15 @@ async fn choosing_the_machine_a_shared_panel_shows_hands_its_zone_to_that_machin
     let together = master.laptop_shows(&link, 1, screens.clone()).await;
     let layout_id = together["LayoutId"].as_str().unwrap().to_owned();
     let dell_there = lbm_layout::remote::remote_source_id(&laptop_id, "HDMI-1");
-    // How many screens the engine routes to the laptop.
+    // How many screens the engine routes to the laptop. Every zone the document
+    // describes: a parsed layout keeps the other machines' out of `main_zones` until a
+    // hook's input endpoint has a client (`set_remote_enterable`, lot 6).
     let on_the_laptop = |zones: &str| -> usize {
         let mut layout = lbm_zones::ZonesLayout::from_xml(zones).unwrap();
         // What the hook's router sees once this agent is connected to its input stream.
         layout.set_remote_enterable(true);
         layout
-            .main_zones
+            .all_zones
             .iter()
             .filter(|id| layout.arena[**id].host.as_deref() == Some(laptop_id.as_str()))
             .count()
@@ -2218,4 +2226,363 @@ async fn a_remote_that_shares_only_a_panel_keeps_the_layout_id_and_still_rebuild
         .await;
     assert_eq!(chosen["Result"], Value::Null, "{chosen}");
     drop(link);
+}
+
+/// Waits for `what` to hold, a few seconds at most.
+async fn eventually(what: impl Fn() -> bool, said: &str) {
+    for _ in 0..500 {
+        if what() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("never: {said}");
+}
+
+/// The next control message on `link` that `want` takes, skipping the others.
+async fn next_control_where(
+    link: &mut lbm_net::link::Link,
+    want: impl Fn(&lbm_net::wire::Control) -> bool,
+) -> lbm_net::wire::Control {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match link.next().await {
+                Some(lbm_net::link::Event::Control(message)) if want(&message) => return message,
+                Some(lbm_net::link::Event::Control(_) | lbm_net::link::Event::Input(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("the control message in time")
+}
+
+/// Turns VCP control on in the layout of this machine alone, as the user does in
+/// Settings: nothing is read from or written to a monitor before.
+async fn enable_vcp_control(
+    frontend: &mut Frontend,
+    dir: &std::path::Path,
+    outputs: &[lbm_layout::linux::LinuxMonitor],
+    layout_id: &str,
+) {
+    let mut layout = master_layout(dir, outputs, &[]);
+    assert_eq!(layout.id, layout_id);
+    layout.edit_options(|o| o.vcp_control = true);
+    let document = serde_json::to_value(lbm_store::LayoutDocument::of(&layout)).unwrap();
+    let saved = frontend
+        .ask(json!({ "Method": "SaveLayout", "LayoutId": layout_id, "Document": document }))
+        .await;
+    assert_eq!(saved["Result"], Value::Null, "{saved}");
+}
+
+const ON_DP: u16 = 0x0f;
+const ON_HDMI: u16 = 0x11;
+
+fn input_write(value: u16) -> lbm_agent::vcp::DdcCall {
+    lbm_agent::vcp::DdcCall::Write {
+        connector: "DP-1".into(),
+        code: 0x60,
+        value,
+    }
+}
+
+#[tokio::test]
+async fn choosing_the_machine_a_shared_panel_shows_switches_its_input_and_nothing_else_does() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Given(dell_here())).await;
+    let laptop_id = master.laptop_id();
+    let layout_id = master.alone["LayoutId"].as_str().unwrap().to_owned();
+    // The Dell shows this machine, on DisplayPort.
+    master.ddc.set("DP-1", 0x60, ON_DP);
+    enable_vcp_control(&mut master.frontend, tmp.path(), dell_here(), &layout_id).await;
+
+    // The laptop has the Dell on HDMI, and has read nothing of it yet. The display
+    // change has this machine read its own input, the panel showing it.
+    let mut link = master.link_the_laptop().await;
+    let dell_on_hdmi = |input_source| lbm_ipc::peer::PeerDisplay {
+        input_source,
+        ..laptop_screen("HDMI-1", Some(dell_edid("ABC123", 2)), 0)
+    };
+    link.sender()
+        .control(&lbm_net::wire::Control::Displays {
+            revision: 1,
+            displays: vec![dell_on_hdmi(None)],
+        })
+        .await
+        .unwrap();
+    let remotes = |input| [(laptop_id.as_str(), "laptop", vec![dell_on_hdmi(input)])];
+    let stored_input = |source: &str| {
+        master_layout(tmp.path(), dell_here(), &remotes(None))
+            .source(source)
+            .and_then(|s| s.source.input_source)
+    };
+    eventually(
+        || stored_input(SHARED_DELL) == Some(ON_DP),
+        "DisplayPort learnt",
+    )
+    .await;
+    let dell_there = lbm_layout::remote::remote_source_id(&laptop_id, "HDMI-1");
+    assert_eq!(stored_input(&dell_there), None);
+
+    // The laptop chosen while its input is unknown: the routing follows, and nothing
+    // is written — the hardware KVM case.
+    let chosen = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": dell_there,
+        }))
+        .await;
+    assert_eq!(chosen["Result"], Value::Null, "{chosen}");
+
+    // Now shown, the laptop reads HDMI and says so: a display change here, which this
+    // machine learns from, and which writes nothing.
+    link.sender()
+        .control(&lbm_net::wire::Control::Displays {
+            revision: 2,
+            displays: vec![dell_on_hdmi(Some(ON_HDMI))],
+        })
+        .await
+        .unwrap();
+    eventually(|| stored_input(&dell_there) == Some(ON_HDMI), "HDMI learnt").await;
+    assert_eq!(
+        stored_input(SHARED_DELL),
+        Some(ON_DP),
+        "this machine's own kept"
+    );
+    assert!(master.ddc.writes().is_empty(), "{:?}", master.ddc.calls());
+
+    // Back to this machine: the Dell shows HDMI, so DisplayPort is written, here.
+    master.ddc.set("DP-1", 0x60, ON_HDMI);
+    let back = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": SHARED_DELL,
+        }))
+        .await;
+    assert_eq!(back["Result"], Value::Null, "{back}");
+    eventually(
+        || master.ddc.writes() == [input_write(ON_DP)],
+        "DisplayPort written",
+    )
+    .await;
+
+    // To the laptop again, the Dell silent on the cable it no longer shows: the laptop
+    // is asked to switch it, by its own name for it.
+    master.ddc.silence("DP-1");
+    let there = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": dell_there,
+        }))
+        .await;
+    assert_eq!(there["Result"], Value::Null, "{there}");
+    let asked = next_control_where(&mut link, |c| {
+        matches!(c, lbm_net::wire::Control::SelectInput { .. })
+    })
+    .await;
+    assert_eq!(
+        asked,
+        lbm_net::wire::Control::SelectInput {
+            display: "HDMI-1".into(),
+            value: ON_HDMI,
+        }
+    );
+    assert_eq!(
+        master.ddc.writes(),
+        [input_write(ON_DP)],
+        "one write, the one chosen"
+    );
+}
+
+#[tokio::test]
+async fn a_remote_tells_its_master_what_selects_it_and_switches_when_its_master_asks() {
+    use lbm_net::wire::{Control, Hello, Role};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let (hook_endpoint, api_endpoint) = endpoints(&tmp);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let config = dir.join("config");
+    let desk = lbm_net::identity::Identity::load_or_create(&dir.join("desk")).unwrap();
+    lbm_net::peers::PeerStore::load(&config)
+        .insert(lbm_net::peers::PairedPeer {
+            machine_id: desk.fingerprint().to_owned(),
+            name: "desk".into(),
+            address: String::new(),
+            role: Role::Master,
+        })
+        .unwrap();
+    let ddc = std::sync::Arc::new(lbm_agent::vcp::FakeDdc::default());
+    // The Dell shows this machine, on HDMI.
+    ddc.set("DP-1", 0x60, ON_HDMI);
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, listening) = listen(&api_endpoint);
+    let peers = lbm_agent::peers::Service::new(
+        config,
+        lbm_agent::peers::Setup {
+            bind: "127.0.0.1".parse().unwrap(),
+            input_endpoint: None,
+            options: lbm_net::link::Options::default(),
+        },
+    );
+    let world = lbm_agent::world::SystemWorld::new(
+        lbm_agent::discovery::Discovery::Given(dell_here()),
+        persistence(dir),
+    );
+    let bus = ddc.clone();
+    tokio::spawn(async move {
+        let _listening = listening;
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_peers(peers)
+            .with_ddc(bus);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
+    let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
+    enable_vcp_control(&mut frontend, dir, dell_here(), &layout_id).await;
+    let on = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0 }))
+        .await;
+    let address = on["Result"]["ListenAddress"].as_str().unwrap().to_owned();
+
+    // Its master links: it is told the input that selects this machine on the Dell.
+    let mut link = lbm_net::link::connect(
+        address.as_str(),
+        &desk,
+        Hello::new("desk", "0", Role::Master),
+        lbm_net::link::Options::default(),
+    )
+    .await
+    .unwrap()
+    .accept()
+    .await
+    .unwrap();
+    let reports = |value| {
+        move |c: &Control| {
+            matches!(c, Control::Displays { displays, .. }
+                if displays.iter().any(|d| d.id == SHARED_DELL && d.input_source == Some(value)))
+        }
+    };
+    next_control_where(&mut link, reports(ON_HDMI)).await;
+
+    // A display change, the Dell on DisplayPort now: read again and told, never written.
+    ddc.set("DP-1", 0x60, ON_DP);
+    frontend.ask(json!({ "Method": "Refresh" })).await;
+    next_control_where(&mut link, reports(ON_DP)).await;
+    assert!(ddc.writes().is_empty(), "{:?}", ddc.calls());
+
+    // The master asks for a display this machine does not have: nothing. Then for the
+    // Dell: switched.
+    for (display, value) in [("NOT-HERE", ON_HDMI), (SHARED_DELL, ON_HDMI)] {
+        link.sender()
+            .control(&Control::SelectInput {
+                display: display.into(),
+                value,
+            })
+            .await
+            .unwrap();
+    }
+    eventually(|| ddc.writes() == [input_write(ON_HDMI)], "HDMI written").await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(ddc.writes(), [input_write(ON_HDMI)]);
+}
+
+#[test]
+fn a_panel_switched_to_a_machine_not_showing_it_yet_keeps_the_choice_until_it_does() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let laptop_id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    let dell_on_hdmi = |attached| lbm_ipc::peer::PeerDisplay {
+        attached,
+        ..laptop_screen("HDMI-1", Some(dell_edid("ABC123", 2)), 0)
+    };
+    let laptop = |attached| {
+        vec![lbm_agent::peers::RemoteScreens {
+            machine_id: laptop_id.into(),
+            name: "laptop".into(),
+            displays: vec![dell_on_hdmi(attached)],
+        }]
+    };
+    let dell_there = lbm_layout::remote::remote_source_id(laptop_id, "HDMI-1");
+    let mut world = lbm_agent::world::SystemWorld::new(
+        lbm_agent::discovery::Discovery::Given(dell_here()),
+        persistence(dir),
+    );
+    let shown = |world: &lbm_agent::world::SystemWorld<_, _>| {
+        world
+            .layout()
+            .unwrap()
+            .monitor(SHARED_DELL)
+            .unwrap()
+            .active_source
+            .clone()
+            .unwrap()
+    };
+
+    // The Dell shows this machine; the laptop has lost it.
+    world.set_remote_screens(laptop(false));
+    world.rebuild_layout();
+    let layout_id = world.layout_id().unwrap();
+    assert_eq!(shown(&world), SHARED_DELL);
+    // Nothing known of the laptop's input: it cannot be chosen, nothing could bring
+    // the panel to it.
+    assert!(world
+        .set_active_source(&layout_id, SHARED_DELL, &dell_there)
+        .is_err());
+
+    // Its input learnt earlier, it can: the switch is what brings the panel there.
+    let mut remembered = master_layout(
+        dir,
+        dell_here(),
+        &[(laptop_id, "laptop", vec![dell_on_hdmi(false)])],
+    );
+    remembered.set_source_input(&dell_there, Some(ON_HDMI));
+    world
+        .edit(&layout_id, &lbm_store::LayoutDocument::of(&remembered))
+        .unwrap();
+    world.save_layout().unwrap();
+    let switch = world
+        .set_active_source(&layout_id, SHARED_DELL, &dell_there)
+        .unwrap()
+        .expect("a switch");
+    assert_eq!(switch.value, ON_HDMI);
+    assert_eq!(
+        switch.remote.map(|r| r.display).as_deref(),
+        Some("HDMI-1"),
+        "the laptop can be asked"
+    );
+
+    // A display change before the laptop has the panel back — this machine losing it,
+    // say — does not take the choice back.
+    world.rebuild_layout();
+    assert_eq!(shown(&world), dell_there);
+    // Nobody could switch it after all: back to the machine that has it.
+    assert!(world.switch_failed(SHARED_DELL, &dell_there));
+    assert_eq!(shown(&world), SHARED_DELL);
+
+    // Chosen again, and the laptop has the panel: from then on the rule keeps it, both
+    // machines attached, through any display change, and nothing is waited for.
+    world
+        .set_active_source(&layout_id, SHARED_DELL, &dell_there)
+        .unwrap();
+    world.set_remote_screens(laptop(true));
+    world.rebuild_layout();
+    assert_eq!(shown(&world), dell_there);
+    world.rebuild_layout();
+    assert_eq!(shown(&world), dell_there);
+    assert!(!world.switch_failed(SHARED_DELL, &dell_there));
+    assert_eq!(shown(&world), dell_there);
 }

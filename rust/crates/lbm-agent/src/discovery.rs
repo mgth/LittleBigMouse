@@ -83,6 +83,12 @@ impl Discovery {
                 &self.outputs(),
                 &lbm_display::linux::drm::read_all(),
             ),
+            // Outputs given by hand have no EDID in sysfs: whatever is there belongs to
+            // the machine's real outputs, not to these.
+            Discovery::Given(outputs) => crate::peers::local::linux_displays(
+                outputs,
+                &lbm_display::linux::drm::EdidMap::default(),
+            ),
             _ => Vec::new(),
         }
     }

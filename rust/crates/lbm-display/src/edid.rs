@@ -241,6 +241,17 @@ fn block(code: u8, edid: &[u8]) -> String {
 }
 
 impl Edid {
+    /// What identifies the panel across machines
+    /// ([`lbm_layout::model::panel_key`]).
+    pub fn panel_key(&self) -> Option<String> {
+        lbm_layout::model::panel_key(
+            self.manufacturer_code.as_deref(),
+            self.product_code.as_deref(),
+            self.serial_number.as_deref(),
+            self.serial.as_deref(),
+        )
+    }
+
     /// The members the Linux mapping reads (`LinuxLayoutMapping.AddMonitor`).
     pub fn to_linux(&self) -> LinuxEdid {
         LinuxEdid {
@@ -261,6 +272,8 @@ impl Edid {
     pub fn to_windows(&self) -> WindowsEdid {
         WindowsEdid {
             manufacturer_code: self.manufacturer_code.clone(),
+            product_code: self.product_code.clone(),
+            serial: self.serial.clone(),
             model: self.model.clone(),
             serial_number: self.serial_number.clone(),
             video_interface: self.video_interface.clone(),

@@ -11,8 +11,14 @@ use super::{Zone, ZonesLayout};
 /// a clone shifted by the layout's width (and height) on either side; clones
 /// only feed the link computation and are never serialized. The options are
 /// copied before `init`, which reads the travel limit.
+///
+/// A remote machine's zone has its pixel rectangle translated by that machine's offset
+/// ([`Layout::host_pixel_offsets`]), so that every desktop has its own place in the
+/// engine's one pixel space; its links are computed like any other's, which is what
+/// lets the pointer travel from one machine to the next.
 pub fn compute_zones(layout: &Layout) -> ZonesLayout {
     let mut zones = ZonesLayout::default();
+    let offsets = layout.host_pixel_offsets();
     for source in layout.sorted_sources() {
         let Some(monitor) = layout.monitor(&source.monitor) else {
             continue;
@@ -30,18 +36,34 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
         let name = layout
             .model(&monitor.model)
             .and_then(|m| m.pnp_device_name.clone());
+        let host = source.source.host.as_deref().map(|host| {
+            let offset = offsets
+                .iter()
+                .find(|o| o.host == host)
+                .expect("every attached source's machine has an offset");
+            (host.to_owned(), offset)
+        });
+        let pixels = match &host {
+            Some((_, offset)) => source.source.in_pixel.bounds().translate(offset.vector()),
+            None => source.source.in_pixel.bounds(),
+        };
         let index = zones.zones.len();
-        zones.zones.push(Zone::new(
+        let mut zone = Zone::new(
             index,
             monitor
                 .border_resistance
                 .resolved(layout.options.resistance_defaults),
             Some(source.source.id.clone()),
             name,
-            source.source.in_pixel.bounds(),
+            pixels,
             projection.bounds(),
             None,
-        ));
+        );
+        if let Some((host, offset)) = host {
+            zone.host = Some(host);
+            zone.host_offset = (offset.x, offset.y);
+        }
+        zones.zones.push(zone);
     }
 
     let main_count = zones.zones.len();
@@ -49,7 +71,7 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
     let clone = |zones: &mut ZonesLayout, of: usize, shift: Vector| {
         let original = zones.zones[of].clone();
         let index = zones.zones.len();
-        zones.zones.push(Zone::new(
+        let mut zone = Zone::new(
             index,
             original.border_resistance,
             original.device_id,
@@ -57,7 +79,10 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
             original.pixels_bounds,
             original.physical_bounds.translate(shift),
             Some(of),
-        ));
+        );
+        zone.host = original.host;
+        zone.host_offset = original.host_offset;
+        zones.zones.push(zone);
     };
     if layout.options.loop_x {
         for i in 0..main_count {
@@ -94,7 +119,9 @@ pub fn compute_zones(layout: &Layout) -> ZonesLayout {
             .sorted_sources()
             .into_iter()
             .filter(|s| {
-                s.source.attached_to_desktop
+                // Touch screens are this machine's: their bounds are its desktop's.
+                s.source.is_local()
+                    && s.source.attached_to_desktop
                     && layout
                         .monitor(&s.monitor)
                         .is_some_and(|m| m.active_source.as_deref() == Some(s.source.id.as_str()))

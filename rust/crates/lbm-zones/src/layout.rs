@@ -70,6 +70,15 @@ pub struct ZonesLayout {
     travels: HashMap<(ZoneId, ZoneId), Vec<Rect<i32>>>,
 }
 
+/// A point of the engine's pixel space, seen from the machine it is on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostPoint<'a> {
+    /// The machine id; `None` for this machine.
+    pub host: Option<&'a str>,
+    /// In that machine's own desktop pixels.
+    pub pixel: Point<i32>,
+}
+
 impl Default for ZonesLayout {
     fn default() -> Self {
         ZonesLayout {
@@ -192,6 +201,11 @@ impl ZonesLayout {
                     .find(|(b, _)| *b == pixels_bounds)
                     .map(|(_, id)| *id);
 
+                // Not in C#: the machine a zone is on (docs/multi-pc.md). Absent: this
+                // machine's, as in every document from before the multi-PC mode.
+                let host = zone_el.attribute("Host").map(str::to_owned);
+                let host_offset = Point::new(get_i32(zone_el, "HostX"), get_i32(zone_el, "HostY"));
+
                 let key = layout.arena.insert_with_key(|k| {
                     Zone::new(
                         id,
@@ -206,6 +220,11 @@ impl ZonesLayout {
                         bottom,
                     )
                 });
+                if host.is_some() {
+                    let zone = &mut layout.arena[key];
+                    zone.host = host;
+                    zone.host_offset = host_offset;
+                }
                 by_bounds.push((pixels_bounds, key));
                 layout.zones.push(key);
             }
@@ -273,6 +292,17 @@ impl ZonesLayout {
             .iter()
             .copied()
             .find(|&z| self.arena[z].contains_mm(mm))
+    }
+
+    /// Which machine a point of the engine's pixel space is on, and the same point on
+    /// that machine's own desktop (docs/multi-pc.md, "Engine pixel space"). `None`
+    /// outside every zone.
+    pub fn host_point(&self, pixel: Point<i32>) -> Option<HostPoint<'_>> {
+        let zone = &self.arena[self.containing_pixel(pixel)?];
+        Some(HostPoint {
+            host: zone.host.as_deref(),
+            pixel: zone.to_host_pixel(pixel),
+        })
     }
 
     pub fn width(&self) -> f64 {
@@ -501,5 +531,35 @@ mod tests {
             Some(right_id)
         );
         assert_eq!(layout.containing_pixel(Point::new(99999, 99999)), None);
+    }
+
+    #[test]
+    fn a_zone_without_a_host_is_this_machines_and_its_points_are_its_own() {
+        let layout = ZonesLayout::from_xml(FIXTURE).expect("parse");
+        let (_, right) = zone_by_name(&layout, "Right");
+        assert_eq!(right.host, None);
+        assert_eq!(right.host_offset, Point::new(0, 0));
+        let point = layout.host_point(Point::new(100, 100)).unwrap();
+        assert_eq!(point.host, None);
+        assert_eq!(point.pixel, Point::new(100, 100));
+    }
+
+    #[test]
+    fn a_remote_zones_point_is_given_back_in_its_machines_desktop() {
+        let xml = concat!(
+            r#"<ZonesLayout><MainZones>"#,
+            r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+            r#"<Zone Id="1" Name="There" Host="abcd" HostX="4920" HostY="-20"><PixelsBounds><Rect Left="3000" Top="-20" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+            r#"</MainZones></ZonesLayout>"#,
+        );
+        let layout = ZonesLayout::from_xml(xml).expect("parse");
+        let (_, there) = zone_by_name(&layout, "There");
+        assert_eq!(there.host.as_deref(), Some("abcd"));
+        assert_eq!(there.host_offset, Point::new(4920, -20));
+
+        let point = layout.host_point(Point::new(3010, 0)).unwrap();
+        assert_eq!(point.host, Some("abcd"));
+        assert_eq!(point.pixel, Point::new(-1910, 20));
+        assert_eq!(layout.host_point(Point::new(2500, 0)), None);
     }
 }

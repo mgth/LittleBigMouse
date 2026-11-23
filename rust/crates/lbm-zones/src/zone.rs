@@ -19,6 +19,13 @@ pub struct Zone {
     pub top: Vec<ZoneLink>,
     pub right: Vec<ZoneLink>,
     pub bottom: Vec<ZoneLink>,
+    /// The machine whose screen this is in the multi-PC mode (docs/multi-pc.md); `None`
+    /// for this machine's.
+    pub host: Option<String>,
+    /// What that machine's desktop was translated by to sit in the engine's pixel
+    /// space: a point of this zone minus this is the point on the machine's own
+    /// desktop. Zero for this machine.
+    pub host_offset: Point<i32>,
 }
 
 /// C++ `Zone::ComputeDpi` / the DPI computed in the constructor.
@@ -66,7 +73,15 @@ impl Zone {
             top,
             right,
             bottom,
+            host: None,
+            host_offset: Point::new(0, 0),
         }
+    }
+
+    /// `pixel` on the zone's machine's own desktop: what goes into an input event for
+    /// that machine.
+    pub fn to_host_pixel(&self, pixel: Point<i32>) -> Point<i32> {
+        pixel - self.host_offset
     }
 
     pub fn pixels_bounds(&self) -> Rect<i32> {

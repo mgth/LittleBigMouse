@@ -2511,6 +2511,8 @@ dependencies = [
 name = "lbm-display"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "lbm-ipc",
  "lbm-layout",
  "regex",
  "serde_json",
@@ -2578,6 +2580,8 @@ dependencies = [
 name = "lbm-layout"
 version = "0.1.0"
 dependencies = [
+ "lbm-geom",
+ "lbm-zones",
  "serde_json",
 ]
 

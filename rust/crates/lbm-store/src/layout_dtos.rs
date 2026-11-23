@@ -274,6 +274,16 @@ pub struct SourceDto {
     /// which display is primary is the desktop's business.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary: Option<bool>,
+    /// The machine id of a remote's source (docs/multi-pc.md) — WRITE-ONLY, like
+    /// [`display_name`](Self::display_name): the machine is known again when its
+    /// displays are merged, and the id of a remote's source names it already. Not in
+    /// C#, absent for this machine's sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// The VCP 0x60 value that selects this source on its monitor, once learnt
+    /// (docs/multi-pc.md, "Input switching"). Not in C#.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_source: Option<u16>,
     /// Members this version does not know (not in C#).
     #[serde(flatten)]
     pub extra: UnknownMembers,

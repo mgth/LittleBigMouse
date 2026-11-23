@@ -7,6 +7,9 @@ publish = false
 description = "The LittleBigMouse layout model: monitors in millimetres and pixels, placement solvers, zones"
 
 [dev-dependencies]
+# The runtime side of the zones XML, to check what the hook reads of a remote's zone.
+lbm-zones = { path = "../lbm-zones" }
+lbm-geom = { path = "../lbm-geom" }
 # float_roundtrip: parse doubles correctly rounded, like .NET, so the oracle
 # compares bits and not the parser's best effort.
 serde_json = { workspace = true, features = ["float_roundtrip"] }

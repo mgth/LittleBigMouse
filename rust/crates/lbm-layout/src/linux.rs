@@ -69,6 +69,16 @@ impl LinuxEdid {
             self.product_code.as_deref().unwrap_or("")
         ))
     }
+
+    /// What identifies the panel across machines: [`crate::model::panel_key`].
+    pub fn panel_key(&self) -> Option<String> {
+        crate::model::panel_key(
+            self.manufacturer_code.as_deref(),
+            self.product_code.as_deref(),
+            self.serial_number.as_deref(),
+            self.serial.as_deref(),
+        )
+    }
 }
 
 /// [`Monitor::serial_number`] of a monitor whose EDID could not be read.
@@ -139,6 +149,7 @@ pub fn add_monitor(layout: &mut Layout, monitor: &LinuxMonitor) {
 
     let mut physical_monitor = Monitor::new(monitor_id.clone(), &model);
     physical_monitor.device_id = Some(connector.to_owned());
+    physical_monitor.panel_key = edid.and_then(LinuxEdid::panel_key);
     physical_monitor.serial_number = Some(
         edid.and_then(LinuxEdid::monitor_serial)
             .unwrap_or(UNKNOWN_SERIAL)

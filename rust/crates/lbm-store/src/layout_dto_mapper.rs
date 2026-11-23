@@ -152,6 +152,10 @@ pub fn apply_layout(
             apply_monitor(layout, id, dto);
         }
     }
+    // A stored ActiveSource naming a source not attached any more must not leave a
+    // panel two machines know showing nothing (docs/multi-pc.md); a no-op without
+    // remote sources.
+    layout.resolve_active_sources();
 }
 
 /// C# `Apply(PhysicalMonitorModel, ModelDto)`: a model's stored size, borders and name.
@@ -257,6 +261,12 @@ pub fn apply_monitor(layout: &mut Layout, id: &str, dto: &MonitorDto) {
                 source_id,
                 stored.orientation.unwrap_or(source.orientation),
             );
+        }
+
+        // Learnt on a display event and then remembered: what the monitor reports now
+        // wins over what it reported once.
+        if source.input_source.is_none() && stored.input_source.is_some() {
+            layout.set_source_input(source_id, stored.input_source);
         }
 
         if dto.active_source.as_deref() == Some(source_id.as_str()) {
@@ -532,7 +542,9 @@ pub fn to_monitor_dto(layout: &Layout, monitor: &Monitor) -> MonitorDto {
                 .sources
                 .iter()
                 .filter_map(|id| layout.source(id))
-                .filter(|s| s.source.attached_to_desktop)
+                // A detached source is written too when it holds the input value
+                // that switches the monitor back to it, which only it can remember.
+                .filter(|s| s.source.attached_to_desktop || s.source.input_source.is_some())
                 .map(|s| {
                     let d = &s.source;
                     let dto = SourceDto {
@@ -543,6 +555,8 @@ pub fn to_monitor_dto(layout: &Layout, monitor: &Monitor) -> MonitorDto {
                         orientation: Some(d.orientation),
                         display_name: d.display_name.clone(),
                         primary: Some(d.primary),
+                        host: d.host.clone(),
+                        input_source: d.input_source,
                         ..Default::default()
                     };
                     (d.id.clone(), dto)

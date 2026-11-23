@@ -98,6 +98,10 @@ impl Layout {
     /// system's pixel arrangement, for every monitor (`place_all`) or only the
     /// ones not placed yet; then a compaction, then the published values.
     /// Nothing happens without a primary, or with nothing to place.
+    ///
+    /// Only the monitors showing a local source are placed from the system: a remote
+    /// one's pixels are another desktop's. Those never placed go to the right of the
+    /// rest ([`Layout::place_remote_monitors`]) before the compaction.
     pub fn set_locations_from_system_configuration(&mut self, place_all: bool) {
         let (Some(_), Some(primary)) = (
             self.primary_source().map(|s| s.source.id.clone()),
@@ -109,18 +113,20 @@ impl Layout {
         let monitors: Vec<&Monitor> = self
             .monitors
             .iter()
-            .filter(|m| {
-                m.active_source
-                    .as_deref()
-                    .is_some_and(|id| self.source(id).is_some())
-            })
+            .filter(|m| self.shows_local_source(m))
             .collect();
         let to_place: HashSet<String> = monitors
             .iter()
             .filter(|m| place_all || !m.placed)
             .map(|m| m.id.clone())
             .collect();
-        if to_place.is_empty() {
+        let remote_to_place = self.monitors.iter().any(|m| {
+            (place_all || !m.placed)
+                && self
+                    .active_source_of(m)
+                    .is_some_and(|s| !s.source.is_local())
+        });
+        if to_place.is_empty() && !remote_to_place {
             return;
         }
         let snapshot: Vec<MonitorSnapshot> = monitors
@@ -128,12 +134,15 @@ impl Layout {
             .filter_map(|m| self.snapshot(m, m.id == primary, None))
             .collect();
         let ids: Vec<String> = monitors.iter().map(|m| m.id.clone()).collect();
-        let positions = system_location::solve(&snapshot, Some(&to_place));
-        for id in ids {
-            if let Some(position) = positions.get(&id).copied() {
-                self.set_location(&id, position);
+        if !to_place.is_empty() {
+            let positions = system_location::solve(&snapshot, Some(&to_place));
+            for id in ids {
+                if let Some(position) = positions.get(&id).copied() {
+                    self.set_location(&id, position);
+                }
             }
         }
+        self.place_remote_monitors(place_all);
         self.force_compact();
         self.parse_physical_monitors();
     }
@@ -165,7 +174,8 @@ impl Layout {
     /// source should get so the system arrangement matches the millimetre
     /// layout — with, under `adjust_scale`, the Wayland scale that makes every
     /// monitor's logical pitch the primary's. Keyed by source id, in the
-    /// solver's order. Empty without a primary showing a source.
+    /// solver's order. Empty without a primary showing a source. Only this
+    /// machine's sources: the result is applied to this machine's desktop.
     pub fn compute_pixel_locations_from_physical(
         &self,
         adjust_scale: bool,
@@ -184,10 +194,8 @@ impl Layout {
             .monitors
             .iter()
             .filter(|m| {
-                m.active_source
-                    .as_deref()
-                    .and_then(|id| self.source(id))
-                    .is_some_and(|s| s.source.attached_to_desktop)
+                self.active_source_of(m)
+                    .is_some_and(|s| s.source.attached_to_desktop && s.source.is_local())
             })
             .collect();
         if monitors.is_empty() {

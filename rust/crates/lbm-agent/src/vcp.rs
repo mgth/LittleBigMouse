@@ -30,6 +30,23 @@ pub trait Ddc: Send + Sync {
     fn write(&self, target: Target, code: u8, value: u16) -> DdcFuture<()>;
 }
 
+/// The bus of an agent nobody gave one: every request fails, so an input stays unknown
+/// and is never switched. What an agent starts with; `main` installs [`SystemDdc`], so
+/// no test reaches `ddcutil` or dxva2 by forgetting a double.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoDdc;
+
+const NO_DDC: &str = "This agent reaches no monitor over DDC/CI.";
+
+impl Ddc for NoDdc {
+    fn read(&self, _: Target, _: u8) -> DdcFuture<u16> {
+        Box::pin(async { Err(NO_DDC.into()) })
+    }
+    fn write(&self, _: Target, _: u8, _: u16) -> DdcFuture<()> {
+        Box::pin(async { Err(NO_DDC.into()) })
+    }
+}
+
 /// A request a [`FakeDdc`] was given.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DdcCall {

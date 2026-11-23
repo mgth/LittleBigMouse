@@ -99,11 +99,21 @@ pub struct Agent<W> {
     /// Retire prepared work when a newer request or rebuilt layout replaces it.
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
-    vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
-    remote: std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>,
+    /// Where the wallpaper is painted: nowhere ([`NoDesktop`](crate::desktop::NoDesktop))
+    /// unless `main` installs the session's (`with_desktop`). A test cannot reach the
+    /// developer's desktop by forgetting a double.
+    desktop: std::sync::Arc<dyn crate::desktop::Desktop>,
+    /// The property panel's monitor control, when this agent offers it
+    /// (`with_monitor_control`); the lock is also the one DDC/CI bus of this machine, so
+    /// the input switching holds it too, with or without a panel to serve.
+    vcp: std::sync::Arc<tokio::sync::Mutex<Option<crate::vcp::Service>>>,
+    /// The network TV remotes, when this agent has a configuration to read them from
+    /// (`with_remote_config`): none by default, so a test never loads the user's pairings.
+    remote: Option<std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>>,
     /// The multi-PC mode, when this agent offers it.
     peers: Option<crate::peers::Service>,
     /// The monitors' input, read and written for the multi-PC mode (`input_switch`).
+    /// [`NoDdc`](crate::vcp::NoDdc) unless `main` or a test hands one over.
     ddc: std::sync::Arc<dyn crate::vcp::Ddc>,
     vcp_events: UnboundedSender<VcpEvent>,
     vcp_events_rx: Option<UnboundedReceiver<VcpEvent>>,
@@ -149,10 +159,11 @@ impl<W: AgentWorld> Agent<W> {
             excluded: None,
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
+            desktop: std::sync::Arc::new(crate::desktop::NoDesktop),
             vcp: Default::default(),
-            remote: Default::default(),
+            remote: None,
             peers: None,
-            ddc: std::sync::Arc::new(crate::vcp::SystemDdc::default()),
+            ddc: std::sync::Arc::new(crate::vcp::NoDdc),
             vcp_events,
             vcp_events_rx: Some(vcp_events_rx),
             readings: Default::default(),
@@ -161,10 +172,23 @@ impl<W: AgentWorld> Agent<W> {
         }
     }
 
-    /// Reads and writes the monitors' input through `ddc` rather than the system's
-    /// DDC/CI: the tests' recording double.
+    /// Reads and writes the monitors' input through `ddc`: the system's DDC/CI in `main`
+    /// ([`SystemDdc`](crate::vcp::SystemDdc)), the tests' recording double elsewhere.
     pub fn with_ddc(mut self, ddc: std::sync::Arc<dyn crate::vcp::Ddc>) -> Self {
         self.ddc = ddc;
+        self
+    }
+
+    /// Paints the wallpaper on `desktop`: the session's in `main`
+    /// ([`SystemDesktop`](crate::desktop::SystemDesktop)), a recording double in a test.
+    pub fn with_desktop(mut self, desktop: std::sync::Arc<dyn crate::desktop::Desktop>) -> Self {
+        self.desktop = desktop;
+        self
+    }
+
+    /// Serves the property panel's monitor controls through `service` (`ddcutil`, dxva2).
+    pub fn with_monitor_control(mut self, service: crate::vcp::Service) -> Self {
+        self.vcp = std::sync::Arc::new(tokio::sync::Mutex::new(Some(service)));
         self
     }
 
@@ -190,13 +214,15 @@ impl<W: AgentWorld> Agent<W> {
         self.handle(Input::Hook(HookEvent::Suspended));
     }
 
-    /// Serves the frontends' requests coming out of `calls` (see [`api`]).
+    /// Drives the network TV remotes paired in `path` (`samsung-tizen.json`, …).
     pub fn with_remote_config(mut self, path: std::path::PathBuf) -> Self {
-        self.remote =
-            std::sync::Arc::new(tokio::sync::Mutex::new(crate::remote::Service::new(path)));
+        self.remote = Some(std::sync::Arc::new(tokio::sync::Mutex::new(
+            crate::remote::Service::new(path),
+        )));
         self
     }
 
+    /// Serves the frontends' requests coming out of `calls` (see [`api`]).
     pub fn with_api(mut self, calls: UnboundedReceiver<Call>) -> Self {
         self.calls = Some(calls);
         self
@@ -281,10 +307,11 @@ impl<W: AgentWorld> Agent<W> {
                     match self.world.wallpaper_settings(&layout_id) {
                         Err(e) => Err(e),
                         Ok(settings) => {
+                            let desktop = self.desktop.clone();
                             tokio::spawn(async move {
                                 let supported = tokio::time::timeout(
                                     std::time::Duration::from_secs(5),
-                                    crate::desktop::is_supported(),
+                                    desktop.is_supported(),
                                 )
                                 .await
                                 .unwrap_or(false);
@@ -319,6 +346,7 @@ impl<W: AgentWorld> Agent<W> {
                             let generation = self.wallpaper_generation.clone();
                             let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
                             let lock = self.wallpaper_lock.clone();
+                            let desktop = self.desktop.clone();
                             tokio::spawn(async move {
                                 let _guard = lock.lock().await;
                                 let cache = job.images.clone();
@@ -327,7 +355,7 @@ impl<W: AgentWorld> Agent<W> {
                                 let result = async {
                                     let supported = tokio::time::timeout(
                                         std::time::Duration::from_secs(5),
-                                        crate::desktop::is_supported(),
+                                        desktop.is_supported(),
                                     ).await.unwrap_or(false);
                                     if !supported {
                                         return Err("This desktop has no supported wallpaper service.".into());
@@ -338,7 +366,7 @@ impl<W: AgentWorld> Agent<W> {
                                     let applied = if generation.load(Ordering::SeqCst) != expected {
                                         Err("Settings saved, but the displays changed before application.".into())
                                     } else {
-                                        crate::desktop::apply_checked(&screens).await
+                                        desktop.apply(screens).await
                                     };
                                     applied_successfully = applied.is_ok();
                                     Ok(serde_json::json!({
@@ -349,7 +377,7 @@ impl<W: AgentWorld> Agent<W> {
                                 }.await;
                                 client.send(api::answer(id, result));
                                 if applied_successfully {
-                                    crate::wallpaper_cache::cleanup(cache, store).await;
+                                    crate::wallpaper_cache::cleanup(cache, store, desktop).await;
                                 }
                             });
                             return;
@@ -371,8 +399,8 @@ impl<W: AgentWorld> Agent<W> {
                     Err("The display layout changed; reload before using the remote.".into())
                 } else if let Err(error) = self.world.vcp_target(&monitor) {
                     Err(error)
-                } else {
-                    match self.remote.clone().try_lock_owned() {
+                } else if let Some(remote) = self.remote.clone() {
+                    match remote.try_lock_owned() {
                         Err(_) => Err(
                             "A remote command is already running. Try again when it finishes."
                                 .into(),
@@ -387,6 +415,8 @@ impl<W: AgentWorld> Agent<W> {
                             return;
                         }
                     }
+                } else {
+                    Err("This agent drives no network remote.".into())
                 }
             }
             Request::Vcp {
@@ -411,10 +441,15 @@ impl<W: AgentWorld> Agent<W> {
                             ),
                             Ok(mut service) => {
                                 tokio::spawn(async move {
-                                    let result =
-                                        service.execute(target, write).await.and_then(|state| {
-                                            serde_json::to_value(state).map_err(|e| e.to_string())
-                                        });
+                                    let result = match service.as_mut() {
+                                        Some(service) => service.execute(target, write).await,
+                                        None => {
+                                            Err("This agent offers no monitor control.".to_owned())
+                                        }
+                                    }
+                                    .and_then(|state| {
+                                        serde_json::to_value(state).map_err(|e| e.to_string())
+                                    });
                                     client.send(api::answer(id, result));
                                 });
                                 return;
@@ -812,7 +847,9 @@ impl<W: AgentWorld> Agent<W> {
             let mut service = bus.lock_owned().await;
             let outcome = input_switch::execute(&*ddc, &switch).await;
             // Whatever the property panel read of that monitor may be wrong now.
-            service.forget();
+            if let Some(service) = service.as_mut() {
+                service.forget();
+            }
             let _ = events.send(VcpEvent::Switched {
                 switch: Box::new(switch),
                 outcome,
@@ -869,7 +906,9 @@ impl<W: AgentWorld> Agent<W> {
         tokio::spawn(async move {
             let mut service = bus.lock_owned().await;
             let result = input_switch::switch_locally(&*ddc, target, value).await;
-            service.forget();
+            if let Some(service) = service.as_mut() {
+                service.forget();
+            }
             match result {
                 Ok(true) => eprintln!("[lbm-agent] {display} switched to input {value:#04x}"),
                 Ok(false) => eprintln!("[lbm-agent] {display} already shows input {value:#04x}"),
@@ -951,6 +990,7 @@ impl<W: AgentWorld> Agent<W> {
         let generation = self.wallpaper_generation.clone();
         let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
         let lock = self.wallpaper_lock.clone();
+        let desktop = self.desktop.clone();
         tokio::spawn(async move {
             let _guard = lock.lock().await;
             if generation.load(Ordering::SeqCst) != expected {
@@ -964,8 +1004,8 @@ impl<W: AgentWorld> Agent<W> {
             .await;
             match prepared {
                 Ok(Ok(screens)) if generation.load(Ordering::SeqCst) == expected => {
-                    if crate::desktop::apply(&screens).await {
-                        crate::wallpaper_cache::cleanup(cache, store).await;
+                    if desktop.apply(screens).await.is_ok() {
+                        crate::wallpaper_cache::cleanup(cache, store, desktop).await;
                     }
                 }
                 Ok(Err(error)) => eprintln!("[lbm-agent] wallpaper: {error}"),
@@ -995,13 +1035,14 @@ impl<W: AgentWorld> Agent<W> {
             }
         };
         let lock = self.wallpaper_lock.clone();
+        let desktop = self.desktop.clone();
         tokio::spawn(async move {
             let _pending = pending;
             let _guard = lock.lock().await;
             if generation.load(std::sync::atomic::Ordering::SeqCst) != expected {
                 return;
             }
-            crate::desktop::apply(&screens).await;
+            let _ = desktop.apply(screens).await;
         });
     }
 

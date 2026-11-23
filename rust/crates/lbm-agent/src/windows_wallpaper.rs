@@ -199,23 +199,37 @@ mod native {
             }
         }
     }
-    fn connect() -> Result<(Apartment, Native), String> {
+    /// The interface and the apartment it lives in, **in that order**: fields drop in
+    /// declaration order, so the interface is released before `CoUninitialize`. This was
+    /// a tuple `(Apartment, Native)`, which `supported()` dropped as a temporary — apartment
+    /// first, then a `Release` into a COM object whose apartment was already torn down:
+    /// undefined behaviour, and a plausible source of the intermittent access violations
+    /// the Windows test run of `api.rs` died of.
+    struct Connection {
+        shell: Native,
+        _apartment: Apartment,
+    }
+    fn connect() -> Result<Connection, String> {
         unsafe {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED)
                 .ok()
                 .map_err(|e| e.to_string())?;
-            let guard = Apartment;
+            // Only a successful initialisation is balanced by an uninitialisation.
+            let apartment = Apartment;
             let shell =
                 CoCreateInstance(&DesktopWallpaper, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
-            Ok((guard, Native(shell)))
+            Ok(Connection {
+                shell: Native(shell),
+                _apartment: apartment,
+            })
         }
     }
     pub fn supported() -> bool {
         connect().is_ok()
     }
     pub fn apply(screens: &[ScreenWallpaper]) -> Result<(), String> {
-        let (_guard, shell) = connect()?;
-        super::apply_with(&shell, screens, &crate::wallpaper::output_dir())
+        let connection = connect()?;
+        super::apply_with(&connection.shell, screens, &crate::wallpaper::output_dir())
     }
 }
 #[cfg(windows)]

@@ -817,7 +817,10 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
             return Err("no attached screen to place".to_owned());
         }
 
-        let Some(backend) = lbm_display::linux::Backend::detect() else {
+        // The backend this world was built on, never one detected afresh: a world over
+        // described or fallback outputs — every test's — has no compositor to move, and
+        // detecting one here would hand it the developer's real outputs.
+        let Discovery::Linux(backend) = self.discovery else {
             return Err("no display backend to apply through".to_owned());
         };
         let gaps = &self.gaps;

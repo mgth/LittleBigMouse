@@ -7,11 +7,108 @@
 //! Plasma has no per-screen wallpaper API: what it has is `evaluateScript`, which runs a
 //! line of its own scripting language inside plasmashell. C# spawned `busctl` for that
 //! call; the agent already speaks D-Bus (`sleep.rs`), so it makes the call itself.
+//!
+//! **Only the binary reaches the real desktop.** Everything goes through [`Desktop`], and
+//! an [`Agent`](crate::runtime::Agent) starts with [`NoDesktop`]: `main` installs
+//! [`SystemDesktop`]. A test agent once painted the developer's own first screen with an
+//! image cut into its tempdir — Plasma matches screens by position, and the fallback
+//! output of a test sits at 0,0 like every real primary screen does — and the background
+//! then pointed at a file deleted with the tempdir. A test that wants to see what would
+//! have been painted hands the agent a [`FakeDesktop`].
 
 use std::collections::BTreeSet;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::Mutex;
 
 use lbm_store::wallpaper_settings::WallpaperStyle;
+
+/// What a [`Desktop`] answers, later: a desktop environment can take its time, or hang.
+pub type DesktopFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
+/// The desktop environment's background, as the agent writes it.
+pub trait Desktop: Send + Sync {
+    /// Whether this desktop is one we know how to set.
+    fn is_supported(&self) -> DesktopFuture<bool>;
+    /// Shows `screens`. An empty list is nothing to do, never a refusal.
+    fn apply(&self, screens: Vec<ScreenWallpaper>) -> DesktopFuture<Result<(), String>>;
+    /// Complete native references, including stored desktops which are not connected.
+    /// An unsupported plugin or an incomplete answer prevents cache collection.
+    fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>>;
+}
+
+/// The desktop of an agent nobody gave one: it paints nothing and says it cannot, so the
+/// editor reports an unsupported desktop and the wallpaper cache is never collected
+/// against references nobody read.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoDesktop;
+
+const NO_DESKTOP: &str = "This agent has no desktop to paint.";
+
+impl Desktop for NoDesktop {
+    fn is_supported(&self) -> DesktopFuture<bool> {
+        Box::pin(async { false })
+    }
+    fn apply(&self, screens: Vec<ScreenWallpaper>) -> DesktopFuture<Result<(), String>> {
+        let empty = screens.is_empty();
+        Box::pin(async move {
+            if empty {
+                Ok(())
+            } else {
+                Err(NO_DESKTOP.into())
+            }
+        })
+    }
+    fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
+        Box::pin(async { Err(NO_DESKTOP.into()) })
+    }
+}
+
+/// A desktop that records what it is asked to show, for the tests. Supported, and it
+/// takes every request; it vouches for no references, so the cache keeps what it holds.
+#[derive(Debug, Default)]
+pub struct FakeDesktop {
+    applied: Mutex<Vec<Vec<ScreenWallpaper>>>,
+}
+
+impl FakeDesktop {
+    /// Every non-empty request, oldest first.
+    pub fn applied(&self) -> Vec<Vec<ScreenWallpaper>> {
+        self.applied.lock().unwrap().clone()
+    }
+}
+
+impl Desktop for FakeDesktop {
+    fn is_supported(&self) -> DesktopFuture<bool> {
+        Box::pin(async { true })
+    }
+    fn apply(&self, screens: Vec<ScreenWallpaper>) -> DesktopFuture<Result<(), String>> {
+        if !screens.is_empty() {
+            self.applied.lock().unwrap().push(screens);
+        }
+        Box::pin(async { Ok(()) })
+    }
+    fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
+        Box::pin(async { Err("a fake desktop vouches for no references".into()) })
+    }
+}
+
+/// This session's desktop: Plasma over D-Bus, or IDesktopWallpaper. `main`'s alone.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemDesktop(());
+
+impl Desktop for SystemDesktop {
+    fn is_supported(&self) -> DesktopFuture<bool> {
+        Box::pin(is_supported())
+    }
+    fn apply(&self, screens: Vec<ScreenWallpaper>) -> DesktopFuture<Result<(), String>> {
+        Box::pin(async move { apply_checked(&screens).await })
+    }
+    fn references(&self) -> DesktopFuture<Result<BTreeSet<PathBuf>, String>> {
+        Box::pin(references())
+    }
+}
 
 /// What one screen should show. The position is how the screen is found: the desktop knows
 /// its own screens by where they are, not by the names the layout uses.
@@ -28,9 +125,9 @@ pub struct ScreenWallpaper {
     pub color: String,
 }
 
-/// Complete native references, including stored desktops which are not connected.
-/// An unsupported plugin or incomplete answer prevents cache collection.
-pub(crate) async fn references() -> Result<BTreeSet<PathBuf>, String> {
+/// [`Desktop::references`] of this session. Private, as everything below that reaches the
+/// desktop is: [`SystemDesktop`] is the only way to it.
+async fn references() -> Result<BTreeSet<PathBuf>, String> {
     #[cfg(target_os = "linux")]
     {
         let reply = plasma::evaluate(plasma::REFERENCES)
@@ -53,34 +150,30 @@ pub(crate) async fn references() -> Result<BTreeSet<PathBuf>, String> {
 
 /// Whether this desktop is one we know how to set. Plasma answers its own script.
 #[cfg(target_os = "linux")]
-pub async fn is_supported() -> bool {
+async fn is_supported() -> bool {
     plasma::evaluate(r#"print("ok")"#).await.as_deref() == Some("ok")
 }
 
-/// Shows `screens`. Answers whether the desktop took it.
-///
-/// A wallpaper is never a reason to fail anything: a desktop that refuses, or one that is
-/// not Plasma, leaves the background as it was and says so once.
-#[cfg(target_os = "linux")]
-pub async fn apply(screens: &[ScreenWallpaper]) -> bool {
-    if screens.is_empty() {
-        return true;
-    }
-    plasma::evaluate(&plasma::script(screens)).await.as_deref() == Some("ok")
-}
-
 #[cfg(windows)]
-pub async fn is_supported() -> bool {
+async fn is_supported() -> bool {
     tokio::task::spawn_blocking(crate::windows_wallpaper::supported)
         .await
         .unwrap_or(false)
 }
-#[cfg(windows)]
-pub async fn apply(screens: &[ScreenWallpaper]) -> bool {
-    apply_checked(screens).await.is_ok()
+
+#[cfg(not(any(target_os = "linux", windows)))]
+async fn is_supported() -> bool {
+    false
 }
 
-pub async fn apply_checked(screens: &[ScreenWallpaper]) -> Result<(), String> {
+/// Shows `screens`, and answers whether the desktop took them.
+///
+/// A wallpaper is never a reason to fail anything: a desktop that refuses, or one that is
+/// not Plasma, leaves the background as it was and says so once.
+async fn apply_checked(screens: &[ScreenWallpaper]) -> Result<(), String> {
+    if screens.is_empty() {
+        return Ok(());
+    }
     #[cfg(windows)]
     {
         let screens = screens.to_vec();
@@ -88,23 +181,18 @@ pub async fn apply_checked(screens: &[ScreenWallpaper]) -> Result<(), String> {
             .await
             .map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     {
-        if apply(screens).await {
+        if plasma::evaluate(&plasma::script(screens)).await.as_deref() == Some("ok") {
             Ok(())
         } else {
             Err("The desktop refused the wallpaper update.".into())
         }
     }
-}
-#[cfg(not(any(target_os = "linux", windows)))]
-pub async fn is_supported() -> bool {
-    false
-}
-
-#[cfg(not(any(target_os = "linux", windows)))]
-pub async fn apply(_screens: &[ScreenWallpaper]) -> bool {
-    false
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        Err("Desktop wallpapers are unsupported on this platform.".into())
+    }
 }
 
 /// `org.kde.image`'s `FillMode` is a QML `Image.fillMode`, and the numbers are QML's.
@@ -454,11 +542,29 @@ mod tests {
         );
     }
 
-    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn nothing_to_show_is_not_a_failure() {
         // Not a call to plasma: an empty list is what a layout with no wallpaper settings
         // produces, and it must not be reported as a desktop that refused.
-        assert!(apply(&[]).await);
+        assert_eq!(apply_checked(&[]).await, Ok(()));
+        assert_eq!(NoDesktop.apply(Vec::new()).await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn an_agent_given_no_desktop_paints_nothing_and_says_so() {
+        let screen = ScreenWallpaper {
+            expected_size: None,
+            x: 0.0,
+            y: 0.0,
+            image: None,
+            style: WallpaperStyle::Fill,
+            color: "#204060".to_owned(),
+        };
+        assert!(!NoDesktop.is_supported().await);
+        assert!(NoDesktop.apply(vec![screen]).await.is_err());
+        assert!(
+            NoDesktop.references().await.is_err(),
+            "an unread desktop must keep the wallpaper cache from being collected"
+        );
     }
 }

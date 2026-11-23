@@ -293,7 +293,14 @@ fn run(options: Options) -> ExitCode {
 
         // The frontends' requests: the socket's, and the tray's.
         let (calls, calls_rx) = tokio::sync::mpsc::unbounded_channel();
+        // The session's desktop and monitors: an agent has none unless given them, so
+        // that only this binary — never a test — repaints a background or writes DDC/CI.
         agent = agent
+            .with_desktop(std::sync::Arc::new(
+                lbm_agent::desktop::SystemDesktop::default(),
+            ))
+            .with_ddc(std::sync::Arc::new(lbm_agent::vcp::SystemDdc::default()))
+            .with_monitor_control(lbm_agent::vcp::Service::default())
             .with_api(calls_rx)
             .with_remote_config(config_dir.clone())
             // Off unless `multi-pc.json` says otherwise; then nothing listens or runs.

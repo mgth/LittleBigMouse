@@ -510,8 +510,14 @@ async fn the_agent_writes_the_wallpaper_settings_a_frontend_sends() {
     let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
     let (calls, _listener) = listen(&api_endpoint);
     let world = system_world(dir.path());
+    // Never the session's desktop: Plasma matches screens by position, and this test's
+    // fallback output sits at 0,0 like the developer's own primary screen.
+    let desktop = std::sync::Arc::new(lbm_agent::desktop::FakeDesktop::default());
+    let painted = desktop.clone();
     tokio::spawn(async move {
-        let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_desktop(desktop);
         agent.run(signals, inputs_rx, std::future::pending()).await;
     });
 
@@ -519,6 +525,10 @@ async fn the_agent_writes_the_wallpaper_settings_a_frontend_sends() {
     let state = frontend.ask(json!({ "Method": "Subscribe" })).await["Result"].clone();
     let layout_id = state["LayoutId"].as_str().unwrap().to_owned();
     let screen = frontend_layout(dir.path()).monitors()[0].id.clone();
+    assert!(
+        painted.applied().is_empty(),
+        "nothing to paint before there are settings"
+    );
 
     let settings = json!({
         "Mode": "PerScreen",
@@ -549,6 +559,31 @@ async fn the_agent_writes_the_wallpaper_settings_a_frontend_sends() {
         written[&layout_id]["PerScreen"][&screen]["Kind"], 1,
         "Kind travels as the number System.Text.Json writes"
     );
+
+    // And the desktop it was handed is painted: one screen, found by where it is, with
+    // the colour saved rendered into this agent's own wallpaper directory — the very
+    // request (`editor_<hash>.png` in a tempdir) that once reached a developer's Plasma.
+    eventually(
+        || !painted.applied().is_empty(),
+        "the saved wallpaper never reached the desktop",
+    )
+    .await;
+    let painted = painted.applied();
+    assert_eq!(painted.len(), 1, "{painted:?}");
+    let [only] = painted[0].as_slice() else {
+        panic!("one screen expected: {painted:?}");
+    };
+    assert_eq!((only.x, only.y), (0.0, 0.0));
+    assert!(
+        only.image
+            .as_ref()
+            .is_some_and(|image| image.starts_with(dir.path().join("wallpapers"))),
+        "{only:?}"
+    );
+    let rendered = image::open(only.image.as_ref().unwrap())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(rendered.get_pixel(0, 0).0, [0x10, 0x20, 0x30, 0xff]);
 
     // Another layout's settings are not this agent's to write: the displays changed
     // under the editor, exactly as for an edit.
@@ -1368,7 +1403,8 @@ async fn wallpaper_editor_reads_the_agents_store_and_rejects_stale_or_invalid_up
         answer["Result"]["Settings"]["Mode"], "PerScreen",
         "{answer}"
     );
-    assert!(answer["Result"]["Supported"].is_boolean());
+    // An agent given no desktop has none: never the session's, whatever runs the test.
+    assert_eq!(answer["Result"]["Supported"], false, "{answer}");
     assert!(
         !dir.path().join("wallpaper.json").exists(),
         "a read never seeds settings"

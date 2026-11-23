@@ -179,8 +179,16 @@ impl Plan {
 
 /// Called while the runtime's wallpaper application lock is held. Native reads have
 /// a deadline; filesystem work runs off the resident event loop. Failures only log.
-pub(crate) async fn cleanup(dir: PathBuf, store: PathBuf) {
-    let result = collect_with(dir, store, references).await;
+pub(crate) async fn cleanup(
+    dir: PathBuf,
+    store: PathBuf,
+    desktop: std::sync::Arc<dyn crate::desktop::Desktop>,
+) {
+    let result = collect_with(dir, store, || {
+        let desktop = desktop.clone();
+        async move { references(&*desktop).await }
+    })
+    .await;
     match result {
         Ok(n) if n > 0 => eprintln!("[lbm-agent] wallpaper cache: removed {n} unused files"),
         Err(e) => eprintln!("[lbm-agent] wallpaper cache retained: {e}"),
@@ -204,8 +212,8 @@ where
         .await
         .map_err(|e| e.to_string())?
 }
-async fn references() -> Result<BTreeSet<PathBuf>, String> {
-    tokio::time::timeout(Duration::from_secs(5), crate::desktop::references())
+async fn references(desktop: &dyn crate::desktop::Desktop) -> Result<BTreeSet<PathBuf>, String> {
+    tokio::time::timeout(Duration::from_secs(5), desktop.references())
         .await
         .map_err(|_| "desktop reference query timed out".to_owned())?
 }

@@ -254,6 +254,18 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   côtés balayaient mutuellement leurs tranches). Sous Windows, `IDesktopWallpaper` n'est
   toujours pas porté.
 
+- **Ce qu'un test ne peut pas toucher.** Le bureau, le bus DDC/CI, le panneau VCP et les
+  télécommandes réseau sont des capacités qu'on donne à l'`Agent`, comme `with_api` ou
+  `with_launcher` : sans elles, il a `desktop::NoDesktop` (rien n'est peint, l'éditeur dit
+  « non pris en charge »), `vcp::NoDdc`, aucun panneau et aucune télécommande. Seul `main`
+  installe `SystemDesktop`, `SystemDdc`, `with_monitor_control` et `with_remote_config` ; un
+  test qui veut voir ce qui aurait été peint passe un `desktop::FakeDesktop`. C'est arrivé :
+  un test de l'API a repeint le premier écran du développeur (Plasma apparie par position,
+  et la sortie de repli d'un test est en 0,0 comme tout écran principal) avec une image de
+  son répertoire temporaire. De même, `ApplyTopology` sous Linux passe par le backend de la
+  découverte du monde et non par un `Backend::detect()` refait sur place : un monde de test
+  (sorties décrites ou de repli) n'a aucun compositeur à déplacer.
+
 ## Suite
 
 Par ordre de valeur :

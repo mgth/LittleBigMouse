@@ -311,7 +311,10 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   never in the `Peers` state or event, which every frontend gets at every change: a
   frontend asks `PeerWallpapers` when the stamp changes.
 - **In the window** (`lbm-app/src/remote_wallpapers.rs`): one request per stamp, the
-  pictures decoded once and uploaded as textures once per change. A screen whose active
+  pictures decoded once and uploaded as textures once per change. The stamps are one
+  agent's: after a new connection to the agent (which may have restarted and stamps from
+  zero again) every remote's pictures are asked for once more whatever their stamp, the
+  old ones shown meanwhile. A screen whose active
   source is a remote's is drawn over that remote's picture of that display; every other
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.

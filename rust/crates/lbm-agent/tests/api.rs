@@ -2076,7 +2076,9 @@ async fn choosing_the_machine_a_shared_panel_shows_hands_its_zone_to_that_machin
     let dell_there = lbm_layout::remote::remote_source_id(&laptop_id, "HDMI-1");
     // How many screens the engine routes to the laptop.
     let on_the_laptop = |zones: &str| -> usize {
-        let layout = lbm_zones::ZonesLayout::from_xml(zones).unwrap();
+        let mut layout = lbm_zones::ZonesLayout::from_xml(zones).unwrap();
+        // What the hook's router sees once this agent is connected to its input stream.
+        layout.set_remote_enterable(true);
         layout
             .main_zones
             .iter()

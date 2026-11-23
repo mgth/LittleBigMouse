@@ -235,7 +235,7 @@ async fn connection<S>(
                                 s.applied = protocol::fingerprint(&xml);
                                 s.applied_is_virtual = layout.virtual_layout;
                                 s.broadcast(&Event::Loaded {
-                                    zones: layout.zones.len(),
+                                    zones: layout.all_zones.len(),
                                     main: layout.main_zones.len(),
                                     virtual_layout: layout.virtual_layout,
                                 });

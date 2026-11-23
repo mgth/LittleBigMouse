@@ -472,7 +472,10 @@ fn the_hook_reads_back_which_machine_a_point_is_on_and_where_on_it() {
     let mut layout = with_laptop();
     layout.set_locations_from_system_configuration(false);
     let xml = compute_zones(&layout).serialize();
-    let zones = lbm_zones::ZonesLayout::from_xml(&xml).unwrap();
+    let mut zones = lbm_zones::ZonesLayout::from_xml(&xml).unwrap();
+    // As the evdev router does while its agent is connected: another machine's zones
+    // are out of play until then.
+    zones.set_remote_enterable(true);
     let x = 4480 + HOST_GAP_PX + 1920;
 
     let here = zones.host_point(lbm_geom::Point::new(100, 100)).unwrap();

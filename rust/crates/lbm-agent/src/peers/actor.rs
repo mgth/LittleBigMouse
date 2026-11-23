@@ -687,6 +687,7 @@ impl Actor {
             machine_id.clone(),
             info.hello.role,
             events,
+            sender.clone(),
             self.internal.clone(),
             self.hook.sink(),
         ));
@@ -816,6 +817,19 @@ impl Actor {
                     // The same pictures again: nothing for the frontends to fetch.
                     *known = revision;
                 }
+            }
+            // The remote ended the session of the stream it was being sent: what goes on
+            // being sent is ignored there until an `Enter`. The hop ends here too, so that
+            // the pointer comes home and the next crossing starts a session afresh.
+            Control::InputReset
+                if live.info.hello.role == Role::Remote
+                    && self.selected.as_ref() == Some(&(machine_id.to_owned(), id)) =>
+            {
+                eprintln!(
+                    "[lbm-agent] multi-PC: {} ended the input session: the pointer comes home",
+                    live.info.hello.name
+                );
+                self.hook.restart();
             }
             // Only this machine's master may switch its monitors: a remote of this
             // machine has no say over them, and an unpaired machine never gets a link.
@@ -1047,6 +1061,7 @@ async fn forward(
     machine_id: String,
     their_role: Role,
     mut events: mpsc::Receiver<Event>,
+    link: LinkSender,
     internal: mpsc::UnboundedSender<Internal>,
     hook: Sink,
 ) {
@@ -1063,9 +1078,16 @@ async fn forward(
                     // The hook is not keeping up and this batch is lost: it may have been
                     // a release. The stream ends here instead, so the hook releases what
                     // it holds; what follows reaches it as a new stream, ignored until
-                    // the master's next `Enter`.
+                    // the master's next `Enter`. The master is told, or it would go on
+                    // sending into that void, its pointer and keyboards held here, until
+                    // the user crossed home and back. Sent from a task of its own: the
+                    // send may wait for room, and this loop must go on reading the link.
                     hook.release().await;
                     injected = false;
+                    let link = link.clone();
+                    tokio::spawn(async move {
+                        let _ = link.control(&Control::InputReset).await;
+                    });
                 }
             }
             Some(Event::Input(_)) => {}

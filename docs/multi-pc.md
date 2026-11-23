@@ -57,6 +57,10 @@ screen), Windows as master, the portal and X11 backends as master.
     protocol 1 without a new version, an older master ignores it as an unknown type
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
+  - `InputReset` — remote → master: the remote ended the session of the input stream
+    while the link lives on (its hook could not keep up); the master brings its pointer
+    home (see "The end of a hop"). Added after protocol 1 without a new version, an older
+    master ignores it as an unknown type
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -201,7 +205,7 @@ On a remote (`lbm-hook/src/remote`):
   end of the link closes that connection: the hook releases what is held. So does a
   batch that finds the agent's queue to the hook full: it may have been a release, so
   the connection is closed after what is queued, and the hook ignores what follows
-  until the master's next `Enter`.
+  until the master's next `Enter` — which is why the master is then told `InputReset`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the selected remote with `try_input`.
   **One remote at a time**: batches carry no destination, so exactly one linked remote
@@ -217,6 +221,9 @@ On a remote (`lbm-hook/src/remote`):
   closed (the hook comes home and releases its keyboards) and that link is sent
   `Leave` with a send that waits for room — or ends with the link, whose end the remote
   takes the same way. No connection relays anything before that `Leave` is queued.
+  An `InputReset` from the selected remote ends the hop the same way and a new
+  connection is made at once: the master's hook comes home, releases its keyboards and
+  shows its cursor, and the next crossing sends a fresh `Enter` that the remote takes.
 - **`SelectInput`** is heard only from a paired machine linked as this one's master, and
   only for a display this machine has (its id in `Displays`, a monitor wired here); from
   anyone else it is logged and ignored. The master sends it only to a machine linked as

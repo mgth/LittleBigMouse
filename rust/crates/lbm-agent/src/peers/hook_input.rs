@@ -7,12 +7,14 @@
 //!   for later — input replayed late is input nobody typed. When the link they came on
 //!   ends, or a batch finds the queue full, the connection is closed ([`Sink::release`]):
 //!   that is how the hook learns to release whatever the stream left pressed. The hook
-//!   ignores a new connection's batches until an `Enter`.
+//!   ignores a new connection's batches until an `Enter`; after a full queue the master
+//!   is told so (`InputReset`, sent by the link's task).
 //! - **Master**: while a remote is linked ([`HookInput::set_target`]), the connection is
 //!   kept, and every batch the hook writes to it is relayed to that remote's link with
 //!   `try_input`, never a wait. A connection relays to one link for its whole life.
-//!   Its end — the remote going away, another remote chosen, the hook gone, or a batch
-//!   the link has no room for — is the end of the hop: the connection is closed, which
+//!   Its end — the remote going away, another remote chosen, the hook gone, a batch
+//!   the link has no room for, or the remote saying it ended the session
+//!   ([`HookInput::restart`]) — is the end of the hop: the connection is closed, which
 //!   brings the master's pointer home (docs/multi-pc.md), and the link it relayed to is
 //!   told `Leave`, which makes the remote's hook release what the stream left pressed.
 //!   No batch of a new connection is relayed before that `Leave` is queued.
@@ -102,6 +104,14 @@ impl HookInput {
     /// The link the hook's own batches go to (this machine is its master), or none.
     pub fn set_target(&self, link: Option<LinkSender>) {
         self.target.send_replace(link);
+    }
+
+    /// Ends the hop under way and starts the next at once, to the same link: the remote
+    /// ended its session (`InputReset`) and ignores what follows until an `Enter`, which
+    /// only a new crossing sends. The connection is closed — the hook comes home, its
+    /// keyboards ungrabbed — the link is told `Leave`, and a new connection is made.
+    pub fn restart(&self) {
+        self.target.send_modify(|_| {});
     }
 }
 

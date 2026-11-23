@@ -375,28 +375,41 @@ mod endpoint {
     }
 
     /// As [`serve`], with a hook that only starts reading `pause` after the client
-    /// connected: one too busy to keep up for a while.
+    /// connected: one too busy to keep up for a while. A client that connects again is
+    /// served again, as the hook serves its newest client; the pause is the first's.
     pub fn serve_after(directory: &Path, name: &str, pause: Duration) -> Endpoint {
         let path = directory.join(name);
         let listener = tokio::net::UnixListener::bind(&path).unwrap();
         let (received_tx, received) = mpsc::unbounded_channel();
         let (to_client, mut outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
+        let current = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let writer = current.clone();
         tokio::spawn(async move {
-            // One client, as the hook serves: the first is the one under test.
-            let (stream, _) = listener.accept().await.unwrap();
-            tokio::time::sleep(pause).await;
-            let (mut reader, mut writer) = tokio::io::split(stream);
-            tokio::spawn(async move {
-                while let Some(batch) = outgoing.recv().await {
-                    if write_batch(&mut writer, &batch).await.is_err() {
+            // What is written before a client connects waits for it.
+            while let Some(batch) = outgoing.recv().await {
+                loop {
+                    if let Some(writer) = writer.lock().await.as_mut() {
+                        let _ = write_batch(writer, &batch).await;
                         break;
                     }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
                 }
-            });
-            while let Ok(batch) = read_batch(&mut reader).await {
-                let _ = received_tx.send(Some(batch));
             }
-            let _ = received_tx.send(None);
+        });
+        tokio::spawn(async move {
+            let mut pause = pause;
+            while let Ok((stream, _)) = listener.accept().await {
+                tokio::time::sleep(std::mem::take(&mut pause)).await;
+                let (mut reader, writer) = tokio::io::split(stream);
+                *current.lock().await = Some(writer);
+                let received_tx = received_tx.clone();
+                tokio::spawn(async move {
+                    while let Ok(batch) = read_batch(&mut reader).await {
+                        let _ = received_tx.send(Some(batch));
+                    }
+                    let _ = received_tx.send(None);
+                });
+            }
         });
         Endpoint {
             path: path.to_string_lossy().into_owned(),
@@ -619,6 +632,8 @@ async fn only_this_machines_master_may_switch_its_monitors() {
 const CTRL: u16 = 29;
 #[cfg(unix)]
 const BTN_LEFT: u16 = 0x110;
+#[cfg(unix)]
+const KEY_A: u16 = 30;
 
 /// What a remote's hook holds pressed after the stream it was sent, counted the way its
 /// session counts (`lbm-hook/src/remote/mod.rs`): nothing before an `Enter`, and
@@ -875,6 +890,106 @@ async fn a_batch_the_remotes_hook_has_no_room_for_ends_its_stream_so_the_hook_re
     }
     assert!(pressed, "Ctrl reached the tower's hook");
     assert!(held.keys.is_empty(), "{:?} left pressed", held.keys);
+
+    // The master is told the session ended: it would otherwise go on sending into a
+    // session the tower no longer has, its pointer away and its keyboards held.
+    tokio::time::timeout(PATIENCE, async {
+        while next_control(&mut link).await != Control::InputReset {}
+    })
+    .await
+    .expect("the master is told the session ended");
+
+    // Once what was queued has drained, the master's next crossing works: a fresh
+    // `Enter`, then a key, reach the tower's hook and are taken.
+    while tokio::time::timeout(Duration::from_millis(300), hook.received.recv())
+        .await
+        .is_ok()
+    {}
+    sender
+        .input(&encode(&[
+            InputEvent::Enter { x: 5, y: 5 },
+            InputEvent::Key {
+                code: KEY_A,
+                pressed: true,
+            },
+        ]))
+        .await
+        .unwrap();
+    let mut after = Held::default();
+    while !after.keys.contains(&KEY_A) {
+        match hook.next().await {
+            Some(batch) => after.apply(&batch),
+            None => after.end(),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_that_ended_the_session_brings_the_masters_pointer_home_for_a_fresh_crossing() {
+    use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, crossing);
+
+    // The laptop's hook could not keep up: the laptop ended the session and says so.
+    laptop_link
+        .sender()
+        .control(&Control::InputReset)
+        .await
+        .unwrap();
+
+    // The desk's hook loses its client (it comes home and lets go of the keyboards), the
+    // laptop is told `Leave`, and a new connection carries the next crossing.
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the connection ends")
+            .is_err(),
+        "the hook's connection is closed"
+    );
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    let mut successor = accept().await;
+    let again = [
+        InputEvent::Enter { x: 20, y: 20 },
+        InputEvent::Key {
+            code: KEY_A,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut successor, &encode(&again)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, again);
 }
 
 #[cfg(unix)]

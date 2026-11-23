@@ -109,6 +109,12 @@ pub enum Control {
         display: String,
         value: u16,
     },
+    /// Remote → master: the remote ended the session of the master's input stream
+    /// although the link lives on (its hook could not keep up, and what it held was
+    /// released). What the master sends next is ignored there until an `Enter`, so the
+    /// master brings its pointer home and starts afresh. Added after protocol 1 without
+    /// a new version: an older master sees an unknown type.
+    InputReset,
     Ping,
     Pong,
     /// The sender is closing the link on purpose.
@@ -239,6 +245,7 @@ mod tests {
                 display: "DP-1".into(),
                 value: 0x0f,
             },
+            Control::InputReset,
             Control::Ping,
             Control::Pong,
             Control::Bye {
@@ -289,6 +296,15 @@ mod tests {
         // The bound of a whole message of wallpapers (512 KiB of pictures) fits a control
         // frame once in base64, with room for the JSON around it.
         const { assert!(512 * 1024 * 4 / 3 + 64 * 1024 < MAX_CONTROL_SIZE) };
+    }
+
+    #[test]
+    fn an_input_reset_is_a_bare_type_an_older_peer_reads_as_unknown() {
+        let reset = encode_control(&Control::InputReset).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&reset[5..]).unwrap(),
+            r#"{"Type":"InputReset"}"#
+        );
     }
 
     #[tokio::test]

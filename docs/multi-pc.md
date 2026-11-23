@@ -289,7 +289,9 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   `IDesktopWallpaper::GetWallpaper` per monitor on Windows; a solid colour is an answer) —
   matches the outputs to its `Displays` by geometry, and draws each picture as the
   desktop does (Fill, Fit, Stretch, Center, Span and Tile, with Plasma's one-axis tiles),
-  no wider than **384 px**. The desktop is behind the agent's `Desktop` trait, so a test
+  no wider than **384 px**. On Linux a display's bounds are logical pixels, so it is drawn
+  at its output's scale, as the window's own preview does: a centred or tiled picture keeps
+  the share of the screen it has there. Windows' bounds are physical already (scale 1). The desktop is behind the agent's `Desktop` trait, so a test
   hands it a fake and never reads the developer's.
 - **Bounds**: a JPEG of at most **96 KiB** per display (quality 80, then 65 and 50, then
   half and a quarter of the size; past that, the average colour), and at most **512 KiB**

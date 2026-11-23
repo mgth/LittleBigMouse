@@ -67,7 +67,7 @@ fn thumbnail(display: &PeerDisplay, entries: &[Entry]) -> Option<Thumbnail> {
             f64::from(display.width),
             f64::from(display.height),
         ),
-        scale: 1.,
+        scale: device_scale(display),
     };
     let entry = entry_for(&target, entries)?;
     if entry.path.is_none() {
@@ -98,6 +98,20 @@ fn thumbnail(display: &PeerDisplay, entries: &[Entry]) -> Option<Thumbnail> {
         color: average(&pixels),
         image: encode(&pixels, MAX_IMAGE_BYTES),
     })
+}
+
+/// How many device pixels one pixel of `display`'s bounds is, as the renderer wants it.
+/// Linux reports a display in the compositor's logical pixels, so a 3840×2160 output at
+/// 200% is 1920×1080 there: without its scale, a centred or tiled picture, which the
+/// desktop draws at its own pixel size, would be drawn twice as large as it shows. The
+/// local preview passes the same scale (`lbm-app/src/desktop_wallpaper.rs`). Windows
+/// reports physical pixels already, and its scale must not be applied twice.
+fn device_scale(display: &PeerDisplay) -> f64 {
+    if cfg!(windows) || !display.scale.is_finite() || display.scale <= 0. {
+        1.
+    } else {
+        display.scale
+    }
 }
 
 /// `pixels` no wider than `width`, its shape kept.
@@ -277,6 +291,36 @@ mod tests {
             "{pixel:?}"
         );
         assert!(sent.iter().all(|w| w.color.is_none()));
+    }
+
+    /// A 3840×2160 output at 200% is 1920×1080 in Linux's logical pixels. A centred
+    /// 960-pixel picture covers a quarter of its width, as the desktop draws it, not half.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_centred_picture_on_a_linux_output_at_200_percent_covers_what_it_covers_on_the_screen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("small.png");
+        RgbaImage::from_pixel(960, 540, Rgba([250, 0, 0, 255]))
+            .save(&path)
+            .unwrap();
+        let mut screen = display("eDP-1", 0, 1920, 1080);
+        screen.scale = 2.0;
+        screen.effective_dpi = 192.0;
+        let mut centred = entry(&screen, Some(path));
+        centred.style = Style::Center;
+
+        let sent = thumbnails(std::slice::from_ref(&screen), &[centred]);
+        let picture = decoded(&sent[0]);
+        assert_eq!(picture.dimensions(), (384, 216));
+        let red = |x: u32| {
+            let [r, g, b, _] = picture.get_pixel(x, 108).0;
+            r > 200 && g < 60 && b < 60
+        };
+        // A quarter of 384 is 96 pixels, from 144 to 240; half would be 96 to 288.
+        assert!(red(192), "the centre shows the picture");
+        assert!(red(150), "inside the quarter");
+        assert!(!red(130), "outside the quarter: the desktop's colour");
+        assert!(!red(250), "outside the quarter: the desktop's colour");
     }
 
     #[test]

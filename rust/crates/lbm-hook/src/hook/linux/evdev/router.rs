@@ -31,6 +31,7 @@ use super::devices::{
     Node, ScanResult, REGRAB_EVERY,
 };
 use super::frame::Frame;
+use super::hider::CursorHider;
 use super::pipeline::{Outputs, Pipeline};
 use super::probe::{
     device_bounds_blocking, first_zone_center, kwin_cursor_pos, layout_bounds_blocking,
@@ -182,6 +183,8 @@ struct Router {
     pipe: Pipeline,
     /// The input stream's client, for the frames that go to another machine.
     link: Driver,
+    /// Hides this machine's cursor while the pointer is on another one.
+    hider: CursorHider,
 }
 
 /// The router's devices and input stream, as the pipeline writes to them.
@@ -190,6 +193,7 @@ struct Outs<'a> {
     virt_kbd: &'a mut VirtualDevice,
     keyboards: &'a mut Vec<Keyboard>,
     link: &'a mut Driver,
+    hider: &'a mut CursorHider,
 }
 
 impl Outputs for Outs<'_> {
@@ -219,6 +223,18 @@ impl Outputs for Outs<'_> {
         for keyboard in self.keyboards.iter_mut() {
             keyboard.release();
         }
+    }
+
+    fn hide_cursor(&mut self, from: Point<i32>) {
+        self.hider.hide(from);
+    }
+
+    fn cursor_hiding_spot(&mut self) -> Option<Point<i32>> {
+        self.hider.spot()
+    }
+
+    fn show_cursor(&mut self) {
+        self.hider.show();
     }
 }
 
@@ -255,6 +271,9 @@ impl Router {
         }
         let virt = build_virtual(device)?;
         let virt_kbd = build_virtual_keyboard()?;
+        // Its thread, the first time; it reaches for the display server only when the
+        // pointer first goes to another machine.
+        let hider = CursorHider::new();
 
         let mut devices = Vec::new();
         let mut pending = Vec::new();
@@ -340,6 +359,7 @@ impl Router {
             accel_cfg,
             pipe: Pipeline::new(env, sens, debug),
             link: Driver::default(),
+            hider,
         };
 
         // Place the cursor at the start point and prime the engine there.
@@ -363,6 +383,7 @@ impl Router {
                 virt_kbd: &mut self.virt_kbd,
                 keyboards: &mut self.keyboards,
                 link: &mut self.link,
+                hider: &mut self.hider,
             },
         )
     }
@@ -590,6 +611,7 @@ impl Router {
             virt_kbd,
             keyboards,
             link,
+            hider,
             ..
         } = self;
         let mut out = Outs {
@@ -597,6 +619,7 @@ impl Router {
             virt_kbd,
             keyboards,
             link,
+            hider,
         };
         pipe.flush_frame(
             shared,

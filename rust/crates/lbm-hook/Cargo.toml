@@ -131,3 +131,9 @@ futures = "0.3"
 # Portal signal diagnostics: ashpd traces every InputCapture signal it receives
 # (and, crucially, bodies it fails to deserialize and silently drops).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# Hiding the local cursor while the pointer is on another machine (multi-PC): a
+# layer-shell surface that sets no cursor. The versions lbm-overlay and lbm-pattern
+# already use; xdg-output ("unstable") gives the outputs' logical geometry.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }

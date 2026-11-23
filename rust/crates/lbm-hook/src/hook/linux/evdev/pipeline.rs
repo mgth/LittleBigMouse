@@ -26,6 +26,15 @@
 //! back: `Leave`, the keyboards are let go, and emission resumes here from where the
 //! engine landed.
 //!
+//! ## The local cursor
+//!
+//! The compositor would go on drawing the frozen pointer, so it is hidden while the
+//! pointer is away ([`super::hider`]): [`Outputs::hide_cursor`] once the `Enter` is
+//! queued, [`Outputs::show_cursor`] every time the pointer comes home, whichever way.
+//! Once the surface that hides it is in place, the frozen pointer is moved onto it
+//! ([`Outputs::cursor_hiding_spot`]), a few pixels inside the edge it left by, and
+//! stays there; coming home starts from where it left, not from there.
+//!
 //! ## Held keys and buttons
 //!
 //! One rule, in both directions: **a release goes where its press went.** Each side
@@ -124,6 +133,14 @@ pub(crate) trait Outputs {
     fn grab_keyboards(&mut self);
     /// Lets every keyboard go.
     fn release_keyboards(&mut self);
+    /// The pointer went to another machine from `from`, where it is frozen: hide this
+    /// machine's cursor.
+    fn hide_cursor(&mut self, from: Point<i32>);
+    /// Where the frozen pointer is to go to be under what hides the cursor, once that
+    /// is in place; `None` until then, and when nothing hides it.
+    fn cursor_hiding_spot(&mut self) -> Option<Point<i32>>;
+    /// The pointer is home: show this machine's cursor.
+    fn show_cursor(&mut self);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,6 +178,9 @@ pub(crate) struct Pipeline {
     home: Point<i32>,
     /// The last pixel sent to the other machine.
     sent: Point<i32>,
+    /// Where the frozen pointer was moved to be under what hides the cursor, while the
+    /// pointer is away.
+    parked: Option<Point<i32>>,
     /// The machine being driven.
     host: String,
     /// Buttons and keys pressed on the other machine and not released there yet.
@@ -185,6 +205,7 @@ impl Pipeline {
             side: Side::Local,
             home,
             sent: home,
+            parked: None,
             host: String::new(),
             remote_held: HeldSet::default(),
             resync: false,
@@ -210,7 +231,12 @@ impl Pipeline {
     /// virtual pointer. Clamped to the desktop the device spans: nothing emitted here
     /// may land outside it, whatever the virtual cursor is doing.
     pub(super) fn emit_local(&mut self, out: &mut impl Outputs) {
-        let p = self.local_pos();
+        // A frame while the pointer is away — a release of a button pressed here — must
+        // not take it off what hides the cursor.
+        let p = match self.side {
+            Side::Remote => self.parked.unwrap_or(self.home),
+            Side::Local => self.local_pos(),
+        };
         let d = self.env.device;
         let ax = p.x().min(d.right() - 1).max(d.left()) - d.left();
         let ay = p.y().min(d.bottom() - 1).max(d.top()) - d.top();
@@ -277,6 +303,17 @@ impl Pipeline {
     pub(super) fn end_cycle(&mut self, shared: &'static Shared, out: &mut impl Outputs) {
         if self.is_remote() {
             out.grab_keyboards();
+            if self.parked.is_none() {
+                if let Some(spot) = out.cursor_hiding_spot() {
+                    eprintln!(
+                        "[LittleBigMouse.Hook] evdev: the frozen pointer moves to ({},{}), onto what hides it",
+                        spot.x(),
+                        spot.y()
+                    );
+                    self.parked = Some(spot);
+                    self.emit_local(out);
+                }
+            }
         }
         self.check_rescue(shared, Instant::now(), out);
     }
@@ -461,6 +498,8 @@ impl Pipeline {
             "[LittleBigMouse.Hook] evdev: the pointer is on {}",
             self.host
         );
+        self.parked = None;
+        out.hide_cursor(self.home);
         out.grab_keyboards();
         self.local_leftovers(out);
         true
@@ -596,6 +635,8 @@ impl Pipeline {
         self.side = Side::Local;
         self.remote_held.clear();
         self.rescue.reset();
+        self.parked = None;
+        out.show_cursor();
         out.release_keyboards();
         eprintln!("[LittleBigMouse.Hook] evdev: the pointer is back");
     }
@@ -819,6 +860,11 @@ mod tests {
         grabbed: bool,
         releases: usize,
         driver: Option<(Driver, Arc<Outlet>)>,
+        /// Each hide: where from, and how many events had been sent by then.
+        hides: Vec<((i32, i32), usize)>,
+        shows: usize,
+        /// What hides the cursor is in place, under this spot.
+        spot: Option<Point<i32>>,
     }
 
     impl Outputs for Recording {
@@ -856,6 +902,22 @@ mod tests {
         fn release_keyboards(&mut self) {
             self.grabbed = false;
             self.releases += 1;
+        }
+
+        fn hide_cursor(&mut self, from: Point<i32>) {
+            let sent = match &self.driver {
+                Some(_) => usize::MAX,
+                None => self.sent.len(),
+            };
+            self.hides.push(((from.x(), from.y()), sent));
+        }
+
+        fn cursor_hiding_spot(&mut self) -> Option<Point<i32>> {
+            self.spot
+        }
+
+        fn show_cursor(&mut self) {
+            self.shows += 1;
         }
     }
 
@@ -901,6 +963,9 @@ mod tests {
                     grabbed: false,
                     releases: 0,
                     driver,
+                    hides: Vec::new(),
+                    shows: 0,
+                    spot: None,
                 },
             };
             // The first cycle takes in the client and the layout.
@@ -1043,6 +1108,7 @@ mod tests {
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
         // Landed on Here's last column, where the engine put it.
         assert_eq!(rig.local_cursor(), (1919, 500));
 
@@ -1075,6 +1141,7 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.releases, 1, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
         assert_eq!(rig.local_cursor(), START, "back where it left");
 
         // And the border is a wall again.
@@ -1092,6 +1159,7 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1109,6 +1177,7 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1143,6 +1212,7 @@ mod tests {
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1173,6 +1243,7 @@ mod tests {
             rig.out.sent
         );
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
     }
 
     #[test]
@@ -1283,6 +1354,118 @@ mod tests {
         assert!(rig.out.sent.is_empty());
     }
 
+    // --- the local cursor ----------------------------------------------------
+
+    #[test]
+    fn the_cursor_is_hidden_once_on_crossing_out_after_the_enter_is_queued() {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.move_by(10, 4);
+        rig.move_by(10, 4);
+        // From where the pointer last was here; the Enter was the first thing sent.
+        assert_eq!(rig.out.hides, [(START, 1)]);
+        assert_eq!(rig.out.shows, 0);
+    }
+
+    #[test]
+    fn the_cursor_is_never_hidden_while_the_pointer_stays_here() {
+        let mut rig = Rig::new(true);
+        rig.move_by(-100, 3);
+        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
+        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
+        let mut walled = Rig::new(false);
+        walled.move_by(300, 0);
+        let mut refused = Rig::new(true);
+        refused.out.accepting = false;
+        refused.move_by(30, 0);
+        assert!(!refused.pipe.is_remote(), "an Enter nobody took is a wall");
+        for rig in [&rig, &walled, &refused] {
+            assert!(rig.out.hides.is_empty(), "{:?}", rig.out.hides);
+            assert_eq!(rig.out.shows, 0);
+        }
+    }
+
+    #[test]
+    fn every_way_of_coming_home_shows_the_cursor_once() {
+        type Home = fn(&mut Rig);
+        let ways: [(&str, Home); 6] = [
+            ("crossing back", |rig| rig.move_by(-40, 0)),
+            ("no client", |rig| {
+                rig.out.connected = false;
+                rig.cycle(&[]);
+            }),
+            ("a failed write", |rig| {
+                rig.out.accepting = false;
+                rig.move_by(10, 0);
+            }),
+            ("a layout without the machine", |rig| {
+                let other = LAYOUT.replace(r#"Host="abcd""#, r#"Host="efgh""#);
+                rig.shared
+                    .engine
+                    .lock()
+                    .unwrap()
+                    .load(ZonesLayout::from_xml(&other).unwrap());
+                rig.cycle(&[]);
+            }),
+            ("the rescue", |rig| {
+                for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT, KEY_M] {
+                    rig.type_key(code, 1);
+                }
+                rig.type_key(KEY_M, 2);
+                rig.pipe
+                    .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.out);
+            }),
+            ("the router going away", |rig| {
+                rig.pipe.shut_down(&mut rig.out)
+            }),
+        ];
+        for (way, home) in ways {
+            let mut rig = Rig::new(true);
+            rig.go_over();
+            home(&mut rig);
+            assert!(!rig.pipe.is_remote(), "{way}: home");
+            assert_eq!(rig.out.shows, 1, "{way}: shown once");
+            // Whatever comes after, here, shows nothing more and hides nothing.
+            rig.move_by(-10, 0);
+            rig.pipe.shut_down(&mut rig.out);
+            assert_eq!(rig.out.shows, 1, "{way}: shown once only");
+            assert_eq!(rig.out.hides.len(), 1, "{way}: hidden once, on the way out");
+        }
+    }
+
+    #[test]
+    fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_home_from_where_it_left(
+    ) {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.move_by(5, 0);
+        assert!(rig.out.pointer.is_empty(), "nothing in place yet");
+
+        rig.out.spot = Some(Point::new(1915, 500));
+        rig.cycle(&[]);
+        assert_eq!(rig.local_cursor(), (1915, 500));
+        rig.cycle(&[]);
+        rig.move_by(5, 0);
+        assert_eq!(rig.out.pointer.len(), 1, "moved there once");
+
+        // Home is where it left, not where it hid.
+        rig.pipe.shut_down(&mut rig.out);
+        assert_eq!(rig.local_cursor(), START);
+    }
+
+    #[test]
+    fn a_button_released_here_while_away_is_released_where_the_frozen_pointer_hides() {
+        let mut rig = Rig::new(true);
+        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
+        rig.go_over();
+        rig.out.spot = Some(Point::new(1915, 500));
+        rig.cycle(&[]);
+        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
+        let frame = rig.out.pointer.last().unwrap();
+        assert!(frame.contains(&(1, BTN_LEFT, 0)), "{frame:?}");
+        assert_eq!(rig.local_cursor(), (1915, 500));
+    }
+
     // --- through a real input endpoint ---------------------------------------
 
     /// Injects nothing: on a master the endpoint's injecting side is idle.
@@ -1334,5 +1517,6 @@ mod tests {
         }
         assert_eq!(rig.local_cursor(), START);
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
     }
 }

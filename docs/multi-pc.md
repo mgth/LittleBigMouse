@@ -93,6 +93,23 @@ On the master (lot 6, evdev backend only; the details are in
 - The rescue shortcut is recognised in the grabbed key stream, with the same hold.
 - One remote: batches carry no destination; the agent merges and drives only the
   selected remote (lot 5a).
+- The master's own cursor is hidden while the pointer is away
+  (`lbm-hook/src/hook/linux/evdev/hider/`): once the `Enter` is queued, and shown
+  again on every way home (crossing back, no client, a write the stream refused, a
+  layout without that machine, the rescue, Stop/pause/suspend/quit). On Wayland, a
+  3×3 transparent layer-shell surface on the overlay layer — input region, no
+  keyboard — goes under the frozen pointer and sets no cursor on `wl_pointer.enter`;
+  once the compositor has configured it, the frozen pointer is moved onto it, 4
+  logical pixels inside the output it left by on both axes. Moved, because a
+  compositor picks the surface under the pointer when the pointer moves, not
+  necessarily when a surface maps under a still one; inside, because the edge it left
+  by is an outer edge of this desktop, where hot corners, screen-edge actions and
+  auto-hidden panels react to a resting pointer. Coming home starts from where it
+  left, not from there. On X11, XFixes hides the cursor. A thread of the hook owns the
+  connection; the routing thread never waits for it. If the hook dies, the
+  compositor (or the X server) drops what it asked for, and the cursor is back. When
+  the display server cannot be reached or lacks layer-shell, one line in the log says
+  so and the cursor stays visible.
 
 On a remote (`lbm-hook/src/remote`):
 

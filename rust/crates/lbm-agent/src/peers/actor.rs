@@ -143,8 +143,10 @@ struct Actor {
     displays: Vec<PeerDisplay>,
     revision: u64,
     hook: HookInput,
-    /// The remote the hook's stream goes to (this machine is its master).
-    streaming_to: Option<String>,
+    /// The remote the hook's stream goes to and whose screens are in the layout (this
+    /// machine is its master), with the id of its link: one at a time (see
+    /// [`Actor::select`]).
+    selected: Option<(String, u64)>,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
@@ -205,7 +207,7 @@ pub(super) async fn run(
         revision: u64::from(!start.displays.is_empty()),
         displays: start.displays,
         hook: HookInput::spawn(start.input_endpoint),
-        streaming_to: None,
+        selected: None,
         internal,
         notices: start.notices,
         published: None,
@@ -321,6 +323,10 @@ impl Actor {
             machine_id: Some(self.identity.fingerprint().to_owned()),
             listen_address: self.listen_address.map(|a| a.to_string()),
             error: self.listen_error.clone(),
+            selected_remote: self
+                .selected
+                .as_ref()
+                .map(|(machine_id, _)| machine_id.clone()),
             peers,
         }
     }
@@ -655,15 +661,9 @@ impl Actor {
             self.internal.clone(),
             self.hook.sink(),
         ));
-        match info.hello.role {
-            // This machine is the remote: its screens, from the first moment.
-            Role::Master => self.send_displays(&sender),
-            // This machine is the master: the hook's stream goes to that remote. One at
-            // a time for now: the newest link takes the stream (see `peers` docs).
-            Role::Remote => {
-                self.hook.set_target(Some(sender.clone()));
-                self.streaming_to = Some(machine_id.clone());
-            }
+        // This machine is the remote: its screens, from the first moment.
+        if info.hello.role == Role::Master {
+            self.send_displays(&sender);
         }
         let live = Live {
             id,
@@ -676,6 +676,7 @@ impl Actor {
                 older.sender.close("replaced by a newer connection").await;
             });
         }
+        self.select();
     }
 
     /// Calls back every paired remote this machine knows an address for.
@@ -793,21 +794,50 @@ impl Actor {
             "[lbm-agent] multi-PC: the link with {} ended: {reason:?}",
             live.info.hello.name
         );
-        if self.streaming_to.as_deref() == Some(machine_id) {
-            self.retarget();
-        }
+        self.select();
         self.schedule_redial(machine_id);
     }
 
-    /// The stream goes to another linked remote, if one is left, else nowhere.
-    fn retarget(&mut self) {
-        let next = self
-            .links
-            .iter()
-            .filter(|(_, live)| live.info.hello.role == Role::Remote)
-            .max_by_key(|(_, live)| live.id)
-            .map(|(machine_id, live)| (machine_id.clone(), live.sender.clone()));
-        self.streaming_to = next.as_ref().map(|(machine_id, _)| machine_id.clone());
+    /// Chooses the one remote this machine drives: its screens are the only remote ones
+    /// in the layout and the hook's stream goes to it alone, since a batch carries no
+    /// destination — a zone of another remote would send that remote's `Enter` and keys
+    /// to this one.
+    ///
+    /// The selected remote stays selected for as long as its link lives: another linking
+    /// meanwhile must not pull the screens the user is working on from under the pointer.
+    /// When there is none (the first to link, or the selected one gone), the linked
+    /// remote with the lowest machine id is taken, the order the layout merges in, so
+    /// that the same machines linked give the same choice whatever the timing.
+    ///
+    /// A change of remote — or of link to the same one — is a new target for the hook's
+    /// stream: the connection to the hook ends (it comes home) and the previous link is
+    /// told `Leave` before anything goes to the new one (`hook_input`).
+    fn select(&mut self) {
+        let is_remote = |live: &Live| live.info.hello.role == Role::Remote;
+        let kept = self.selected.as_ref().and_then(|(machine_id, _)| {
+            self.links
+                .get_key_value(machine_id)
+                .filter(|(_, live)| is_remote(live))
+        });
+        let next = kept
+            .or_else(|| {
+                self.links
+                    .iter()
+                    .filter(|(_, live)| is_remote(live))
+                    .min_by(|a, b| a.0.cmp(b.0))
+            })
+            .map(|(machine_id, live)| ((machine_id.clone(), live.id), live.sender.clone()));
+        let chosen = next.as_ref().map(|(key, _)| key.clone());
+        if chosen == self.selected {
+            return;
+        }
+        match &chosen {
+            Some((machine_id, _)) => {
+                eprintln!("[lbm-agent] multi-PC: the input stream goes to {machine_id}")
+            }
+            None => eprintln!("[lbm-agent] multi-PC: no remote to send the input stream to"),
+        }
+        self.selected = chosen;
         self.hook.set_target(next.map(|(_, sender)| sender));
     }
 
@@ -820,9 +850,7 @@ impl Actor {
         self.backoff.remove(machine_id);
         if let Some(live) = self.links.remove(machine_id) {
             tokio::spawn(async move { live.sender.close("forgotten").await });
-            if self.streaming_to.as_deref() == Some(machine_id) {
-                self.retarget();
-            }
+            self.select();
         }
         if stored || waiting {
             Ok(Value::Null)
@@ -886,6 +914,7 @@ impl Actor {
 
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
+        self.selected = None;
         self.hook.set_target(None);
         self.pending.clear();
         // Half-made connections are dropped, which closes them; timers simply stop.

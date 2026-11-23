@@ -38,6 +38,11 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
     let text = |v: &Value, key: &str| v[key].as_str().unwrap_or_default().to_owned();
     let mut peers = Vec::new();
     let mut remotes = Vec::new();
+    // The agent drives one remote at a time and merges its screens only; an agent older
+    // than that rule says nothing and merged every linked remote.
+    let selected = object
+        .get("SelectedRemote")
+        .map(|selected| selected.as_str().unwrap_or_default());
     for entry in value["Peers"].as_array().into_iter().flatten() {
         let machine_id = text(entry, "MachineId");
         if machine_id.is_empty() {
@@ -57,7 +62,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             .flatten()
             .filter_map(|d| serde_json::from_value(d.clone()).ok())
             .collect();
-        if role == Role::Remote && connected && !pending {
+        let merged = selected.is_none_or(|selected| selected == machine_id);
+        if role == Role::Remote && connected && !pending && merged {
             remotes.push(Remote {
                 machine_id: machine_id.clone(),
                 name: text(entry, "Name"),
@@ -444,6 +450,26 @@ mod tests {
         assert_eq!(read_state.peers[4].role, Role::Master);
         assert_eq!(read_state.name, "desk");
         assert_eq!(read_state.port, 24817);
+    }
+
+    #[test]
+    fn only_the_remote_the_agent_selected_is_merged() {
+        let peers = json!([
+            {"MachineId": "ff", "Name": "late", "Connected": true, "Role": "Remote",
+             "State": "Paired", "Displays": [display("eDP-1")]},
+            {"MachineId": "0a", "Name": "early", "Connected": true, "Role": "Remote",
+             "State": "Paired", "Displays": [display("HDMI-1")]},
+        ]);
+        let mut selected = state(peers.clone());
+        selected["SelectedRemote"] = json!("ff");
+        let (read_state, remotes) = read(&selected).unwrap();
+        let ids: Vec<&str> = remotes.iter().map(|r| r.machine_id.as_str()).collect();
+        assert_eq!(ids, ["ff"]);
+        assert_eq!(read_state.peers.len(), 2, "the page still shows both");
+
+        let mut none = state(peers);
+        none["SelectedRemote"] = Value::Null;
+        assert!(read(&none).unwrap().1.is_empty());
     }
 
     #[test]

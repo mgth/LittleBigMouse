@@ -88,7 +88,8 @@ On the master (lot 6, evdev backend only; the details are in
   released on the machine that saw it pressed. A keyboard is grabbed once none of
   its keys is held.
 - The rescue shortcut is recognised in the grabbed key stream, with the same hold.
-- One remote: batches carry no destination.
+- One remote: batches carry no destination; the agent merges and drives only the
+  selected remote (lot 5a).
 
 ## Model
 
@@ -159,12 +160,16 @@ On the master (lot 6, evdev backend only; the details are in
   the connection is closed after what is queued, and the hook ignores what follows
   until the master's next `Enter`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
-  shown through the API; the hook's batches go to the linked remote with `try_input`.
-  **One remote at a time**: the most recently linked one gets the stream until lot 6
-  routes by zone.
+  shown through the API; the hook's batches go to the selected remote with `try_input`.
+  **One remote at a time**: batches carry no destination, so exactly one linked remote
+  is **selected** — the only one whose screens are merged (lot 5b) and the only one the
+  stream goes to. It stays selected for as long as its link lives (another linking
+  does not take the screens from under the pointer); when there is none, the linked
+  remote with the lowest machine id is taken, the merge order, so the same machines give
+  the same choice whatever the timing.
 - **The end of a hop, on the master**: one connection to the hook's input endpoint
-  relays to one remote link for its whole life. It ends when the remote the stream goes
-  to changes or goes, when the hook goes, or when a batch finds the link's queue full (a
+  relays to one remote link for its whole life. It ends when the selected remote
+  changes or goes, when the hook goes, or when a batch finds the link's queue full (a
   batch is never dropped mid-session: it may be a release). The connection is then
   closed (the hook comes home and releases its keyboards) and that link is sent
   `Leave` with a send that waits for room — or ends with the link, whose end the remote
@@ -175,8 +180,9 @@ On the master (lot 6, evdev backend only; the details are in
   its remote.
 - **API** (additive to protocol 3, capability `MultiPc`):
   - `Peers` → `{ Enabled, Port, Name, MachineId (this machine's fingerprint, null before
-    the first use), ListenAddress, Error, Peers: [{ MachineId, Name, Address, Connected,
-    Displays, Role, State: "Paired" | "Pending" }] }`;
+    the first use), ListenAddress, Error, SelectedRemote (the machine id of the selected
+    remote, null when none), Peers: [{ MachineId, Name, Address, Connected, Displays,
+    Role, State: "Paired" | "Pending" }] }`;
   - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
     everything is closed;
   - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
@@ -188,9 +194,13 @@ On the master (lot 6, evdev backend only; the details are in
 
 ## The master's layout (lot 5b)
 
-- **Which screens**: those of every machine in `peers.json` linked now as a **remote** of
-  this one (it said `Remote` in its `Hello`) that has sent its `Displays`, in machine-id
-  order. A machine this one is the remote of is never merged, nor one pending.
+- **Which screens**: those of the **selected remote** (`SelectedRemote`, lot 5a), a
+  machine in `peers.json` linked now as a **remote** of this one (it said `Remote` in its
+  `Hello`) that has sent its `Displays`. The other linked remotes are shown in the
+  Machines panel but not merged: a zone of theirs would send their input to the
+  selected one. A machine this one is the remote of is never merged, nor one pending. A
+  frontend reading a state without `SelectedRemote` (an older agent) merges every linked
+  remote, in machine-id order, as that agent did.
 - **A display change**: such a machine linking, leaving, or sending other screens goes
   through the reconciler exactly as a local display change (`Input::DisplayChanged`:
   debounce, settle loop, rebuild, profile, `Load`+`Run` if the layout is enabled). The
@@ -201,8 +211,8 @@ On the master (lot 6, evdev backend only; the details are in
   1. this machine's displays mapped (`lbm_layout::linux::populate` /
      `windows::populate`, which compute an id and then call the load closure);
   2. in that closure, before anything else, `lbm_display::peer::merge_peer(layout,
-     machine_id, name, &displays)` for each remote, in machine-id order, with the
-     `Displays` of the `Peers` state (`Name` is the peer's);
+     machine_id, name, &displays)` for the selected remote, with the `Displays` of the
+     `Peers` state (`Name` is the peer's);
   3. `layout.id = layout.compute_id()` (only when something was merged);
   4. the store loaded (`LayoutPersistence::load`); `populate` then places what the store
      did not (remote monitors to the right of the local ones) and anchors.

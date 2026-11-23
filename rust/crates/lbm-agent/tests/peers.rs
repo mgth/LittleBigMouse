@@ -692,6 +692,14 @@ async fn next_input(link: &mut Link) -> Vec<lbm_ipc::input::InputEvent> {
     .expect("an input batch in time")
 }
 
+/// Nothing comes on `link` for a while.
+#[cfg(unix)]
+async fn silent(link: &mut Link) -> bool {
+    tokio::time::timeout(Duration::from_millis(300), next_input(link))
+        .await
+        .is_err()
+}
+
 /// A remote of a test's own: a listener under a fresh identity.
 #[cfg(unix)]
 async fn a_remote(
@@ -925,4 +933,118 @@ async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from
         next_input(&mut laptop_link).await,
         [InputEvent::Enter { x: 20, y: 20 }]
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_it_alone_gets_the_input(
+) {
+    use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+    let (_a_dir, alpha, mut alpha_listener) = a_remote("alpha", link::Options::default()).await;
+    let (_b_dir, beta, mut beta_listener) = a_remote("beta", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        alpha.fingerprint(),
+        &alpha_listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    // Paired, but called back by nobody: the desk connects to it by hand, last.
+    pair(desk_dir.path(), beta.fingerprint(), "", Role::Remote);
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    let mut alpha_link = linked_from(&mut alpha_listener).await;
+    alpha_link
+        .sender()
+        .control(&Control::Displays {
+            revision: 1,
+            displays: vec![display("A1", 0)],
+        })
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, alpha.fingerprint())).await;
+    let (connected, beta_link) = tokio::join!(
+        desk.ask(PeerRequest::Connect(beta_listener.local_addr().to_string())),
+        linked_from(&mut beta_listener)
+    );
+    connected.unwrap();
+    let mut beta_link = beta_link;
+    beta_link
+        .sender()
+        .control(&Control::Displays {
+            revision: 1,
+            displays: vec![display("B1", 0)],
+        })
+        .await
+        .unwrap();
+    let both = desk
+        .until(|s| {
+            [alpha.fingerprint(), beta.fingerprint()].iter().all(|id| {
+                peer(s, id).is_some_and(|p| p.peer.connected && !p.peer.displays.is_empty())
+            })
+        })
+        .await;
+
+    // Alpha linked first and stays the one driven although beta linked after it.
+    assert_eq!(both.selected_remote.as_deref(), Some(alpha.fingerprint()));
+    let merged: Vec<String> = both
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, [alpha.fingerprint().to_owned()]);
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 5, y: 5 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut alpha_link).await, crossing);
+    assert!(silent(&mut beta_link).await, "beta hears nothing");
+
+    // Alpha goes: beta is driven now. The hook's connection ends first (its pointer
+    // comes home), and the next one relays to beta from its first batch.
+    drop(alpha_link);
+    let now = desk.until(|s| !linked(s, alpha.fingerprint())).await;
+    let now = if now.selected_remote.as_deref() == Some(beta.fingerprint()) {
+        now
+    } else {
+        desk.until(|s| s.selected_remote.as_deref() == Some(beta.fingerprint()))
+            .await
+    };
+    let merged: Vec<String> = now
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, [beta.fingerprint().to_owned()]);
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the old connection ends")
+            .is_err(),
+        "the first connection is closed"
+    );
+    let mut successor = accept().await;
+    let entering = [InputEvent::Enter { x: 7, y: 7 }];
+    write_batch(&mut successor, &encode(&entering))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut beta_link).await, entering);
 }

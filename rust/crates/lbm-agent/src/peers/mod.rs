@@ -21,8 +21,10 @@
 //!   what the stream left pressed;
 //! - **this machine is the master**: it keeps the remote's latest screens and shows them
 //!   in the state, and relays the batches its hook writes to the remote's link. **One
-//!   remote at a time**: the stream goes to the most recently linked remote (lot 6 will
-//!   route by zone). A paired remote whose address is known is called back while the
+//!   remote at a time**: the selected remote (`SelectedRemote`) is the only one whose
+//!   screens are merged and the only one the stream goes to — it stays selected while
+//!   its link lives, and when it goes the linked remote with the lowest machine id
+//!   takes its place. A paired remote whose address is known is called back while the
 //!   mode is on, after one second, then twice as long at every failure, up to thirty.
 //!
 //! An unknown machine is shown as `Pending` and gets nothing but `Hello` until the user
@@ -89,6 +91,11 @@ pub struct PeersState {
     pub listen_address: Option<String>,
     /// Why the mode is not fully working, when it is not.
     pub error: Option<String>,
+    /// The machine id of the one remote this machine drives now: the only one whose
+    /// screens are in the layout and the one the input stream goes to. `None` when no
+    /// remote is linked. Absent from the state of an agent older than the rule.
+    #[serde(default)]
+    pub selected_remote: Option<String>,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -104,9 +111,10 @@ pub struct RemoteScreens {
 }
 
 impl PeersState {
-    /// The screens the layout is to hold besides this machine's: those of every paired
-    /// machine linked as a remote of this one, in machine-id order so that the same
-    /// machines always give the same layout.
+    /// The screens the layout is to hold besides this machine's: those of the selected
+    /// remote ([`PeersState::selected_remote`]), a paired machine linked as a remote of
+    /// this one. One remote at a time: the input stream carries no destination, so a
+    /// zone of any other remote would send its input to the selected one.
     ///
     /// A machine this one is the remote of is never merged: its screens are its own
     /// master's business, and it sends none anyway. A pending machine is not trusted
@@ -120,6 +128,7 @@ impl PeersState {
             .iter()
             .filter(|p| {
                 p.state == PeerState::Paired
+                    && self.selected_remote.as_deref() == Some(p.peer.machine_id.as_str())
                     && p.role == Role::Remote
                     && p.peer.connected
                     && !p.peer.displays.is_empty()
@@ -457,6 +466,7 @@ impl Service {
             machine_id: identity.map(|identity| identity.fingerprint().to_owned()),
             listen_address: None,
             error: self.failure.clone(),
+            selected_remote: None,
             peers: PeerStore::load(&self.directory)
                 .peers()
                 .iter()
@@ -514,7 +524,7 @@ mod tests {
         }
     }
 
-    fn state(enabled: bool, peers: Vec<PeerEntry>) -> PeersState {
+    fn state(enabled: bool, selected: &str, peers: Vec<PeerEntry>) -> PeersState {
         PeersState {
             enabled,
             port: 24817,
@@ -522,6 +532,7 @@ mod tests {
             machine_id: None,
             listen_address: None,
             error: None,
+            selected_remote: Some(selected.to_owned()),
             peers,
         }
     }
@@ -531,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_linked_paired_remotes_of_this_machine_are_merged_in_machine_id_order() {
+    fn only_the_selected_remote_is_merged_and_only_if_it_is_a_linked_paired_remote() {
         let mut silent = entry("e", Role::Remote, PeerState::Paired, true);
         silent.peer.displays.clear();
         let peers = vec![
@@ -543,9 +554,24 @@ mod tests {
             silent,
         ];
         assert_eq!(
-            ids(&state(true, peers.clone()).remote_screens()),
-            ["c2", "d"]
+            ids(&state(true, "d", peers.clone()).remote_screens()),
+            ["d"]
         );
-        assert!(state(false, peers).remote_screens().is_empty());
+        assert_eq!(
+            ids(&state(true, "c2", peers.clone()).remote_screens()),
+            ["c2"]
+        );
+        for unfit in ["a", "b", "c", "e", "zz"] {
+            assert!(
+                state(true, unfit, peers.clone())
+                    .remote_screens()
+                    .is_empty(),
+                "{unfit}"
+            );
+        }
+        let mut none = state(true, "d", peers.clone());
+        none.selected_remote = None;
+        assert!(none.remote_screens().is_empty());
+        assert!(state(false, "d", peers).remote_screens().is_empty());
     }
 }

@@ -154,11 +154,21 @@ On the master (lot 6, evdev backend only; the details are in
   is what this machine last read of that panel's VCP 0x60 (see "Input switching"),
   absent when unread or unreadable. Input batches go to the hook's input endpoint, connected at
   the first batch and again after a failure; with no connection they are dropped. The
-  end of the link closes that connection: the hook releases what is held.
+  end of the link closes that connection: the hook releases what is held. So does a
+  batch that finds the agent's queue to the hook full: it may have been a release, so
+  the connection is closed after what is queued, and the hook ignores what follows
+  until the master's next `Enter`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the linked remote with `try_input`.
   **One remote at a time**: the most recently linked one gets the stream until lot 6
   routes by zone.
+- **The end of a hop, on the master**: one connection to the hook's input endpoint
+  relays to one remote link for its whole life. It ends when the remote the stream goes
+  to changes or goes, when the hook goes, or when a batch finds the link's queue full (a
+  batch is never dropped mid-session: it may be a release). The connection is then
+  closed (the hook comes home and releases its keyboards) and that link is sent
+  `Leave` with a send that waits for room — or ends with the link, whose end the remote
+  takes the same way. No connection relays anything before that `Leave` is queued.
 - **`SelectInput`** is heard only from a paired machine linked as this one's master, and
   only for a display this machine has (its id in `Displays`, a monitor wired here); from
   anyone else it is logged and ignored. The master sends it only to a machine linked as

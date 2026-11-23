@@ -18,10 +18,14 @@ use tokio::sync::mpsc::UnboundedReceiver;
 const PATIENCE: Duration = Duration::from_secs(10);
 
 fn setup(input_endpoint: Option<String>) -> Setup {
+    setup_with(input_endpoint, link::Options::default())
+}
+
+fn setup_with(input_endpoint: Option<String>, options: link::Options) -> Setup {
     Setup {
         bind: "127.0.0.1".parse().unwrap(),
         input_endpoint,
-        options: link::Options::default(),
+        options,
     }
 }
 
@@ -64,7 +68,11 @@ struct Node {
 
 impl Node {
     fn new(directory: &Path, input_endpoint: Option<String>) -> Node {
-        let mut service = Service::new(directory.to_owned(), setup(input_endpoint));
+        Node::with_setup(directory, setup(input_endpoint))
+    }
+
+    fn with_setup(directory: &Path, setup: Setup) -> Node {
+        let mut service = Service::new(directory.to_owned(), setup);
         let notices = service.take_notices().unwrap();
         Node { service, notices }
     }
@@ -350,6 +358,7 @@ async fn a_remote_publishes_its_screens_at_link_up_and_after_a_display_change() 
 #[cfg(unix)]
 mod endpoint {
     use std::path::Path;
+    use std::time::Duration;
 
     use lbm_ipc::input::{read_batch, write_batch};
     use tokio::sync::mpsc;
@@ -362,6 +371,12 @@ mod endpoint {
     }
 
     pub fn serve(directory: &Path, name: &str) -> Endpoint {
+        serve_after(directory, name, Duration::ZERO)
+    }
+
+    /// As [`serve`], with a hook that only starts reading `pause` after the client
+    /// connected: one too busy to keep up for a while.
+    pub fn serve_after(directory: &Path, name: &str, pause: Duration) -> Endpoint {
         let path = directory.join(name);
         let listener = tokio::net::UnixListener::bind(&path).unwrap();
         let (received_tx, received) = mpsc::unbounded_channel();
@@ -369,6 +384,7 @@ mod endpoint {
         tokio::spawn(async move {
             // One client, as the hook serves: the first is the one under test.
             let (stream, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(pause).await;
             let (mut reader, mut writer) = tokio::io::split(stream);
             tokio::spawn(async move {
                 while let Some(batch) = outgoing.recv().await {
@@ -593,4 +609,320 @@ async fn only_this_machines_master_may_switch_its_monitors() {
         }
     );
     drop(link);
+}
+
+//==================//
+// One session      //
+//==================//
+
+#[cfg(unix)]
+const CTRL: u16 = 29;
+#[cfg(unix)]
+const BTN_LEFT: u16 = 0x110;
+
+/// What a remote's hook holds pressed after the stream it was sent, counted the way its
+/// session counts (`lbm-hook/src/remote/mod.rs`): nothing before an `Enter`, and
+/// everything released on a `Leave` or at the end of the connection.
+#[cfg(unix)]
+#[derive(Default)]
+struct Held {
+    driven: bool,
+    keys: std::collections::BTreeSet<u16>,
+    buttons: std::collections::BTreeSet<u16>,
+}
+
+#[cfg(unix)]
+impl Held {
+    fn apply(&mut self, batch: &[u8]) {
+        use lbm_ipc::input::{decode, InputEvent};
+        for event in decode(batch).unwrap() {
+            match event {
+                InputEvent::Enter { .. } => self.driven = true,
+                InputEvent::Leave => self.end(),
+                _ if !self.driven => {}
+                InputEvent::Key { code, pressed } => {
+                    if pressed {
+                        self.keys.insert(code);
+                    } else {
+                        self.keys.remove(&code);
+                    }
+                }
+                InputEvent::Button { code, pressed } => {
+                    if pressed {
+                        self.buttons.insert(code);
+                    } else {
+                        self.buttons.remove(&code);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn end(&mut self) {
+        self.driven = false;
+        self.keys.clear();
+        self.buttons.clear();
+    }
+}
+
+/// A batch as large as a frame carries: few of them fill any buffer on the way.
+#[cfg(unix)]
+fn flood() -> Vec<u8> {
+    use lbm_ipc::input::{encode, InputEvent};
+    let events: Vec<InputEvent> = (0..7000)
+        .map(|i| InputEvent::Motion { x: i, y: i })
+        .collect();
+    encode(&events)
+}
+
+/// The events of the next input batch on `link`, skipping control messages.
+#[cfg(unix)]
+async fn next_input(link: &mut Link) -> Vec<lbm_ipc::input::InputEvent> {
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match link.next().await {
+                Some(Event::Input(batch)) => return lbm_ipc::input::decode(&batch).unwrap(),
+                Some(Event::Control(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("an input batch in time")
+}
+
+/// A remote of a test's own: a listener under a fresh identity.
+#[cfg(unix)]
+async fn a_remote(
+    name: &str,
+    options: link::Options,
+) -> (tempfile::TempDir, Identity, link::Listener) {
+    let directory = tempfile::tempdir().unwrap();
+    let identity = Identity::load_or_create(directory.path()).unwrap();
+    let listener = link::listen(
+        "127.0.0.1:0",
+        &identity,
+        Hello::new(name, "0", Role::Remote),
+        options,
+    )
+    .await
+    .unwrap();
+    (directory, identity, listener)
+}
+
+/// The link a master made to `listener`, accepted.
+#[cfg(unix)]
+async fn linked_from(listener: &mut link::Listener) -> Link {
+    tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the master connects")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap()
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_batch_the_link_has_no_room_for_ends_the_session_and_the_remote_is_told_leave() {
+    use lbm_ipc::input::{encode, InputEvent};
+    // A link that stalls on purpose here, and must not be taken for lost meanwhile.
+    let stalling = link::Options {
+        keepalive: Duration::from_secs(60),
+        queue: 1,
+        ..link::Options::default()
+    };
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", stalling.clone()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk_hook = endpoint::serve(desk_dir.path(), "desk-input.sock");
+    let mut desk = Node::with_setup(
+        desk_dir.path(),
+        setup_with(Some(desk_hook.path.clone()), stalling),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Ctrl goes down on the laptop, which then reads nothing while the hook's stream
+    // outgrows every buffer on the way — Ctrl's release last.
+    desk_hook
+        .to_client
+        .send(encode(&[
+            InputEvent::Enter { x: 0, y: 0 },
+            InputEvent::Key {
+                code: CTRL,
+                pressed: true,
+            },
+        ]))
+        .unwrap();
+    for _ in 0..400 {
+        desk_hook.to_client.send(flood()).unwrap();
+    }
+    desk_hook
+        .to_client
+        .send(encode(&[InputEvent::Key {
+            code: CTRL,
+            pressed: false,
+        }]))
+        .unwrap();
+
+    // A batch found no room: the agent lets go of the hook, which comes home.
+    assert_eq!(desk_hook.next().await, None);
+
+    // The laptop reads again: whatever was lost on the way, the session ends with a
+    // `Leave`, and its hook holds nothing.
+    let mut held = Held::default();
+    let mut pressed = false;
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match laptop_link.next().await {
+                Some(Event::Input(batch)) => {
+                    held.apply(&batch);
+                    pressed |= held.keys.contains(&CTRL);
+                    if lbm_ipc::input::decode(&batch).unwrap() == [InputEvent::Leave] {
+                        return;
+                    }
+                }
+                Some(Event::Control(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("a Leave in time");
+    assert!(pressed, "Ctrl reached the laptop");
+    assert!(held.keys.is_empty(), "{:?} left pressed", held.keys);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_batch_the_remotes_hook_has_no_room_for_ends_its_stream_so_the_hook_releases_ctrl() {
+    use lbm_ipc::input::{encode, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    // A hook busy for a while (less than the agent's patience with one write): the
+    // agent's queue to it fills.
+    let mut hook =
+        endpoint::serve_after(tower_dir.path(), "input.sock", Duration::from_millis(700));
+    let mut tower = Node::new(tower_dir.path(), Some(hook.path.clone()));
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+
+    let sender = link.sender();
+    sender
+        .input(&encode(&[
+            InputEvent::Enter { x: 0, y: 0 },
+            InputEvent::Key {
+                code: CTRL,
+                pressed: true,
+            },
+        ]))
+        .await
+        .unwrap();
+    for _ in 0..120 {
+        sender.input(&flood()).await.unwrap();
+    }
+    sender
+        .input(&encode(&[InputEvent::Key {
+            code: CTRL,
+            pressed: false,
+        }]))
+        .await
+        .unwrap();
+
+    // Ctrl is released on the tower: by its release if that got through, else by the end
+    // of the connection.
+    let mut held = Held::default();
+    let mut pressed = false;
+    loop {
+        match hook.next().await {
+            Some(batch) => {
+                held.apply(&batch);
+                pressed |= held.keys.contains(&CTRL);
+            }
+            None => {
+                held.end();
+                break;
+            }
+        }
+        if pressed && !held.keys.contains(&CTRL) {
+            break;
+        }
+    }
+    assert!(pressed, "Ctrl reached the tower's hook");
+    assert!(held.keys.is_empty(), "{:?} left pressed", held.keys);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from_its_successor() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    // The pointer crosses to the laptop and a drag starts there.
+    let mut hook = accept().await;
+    let press = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Button {
+            code: BTN_LEFT,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&press)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, press);
+
+    // The hook exits with the button down; the next one starts and crosses at once.
+    drop(hook);
+    let mut successor = accept().await;
+    write_batch(
+        &mut successor,
+        &encode(&[InputEvent::Enter { x: 20, y: 20 }]),
+    )
+    .await
+    .unwrap();
+
+    // The laptop releases the drag before it hears anything of the new hook.
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    assert_eq!(
+        next_input(&mut laptop_link).await,
+        [InputEvent::Enter { x: 20, y: 20 }]
+    );
 }

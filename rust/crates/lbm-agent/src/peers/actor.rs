@@ -918,7 +918,18 @@ async fn forward(
     let mut injected = false;
     let reason = loop {
         match events.recv().await {
-            Some(Event::Input(batch)) if injecting => injected |= hook.try_batch(batch),
+            Some(Event::Input(batch)) if injecting => {
+                if hook.try_batch(batch) {
+                    injected = true;
+                } else if injected {
+                    // The hook is not keeping up and this batch is lost: it may have been
+                    // a release. The stream ends here instead, so the hook releases what
+                    // it holds; what follows reaches it as a new stream, ignored until
+                    // the master's next `Enter`.
+                    hook.release().await;
+                    injected = false;
+                }
+            }
             Some(Event::Input(_)) => {}
             Some(Event::Control(message)) => {
                 let _ = internal.send(Internal::Control {

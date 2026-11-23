@@ -5,13 +5,21 @@
 //!   the hook, which injects them. The connection is made at the first batch and made
 //!   again after a failure; batches that find no connection are dropped, never queued
 //!   for later — input replayed late is input nobody typed. When the link they came on
-//!   ends, the connection is closed ([`Sink::release`]): that is how the hook learns to
-//!   release whatever the stream left pressed.
+//!   ends, or a batch finds the queue full, the connection is closed ([`Sink::release`]):
+//!   that is how the hook learns to release whatever the stream left pressed. The hook
+//!   ignores a new connection's batches until an `Enter`.
 //! - **Master**: while a remote is linked ([`HookInput::set_target`]), the connection is
 //!   kept, and every batch the hook writes to it is relayed to that remote's link with
-//!   `try_input` — a congested link costs input on that link, never a queue or a wait.
-//!   When the remote goes away, the connection is closed: the hop of the stream has
-//!   ended, which is what brings the master's pointer home (docs/multi-pc.md).
+//!   `try_input`, never a wait. A connection relays to one link for its whole life.
+//!   Its end — the remote going away, another remote chosen, the hook gone, or a batch
+//!   the link has no room for — is the end of the hop: the connection is closed, which
+//!   brings the master's pointer home (docs/multi-pc.md), and the link it relayed to is
+//!   told `Leave`, which makes the remote's hook release what the stream left pressed.
+//!   No batch of a new connection is relayed before that `Leave` is queued.
+//!
+//! A batch is never dropped in the middle of a session: it may be a release, and a
+//! remote that misses the release of Ctrl types every later key with Ctrl held. Where a
+//! queue has no room, the session ends instead, on both sides.
 //!
 //! The hook serves one client, the newest. A machine that is both a master and a remote
 //! at once shares this one connection between the two; nothing more is attempted for
@@ -20,7 +28,7 @@
 use std::io;
 use std::time::Duration;
 
-use lbm_ipc::input::{read_batch, write_batch};
+use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
 use lbm_net::link::LinkSender;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -28,7 +36,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 /// Batches waiting to be written to the hook: a few dozen milliseconds of a fast mouse.
-/// Beyond it the hook is not keeping up, and batches are dropped rather than queued.
+/// Beyond it the hook is not keeping up: the stream is ended rather than queued further.
 const QUEUE: usize = 64;
 
 /// How long one connection attempt may take (a Windows pipe client waits for a server
@@ -53,7 +61,9 @@ enum Message {
 pub struct Sink(mpsc::Sender<Message>);
 
 impl Sink {
-    /// Queues a batch for the hook if there is room; dropped otherwise.
+    /// Queues a batch for the hook if there is room. When there is none the batch is
+    /// lost, and the caller must end the stream ([`Sink::release`]): what follows it
+    /// cannot be injected as if it had not been.
     pub fn try_batch(&self, batch: Vec<u8>) -> bool {
         self.0.try_send(Message::Batch(batch)).is_ok()
     }
@@ -100,6 +110,8 @@ struct Connection {
     writer: Box<dyn AsyncWrite + Unpin + Send>,
     reading: JoinHandle<()>,
     lost: oneshot::Receiver<()>,
+    /// The link the hook's batches go to, for the whole life of this connection.
+    relaying_to: Option<LinkSender>,
 }
 
 impl Drop for Connection {
@@ -116,29 +128,41 @@ async fn run(
 ) {
     let mut connection: Option<Connection> = None;
     let mut retry_at: Option<Instant> = None;
+    // The `Leave` of the last hop being queued on its link; no new connection relays
+    // anything before it is.
+    let mut leaving: Option<JoinHandle<()>> = None;
     let mut targets_open = true;
     loop {
         let relaying = targets.borrow().is_some();
         let may_try = retry_at.is_none_or(|at| Instant::now() >= at);
-        if relaying && connection.is_none() && may_try {
-            connection = open(endpoint.as_deref(), &targets, &mut retry_at).await;
+        if relaying && connection.is_none() && may_try && leaving.is_none() {
+            connection = open(
+                endpoint.as_deref(),
+                relay_target(&targets, &leaving),
+                &mut retry_at,
+            )
+            .await;
         }
-        let waiting_to_retry = relaying && connection.is_none();
+        let waiting_to_retry = relaying && connection.is_none() && leaving.is_none();
         let retry = retry_at.unwrap_or_else(Instant::now);
         tokio::select! {
             message = inbox.recv() => match message {
-                None => return,
-                Some(Message::Release) => connection = None,
+                None => {
+                    close(&mut connection, &mut leaving);
+                    return;
+                }
+                Some(Message::Release) => close(&mut connection, &mut leaving),
                 Some(Message::Batch(batch)) => {
                     let may_try = retry_at.is_none_or(|at| Instant::now() >= at);
                     if connection.is_none() && may_try {
-                        connection = open(endpoint.as_deref(), &targets, &mut retry_at).await;
+                        let target = relay_target(&targets, &leaving);
+                        connection = open(endpoint.as_deref(), target, &mut retry_at).await;
                     }
                     if let Some(open) = &mut connection {
                         let written =
                             tokio::time::timeout(WRITE_TIMEOUT, write_batch(&mut open.writer, &batch)).await;
                         if !matches!(written, Ok(Ok(()))) {
-                            connection = None;
+                            close(&mut connection, &mut leaving);
                             retry_at = Some(Instant::now() + RETRY_AFTER);
                         }
                     }
@@ -150,15 +174,22 @@ async fn run(
                     None => std::future::pending().await,
                 }
             } => {
-                connection = None;
+                close(&mut connection, &mut leaving);
                 retry_at = Some(Instant::now() + RETRY_AFTER);
             }
+            _ = async {
+                match &mut leaving {
+                    Some(task) => { let _ = task.await; }
+                    None => std::future::pending().await,
+                }
+            } => leaving = None,
             changed = targets.changed(), if targets_open => {
                 if changed.is_err() {
                     targets_open = false;
-                } else if targets.borrow().is_none() {
-                    // The remote is gone: so is this hop of the stream.
-                    connection = None;
+                } else {
+                    // Another remote, or none: this hop of the stream is over, and the
+                    // next connection, if any, relays to the new one from its start.
+                    close(&mut connection, &mut leaving);
                     retry_at = None;
                 }
             }
@@ -167,10 +198,40 @@ async fn run(
     }
 }
 
-/// Connects, and starts relaying what the hook writes to the current target.
+/// Where a connection opened now relays: the current target, unless the last hop's
+/// `Leave` is still on its way. A connection opened meanwhile (this machine also being
+/// a remote, whose batches share the connection) relays nothing.
+fn relay_target(
+    targets: &watch::Receiver<Option<LinkSender>>,
+    leaving: &Option<JoinHandle<()>>,
+) -> Option<LinkSender> {
+    match leaving {
+        Some(_) => None,
+        None => targets.borrow().clone(),
+    }
+}
+
+/// Ends a connection: the hook sees it go (and comes home, releasing what it holds),
+/// and the link it relayed to is told `Leave`. That send waits for room, so it is
+/// neither lost nor overtaken by a later connection's batches, which wait for it; it
+/// ends at the latest with the link, whose end the remote takes as a `Leave` too.
+fn close(connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>) {
+    let Some(link) = connection.take().and_then(|c| c.relaying_to.clone()) else {
+        return;
+    };
+    let before = leaving.take();
+    *leaving = Some(tokio::spawn(async move {
+        if let Some(before) = before {
+            let _ = before.await;
+        }
+        let _ = link.input(&encode(&[InputEvent::Leave])).await;
+    }));
+}
+
+/// Connects, and starts relaying what the hook writes to `target`.
 async fn open(
     endpoint: Option<&str>,
-    targets: &watch::Receiver<Option<LinkSender>>,
+    target: Option<LinkSender>,
     retry_at: &mut Option<Instant>,
 ) -> Option<Connection> {
     let endpoint = endpoint?;
@@ -179,11 +240,12 @@ async fn open(
             *retry_at = None;
             let (reader, writer) = tokio::io::split(stream);
             let (lost, lost_rx) = oneshot::channel();
-            let reading = tokio::spawn(relay(reader, targets.clone(), lost));
+            let reading = tokio::spawn(relay(reader, target.clone(), lost));
             Some(Connection {
                 writer: Box::new(writer),
                 reading,
                 lost: lost_rx,
+                relaying_to: target,
             })
         }
         _ => {
@@ -193,17 +255,20 @@ async fn open(
     }
 }
 
-/// The hook's batches to the linked remote, as they come. A batch the link has no room
-/// for is dropped there (`try_input`): the next report says where the pointer is now.
+/// The hook's batches to `target`, as they come, until the hook goes or the link takes
+/// one no more: a batch dropped would be a press or a release the remote never sees,
+/// so a full queue ends the connection instead (and with it the session, see
+/// [`close`]). With no target they are read and let go: nothing was sent anywhere.
 async fn relay(
     mut reader: impl AsyncRead + Unpin,
-    targets: watch::Receiver<Option<LinkSender>>,
+    target: Option<LinkSender>,
     lost: oneshot::Sender<()>,
 ) {
     while let Ok(batch) = read_batch(&mut reader).await {
-        let target = targets.borrow().clone();
-        if let Some(link) = target {
-            let _ = link.try_input(&batch);
+        if let Some(link) = &target {
+            if link.try_input(&batch).is_err() {
+                break;
+            }
         }
     }
     let _ = lost.send(());

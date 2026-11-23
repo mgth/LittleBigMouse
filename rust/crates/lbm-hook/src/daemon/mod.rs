@@ -204,9 +204,15 @@ fn load_layout(shared: &Shared, xml: &str, keep_hooked: bool) -> Option<LoadInfo
         hook::request_unhook(shared);
     }
     if let Some(layout) = ZonesLayout::from_xml(xml) {
+        // Every zone the document described, the other machines' included: they were
+        // accepted, even while they are out of play (`ZonesLayout::set_remote_enterable`).
         let info = LoadInfo {
-            zones: layout.zones.len(),
-            main: layout.main_zones.len(),
+            zones: layout.all_zones.len(),
+            main: layout
+                .all_zones
+                .iter()
+                .filter(|&&z| layout.arena[z].main == z)
+                .count(),
             virtual_layout: layout.virtual_layout,
         };
         let tag = if info.virtual_layout { " VIRTUAL" } else { "" };

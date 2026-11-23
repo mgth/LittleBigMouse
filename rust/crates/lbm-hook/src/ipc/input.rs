@@ -7,21 +7,28 @@
 //! little-endian length, then whole events — and on a remote they go one way, agent
 //! to hook to system, through a [`Session`] and the platform's [`Injector`].
 //!
-//! The connection is a full duplex stream on purpose: on a master, the hook will write
-//! captured batches to the agent over the same one (lot 6). Nothing writes yet.
+//! The connection is a full duplex stream on purpose: on a master, the hook writes the
+//! batches it captured while the pointer is on the remote to the agent over the same
+//! one (lot 6). They reach the connection through the [`Outlet`]: the routing thread
+//! queues an encoded batch with a `try_send` into a bounded queue, and a task of the
+//! endpoint's runtime writes it. A queue that is full means the agent stopped reading;
+//! the routing thread then gives up on that client ([`Driver::send`]), which closes its
+//! connection, rather than wait or drop part of a stream that presses and releases.
 //!
 //! Two threads, neither of them the routing thread. The endpoint's own, with a small
-//! runtime, reads and decodes; the injector's, which owns the session, does the
+//! runtime, reads, decodes and writes; the injector's, which owns the session, does the
 //! system calls. A stalled injection holds back the reader — the stream is bounded —
 //! and never the mouse this machine routes.
 
 use std::io;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc as std_mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use lbm_ipc::input::{decode, read_batch, InputEvent};
+use lbm_ipc::input::{decode, read_batch, write_batch, InputEvent};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, watch, Notify};
 
 use crate::ipc::transport;
 use crate::remote::{Injector, Session};
@@ -30,6 +37,105 @@ use crate::remote::{Injector, Session};
 /// dozen milliseconds of a fast mouse — enough to ride out a slow system call, short
 /// enough that a stalled injector pushes back on the agent instead of piling up.
 const QUEUE: usize = 64;
+
+/// Batches waiting to be written to the agent, on a master. The same reasoning as
+/// [`QUEUE`], from the other side: a quarter of a second of a 1 kHz mouse is more than
+/// any healthy agent lets pile up, and an agent that does is one the pointer should
+/// come home from rather than wait for.
+pub const OUT_QUEUE: usize = 256;
+
+/// The client a master's routing thread writes to: its queue, and the way to close
+/// its connection.
+#[derive(Clone)]
+pub struct Client {
+    id: ClientId,
+    batches: mpsc::Sender<Vec<u8>>,
+    abandon: Arc<Notify>,
+}
+
+/// Where the endpoint publishes its current client for the routing thread.
+///
+/// The routing thread must never block, so it does not read this on every report: it
+/// compares [`Outlet::generation`], one atomic load, with the generation it last took a
+/// copy at, and only takes the lock — with `try_lock` — when they differ.
+#[derive(Default)]
+pub struct Outlet {
+    generation: AtomicU64,
+    current: Mutex<Option<Client>>,
+}
+
+impl Outlet {
+    fn adopt(&self, client: Client) {
+        *self.current.lock().unwrap_or_else(|p| p.into_inner()) = Some(client);
+        self.generation.fetch_add(1, Ordering::Release);
+    }
+
+    /// A connection ended: if it was the current one, there is no client any more. A
+    /// replaced connection's end leaves its successor in place.
+    fn end(&self, id: ClientId) {
+        let mut current = self.current.lock().unwrap_or_else(|p| p.into_inner());
+        if current.as_ref().is_some_and(|client| client.id == id) {
+            *current = None;
+            self.generation.fetch_add(1, Ordering::Release);
+        }
+    }
+}
+
+/// The routing thread's side of the [`Outlet`]: its own copy of the current client,
+/// refreshed when the endpoint says it changed.
+#[derive(Default)]
+pub struct Driver {
+    seen: Option<u64>,
+    client: Option<Client>,
+}
+
+impl Driver {
+    /// Catches up with the endpoint. An atomic load when nothing changed; a `try_lock`
+    /// when something did, and on contention the next call tries again.
+    pub fn refresh(&mut self, outlet: &Outlet) {
+        let generation = outlet.generation.load(Ordering::Acquire);
+        if self.seen == Some(generation) {
+            return;
+        }
+        if let Ok(current) = outlet.current.try_lock() {
+            self.client = current.clone();
+            self.seen = Some(generation);
+        }
+    }
+
+    /// Whether there is a client to drive. A connection that ended is noticed here
+    /// even before the endpoint's news is: its queue is closed.
+    pub fn connected(&self) -> bool {
+        self.client
+            .as_ref()
+            .is_some_and(|client| !client.batches.is_closed())
+    }
+
+    /// Queues one encoded batch without waiting. `false` when the batch will never be
+    /// written: no client, a connection that ended, or a queue that is full. A full
+    /// queue closes the connection — the stream already lost an event and cannot be
+    /// trusted to release what it pressed — and the client is forgotten until the
+    /// endpoint names another.
+    pub fn send(&mut self, batch: Vec<u8>) -> bool {
+        let Some(client) = &self.client else {
+            return false;
+        };
+        match client.batches.try_send(batch) {
+            Ok(()) => true,
+            Err(_) => {
+                self.abandon();
+                false
+            }
+        }
+    }
+
+    /// Closes the current client's connection and forgets it.
+    pub fn abandon(&mut self) {
+        if let Some(client) = self.client.take() {
+            client.abandon.notify_one();
+        }
+    }
+}
 
 /// How long `stop` waits for the injector to have released everything.
 const STOP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -71,9 +177,14 @@ impl InputServer {
     }
 }
 
-/// Serves the input endpoint at `endpoint`, injecting through `injector`. Binds before
-/// returning, so a client may connect as soon as this has returned.
-pub fn start(endpoint: String, injector: Box<dyn Injector>) -> io::Result<InputServer> {
+/// Serves the input endpoint at `endpoint`, injecting through `injector` and publishing
+/// its current client in `outlet`. Binds before returning, so a client may connect as
+/// soon as this has returned.
+pub fn start(
+    endpoint: String,
+    injector: Box<dyn Injector>,
+    outlet: Arc<Outlet>,
+) -> io::Result<InputServer> {
     let (messages, inbox) = mpsc::channel(QUEUE);
 
     std::thread::Builder::new()
@@ -106,7 +217,7 @@ pub fn start(endpoint: String, injector: Box<dyn Injector>) -> io::Result<InputS
                     }
                 };
                 let _ = ready_tx.send(Ok(()));
-                accept(&mut acceptor, accepted).await;
+                accept(&mut acceptor, accepted, outlet).await;
             });
         })?;
 
@@ -119,10 +230,15 @@ pub fn start(endpoint: String, injector: Box<dyn Injector>) -> io::Result<InputS
 
 /// Hands every connection the endpoint, newest first.
 ///
-/// The adoption is announced to the injector here, in accepting order, before the
-/// connection can send anything: the injector then cannot see a batch of the new
-/// client ahead of the news that it is the one to listen to.
-async fn accept(acceptor: &mut transport::Acceptor, messages: mpsc::Sender<Message>) {
+/// The adoption is announced to the injector and published in the outlet here, in
+/// accepting order, before the connection can send anything: the injector then cannot
+/// see a batch of the new client ahead of the news that it is the one to listen to, and
+/// the routing thread cannot be handed an older client after a newer one.
+async fn accept(
+    acceptor: &mut transport::Acceptor,
+    messages: mpsc::Sender<Message>,
+    outlet: Arc<Outlet>,
+) {
     let (current, _) = watch::channel(0);
     let mut next: ClientId = 1;
     while let Some(stream) = acceptor.accept().await {
@@ -132,48 +248,96 @@ async fn accept(acceptor: &mut transport::Acceptor, messages: mpsc::Sender<Messa
             return;
         }
         current.send_replace(id);
+        let (batches, outgoing) = mpsc::channel(OUT_QUEUE);
+        let abandon = Arc::new(Notify::new());
+        outlet.adopt(Client {
+            id,
+            batches,
+            abandon: abandon.clone(),
+        });
         tokio::spawn(connection(
             stream,
             id,
             current.subscribe(),
             messages.clone(),
+            Outgoing {
+                batches: outgoing,
+                abandon,
+                outlet: outlet.clone(),
+            },
         ));
     }
 }
 
-/// One client's connection, until it ends, sends what is not a batch, or a newer one
-/// takes the endpoint.
+/// What a connection writes, and how it is told to stop.
+struct Outgoing {
+    batches: mpsc::Receiver<Vec<u8>>,
+    abandon: Arc<Notify>,
+    outlet: Arc<Outlet>,
+}
+
+/// One client's connection, until it ends, sends what is not a batch, cannot be written
+/// to, is abandoned by the routing thread, or a newer one takes the endpoint.
+///
+/// Reading and writing are two futures of one task, raced against each other and
+/// against the two reasons to stop: whichever ends first ends the connection as a
+/// whole, so the client never sees half of one. Neither is cancelled while the other
+/// lives — `read_batch` is not cancel-safe, and losing half a frame mid-stream would
+/// desynchronise everything read after it.
 async fn connection<S>(
     stream: S,
     id: ClientId,
     mut current: watch::Receiver<ClientId>,
     messages: mpsc::Sender<Message>,
+    outgoing: Outgoing,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    // The write half is the master's direction (lot 6); held so the client sees one
-    // connection that lives and dies as a whole.
-    let (mut reader, _writer) = tokio::io::split(stream);
-    loop {
-        let events = tokio::select! {
-            read = read_batch(&mut reader) => match read.and_then(|batch| decode(&batch)) {
+    let Outgoing {
+        mut batches,
+        abandon,
+        outlet,
+    } = outgoing;
+    let (mut reader, mut writer) = tokio::io::split(stream);
+    let reading = async {
+        loop {
+            let events = match read_batch(&mut reader)
+                .await
+                .and_then(|batch| decode(&batch))
+            {
                 Ok(events) => events,
                 // The end of the stream, a frame too long to be a batch, or an event
                 // that does not parse: none of them leaves a stream worth reading on.
                 Err(_) => break,
-            },
-            // Only ever a newer client, since this receiver was made after this
-            // connection's own adoption. Losing a half-read batch is fine: the
-            // connection is over.
-            _ = current.changed() => break,
-        };
-        if events.is_empty() {
-            continue;
+            };
+            if events.is_empty() {
+                continue;
+            }
+            if messages.send(Message::Batch(id, events)).await.is_err() {
+                break;
+            }
         }
-        if messages.send(Message::Batch(id, events)).await.is_err() {
-            break;
+    };
+    let writing = async {
+        while let Some(batch) = batches.recv().await {
+            if write_batch(&mut writer, &batch).await.is_err() {
+                break;
+            }
         }
+    };
+    tokio::select! {
+        () = reading => {}
+        () = writing => {}
+        // Only ever a newer client, since this receiver was made after this
+        // connection's own adoption. Losing a half-read batch is fine: the connection
+        // is over.
+        _ = current.changed() => {}
+        // The routing thread gave up on this client: its queue was full.
+        () = abandon.notified() => {}
     }
+    // Before the injector hears of it: the routing thread is to stop writing to a
+    // client that is gone as early as it can know.
+    outlet.end(id);
     let _ = messages.send(Message::End(id)).await;
 }
 
@@ -259,7 +423,12 @@ mod tests {
     fn serve() -> (InputServer, String, Recording) {
         let recording = Recording::default();
         let endpoint = endpoint();
-        let server = start(endpoint.clone(), Box::new(recording.clone())).expect("binds");
+        let server = start(
+            endpoint.clone(),
+            Box::new(recording.clone()),
+            Arc::new(Outlet::default()),
+        )
+        .expect("binds");
         (server, endpoint, recording)
     }
 
@@ -539,6 +708,102 @@ mod tests {
             .expect("sent");
         closed(&mut agent).await;
         assert_eq!(recording.until(3).await[2], key(C, false));
+    }
+
+    /// A driver that has caught up with `outlet`'s current client, or the test fails.
+    async fn driving(outlet: &Outlet) -> Driver {
+        let mut driver = Driver::default();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !driver.connected() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the client was never published"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            driver.refresh(outlet);
+        }
+        driver
+    }
+
+    fn serve_master() -> (InputServer, String, Arc<Outlet>) {
+        let outlet = Arc::new(Outlet::default());
+        let endpoint = endpoint();
+        let server = start(
+            endpoint.clone(),
+            Box::new(Recording::default()),
+            outlet.clone(),
+        )
+        .expect("binds");
+        (server, endpoint, outlet)
+    }
+
+    #[tokio::test]
+    async fn a_master_writes_its_batches_to_the_client_and_stops_when_it_goes() {
+        let (_server, endpoint, outlet) = serve_master();
+        let mut agent = client(&endpoint).await;
+        let mut driver = driving(&outlet).await;
+
+        let batch = encode(&[InputEvent::Enter { x: 1, y: 2 }]);
+        assert!(driver.send(batch.clone()));
+        let read = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut agent))
+            .await
+            .expect("the batch arrives")
+            .expect("read");
+        assert_eq!(read, batch);
+
+        drop(agent);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while driver.connected() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the client's end was never noticed"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            driver.refresh(&outlet);
+        }
+        assert!(!driver.send(batch), "nobody to write to");
+    }
+
+    #[tokio::test]
+    async fn a_newer_client_is_the_one_a_master_writes_to() {
+        let (_server, endpoint, outlet) = serve_master();
+        let mut first = client(&endpoint).await;
+        let mut driver = driving(&outlet).await;
+        let mut second = client(&endpoint).await;
+        closed(&mut first).await;
+
+        driver.refresh(&outlet);
+        let batch = encode(&[InputEvent::Leave]);
+        assert!(driver.send(batch.clone()));
+        let read = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut second))
+            .await
+            .expect("the batch arrives at the newer client")
+            .expect("read");
+        assert_eq!(read, batch);
+    }
+
+    #[tokio::test]
+    async fn a_full_queue_gives_the_client_up_and_closes_its_connection() {
+        let (batches, mut outgoing) = mpsc::channel(1);
+        let abandon = Arc::new(Notify::new());
+        let outlet = Outlet::default();
+        outlet.adopt(Client {
+            id: 7,
+            batches,
+            abandon: abandon.clone(),
+        });
+        let mut driver = Driver::default();
+        driver.refresh(&outlet);
+        assert!(driver.connected());
+
+        assert!(driver.send(vec![2]));
+        assert!(!driver.send(vec![2]), "the queue holds one batch");
+        assert!(!driver.connected(), "the client is given up");
+        tokio::time::timeout(Duration::from_secs(5), abandon.notified())
+            .await
+            .expect("its connection is told to close");
+        // Given up, not lost from the endpoint's view: the queued batch is still there.
+        assert_eq!(outgoing.recv().await, Some(vec![2]));
     }
 
     #[tokio::test]

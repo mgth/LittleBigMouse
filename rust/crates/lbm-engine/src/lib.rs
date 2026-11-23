@@ -912,6 +912,40 @@ mod tests {
         assert_eq!(eng.old_zone, Some(right));
     }
 
+    /// Every backend but the evdev master moves the real cursor in real pixels, and a
+    /// remote zone's pixels do not exist on this machine: until it is put in play, its
+    /// border is the wall a layout without it would have had — Ctrl included, in both
+    /// algorithms.
+    #[test]
+    fn a_zone_of_another_machine_is_a_wall_until_it_is_put_in_play() {
+        for algorithm in ["Strait", "Cross"] {
+            let xml = FIXTURE
+                .replace(
+                    r#"Algorithm="Strait""#,
+                    &format!(r#"Algorithm="{algorithm}""#),
+                )
+                .replace(
+                    r#"<Zone Id="1" Name="Right">"#,
+                    r#"<Zone Id="1" Name="Right" Host="abcd">"#,
+                );
+            let mut eng = MouseEngine::new();
+            eng.load(ZonesLayout::from_xml(&xml).unwrap());
+            let left = eng.layout.main_zones[0];
+            let mut env = FakeCursor::new();
+            env.ctrl = true;
+            feed(&mut eng, &mut env, -100, 1000);
+            let ev = feed(&mut eng, &mut env, 5, 1000);
+            assert!(!ev.handled, "{algorithm}: crossed into a zone out of play");
+            assert_eq!(env.clip, eng.layout.arena[left].pixels_bounds());
+
+            eng.layout.set_remote_enterable(true);
+            feed(&mut eng, &mut env, -100, 1000);
+            let ev = feed(&mut eng, &mut env, 5, 1000);
+            assert!(ev.handled, "{algorithm}: the zone in play was not entered");
+            assert!(env.pos.x() >= 0, "{algorithm}: landed at {:?}", env.pos);
+        }
+    }
+
     #[test]
     fn ctrl_bypasses_border_resistance() {
         // Give the border some resistance and confirm Ctrl punches straight through.

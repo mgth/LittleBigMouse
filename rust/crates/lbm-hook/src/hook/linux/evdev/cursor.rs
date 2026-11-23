@@ -108,6 +108,22 @@ impl EvdevCursor {
         }
     }
 
+    /// Where the cursor may go now. The emulated clip goes with the old extent: a clip
+    /// is only ever the engine's own (nothing else can confine a pointer this process
+    /// owns), and one it saved as "no clip" while the extent was another rectangle
+    /// would come back as a real confinement to that rectangle — the old desktop, say,
+    /// with the zones of another machine just put in play outside it.
+    pub(super) fn set_bounds(&mut self, bounds: Rect<i32>) {
+        self.bounds = bounds;
+        self.clip = None;
+    }
+
+    /// Lifts the emulated clip: the cursor was put somewhere by other means than the
+    /// engine (it came home from another machine).
+    pub(super) fn release_clip(&mut self) {
+        self.clip = None;
+    }
+
     pub(super) fn clamp(&self, p: Point<i32>) -> Point<i32> {
         let r = self.clip.unwrap_or(self.bounds);
         Point::new(

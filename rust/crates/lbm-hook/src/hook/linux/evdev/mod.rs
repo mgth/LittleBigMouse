@@ -37,9 +37,10 @@
 //! - no synchronous IPC/DBus — the KWin cursor probe runs at arm time, BEFORE
 //!   the grabs;
 //! - no unbounded writes — state broadcasts go to sockets with a write
-//!   timeout (ipc/server.rs); stderr must stay a file/journal, never an
-//!   undrained pipe (the C# spawns the daemon with inherited handles — keep
-//!   it that way);
+//!   timeout (ipc/server.rs), and the multi-PC input stream to a bounded queue
+//!   with `try_send` (ipc/input.rs: a full queue sends the pointer home rather
+//!   than wait); stderr must stay a file/journal, never an undrained pipe (the
+//!   C# spawns the daemon with inherited handles — keep it that way);
 //! - the only permitted wait is the bounded 100 ms `poll()` (and the
 //!   equivalent sleep when no device is left).
 //!
@@ -58,7 +59,9 @@
 //!
 //! Ctrl-override reads the modifier from keyboards WITHOUT grabbing them (evdev
 //! nodes are multi-reader; the compositor keeps them), plus the ctrl usages of
-//! the grabbed combined nodes. Hot-plug is handled by a rescan whenever
+//! the grabbed combined nodes. The one exception is the multi-PC mode: while the
+//! pointer is on another machine the keyboards are grabbed too, and typed there
+//! (see `pipeline`). Hot-plug is handled by a rescan whenever
 //! /dev/input gains a node (new mice would otherwise drive the cursor directly,
 //! next to the engine) and by
 //! purging dead nodes — a removed device reports POLLERR forever and would
@@ -76,6 +79,12 @@
 //!   pointer or the keyboard batch, and the composition of the frames. Owns the
 //!   buffers the pump reuses;
 //! * `uinput` — the two virtual devices this process creates;
+//! * `pipeline` — what a frame becomes once read: the engine run over it, and
+//!   the frame emitted to this machine's virtual devices or, in the multi-PC
+//!   mode, written to another machine through the input stream. No device in
+//!   it, which is what lets the tests drive the whole of it;
+//! * `keys` — held-key bookkeeping, and the rescue shortcut recognised in the
+//!   keyboards' own stream while they are grabbed;
 //! * `cursor` — the authoritative cursor position the engine is run against;
 //! * `probe` — asking the world where things are: the compositor's cursor
 //!   position, the desktop bounds, a fallback start point;
@@ -85,6 +94,8 @@
 mod cursor;
 mod devices;
 mod frame;
+mod keys;
+mod pipeline;
 pub(crate) mod probe;
 mod router;
 pub(crate) mod uinput;

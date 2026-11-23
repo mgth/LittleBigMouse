@@ -73,6 +73,23 @@ Hook ↔ agent: the hook serves a second endpoint beside its command endpoint
 (`input_endpoint_beside`), single client, raw batches both ways. The command
 protocol only gains what configures it (`Load` already carries the zones).
 
+On the master (lot 6, evdev backend only; the details are in
+`lbm-hook/src/hook/linux/evdev/pipeline.rs`):
+
+- The other machines' zones are **in play only while the input endpoint has a
+  client**. An agent connects to it while it has a remote to relay to, and closes
+  that connection when the remote link goes: the hook then brings the pointer home
+  and the borders to the remote become walls again. Every other backend never puts
+  them in play (`ZonesLayout::set_remote_enterable`).
+- The hook never waits on the agent: a full queue closes the connection, which is
+  the end of the hop. The agent ends the remote's stream in turn (its `Leave`), and
+  may reconnect.
+- A release goes where its press went: a button or key held across the border is
+  released on the machine that saw it pressed. A keyboard is grabbed once none of
+  its keys is held.
+- The rescue shortcut is recognised in the grabbed key stream, with the same hold.
+- One remote: batches carry no destination.
+
 ## Model
 
 - **Cross-machine identity** of a panel: EDID manufacturer code + product code +

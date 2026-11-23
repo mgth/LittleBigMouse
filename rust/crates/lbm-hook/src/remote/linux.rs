@@ -99,7 +99,8 @@ impl UinputInjector {
             .layout
             .main_zones
             .is_empty();
-        has_layout.then(|| probe::layout_bounds_blocking(self.shared))
+        // This machine's own zones: the desktop the injected pointer lands on.
+        has_layout.then(|| probe::layout_bounds_blocking(self.shared).1)
     }
 
     /// A pointer device spanning the current desktop, built or rebuilt as needed.

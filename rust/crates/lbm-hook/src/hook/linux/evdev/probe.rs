@@ -12,26 +12,17 @@ use std::time::Duration;
 use crate::geometry::{Point, Rect};
 use crate::shared::Shared;
 
-/// Where the cursor may go: the union of the layout's main zones, in the
+/// Where the cursor may go — the union of the layout's main zones in play, in the
 /// compositor's logical pixel space (kscreen coordinates), so the crossing geometry
-/// and the positions emitted agree.
+/// and the positions emitted agree — and the union of this machine's own zones among
+/// them, which is all a position emitted here may ever be in (docs/multi-pc.md: the
+/// other machines' desktops sit outside this one's).
 ///
-/// Arm-time variant: routing has not started, a blocking lock is fine here.
-pub(crate) fn layout_bounds_blocking(shared: &Shared) -> Rect<i32> {
+/// Arm-time variant: routing has not started, a blocking lock is fine here. The pump
+/// reads [`extents`] under the `try_lock` it already holds.
+pub(crate) fn layout_bounds_blocking(shared: &Shared) -> (Rect<i32>, Rect<i32>) {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
-    bounds_of(&engine)
-}
-
-/// Pump-side variant — routing-thread rule: never block. On contention (an IPC
-/// Load swapping the layout under the lock) returns None and the caller keeps
-/// its cached bounds for one cycle.
-pub(super) fn try_layout_bounds(shared: &Shared) -> Option<Rect<i32>> {
-    let engine = match shared.engine.try_lock() {
-        Ok(g) => g,
-        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => return None,
-    };
-    Some(bounds_of(&engine))
+    extents(&engine.layout)
 }
 
 /// The desktop the absolute device must span: what the agent said when it handed
@@ -64,23 +55,33 @@ pub(super) fn try_device_bounds(shared: &Shared, layout: Rect<i32>) -> Option<Re
     Some(desktop.unwrap_or(layout))
 }
 
-fn bounds_of(engine: &crate::engine::MouseEngine) -> Rect<i32> {
-    let mut it = engine
-        .layout
-        .main_zones
-        .iter()
-        .map(|&id| engine.layout.arena[id].pixels_bounds());
-    let Some(first) = it.next() else {
-        return Rect::new(0, 0, 1920, 1080);
-    };
-    let (mut l, mut t, mut r, mut b) = (first.left(), first.top(), first.right(), first.bottom());
-    for z in it {
-        l = l.min(z.left());
-        t = t.min(z.top());
-        r = r.max(z.right());
-        b = b.max(z.bottom());
+/// `(every zone in play, this machine's zones)`, each as one rectangle. One pass, no
+/// allocation: the pump calls it every cycle.
+pub(super) fn extents(layout: &crate::zones::ZonesLayout) -> (Rect<i32>, Rect<i32>) {
+    // (left, top, right, bottom), or None while nothing was seen.
+    type Union = Option<(i32, i32, i32, i32)>;
+    fn grow(union: &mut Union, z: Rect<i32>) {
+        let (l, t, r, b) = union.get_or_insert((z.left(), z.top(), z.right(), z.bottom()));
+        *l = (*l).min(z.left());
+        *t = (*t).min(z.top());
+        *r = (*r).max(z.right());
+        *b = (*b).max(z.bottom());
     }
-    Rect::new(l, t, r - l, b - t)
+    fn rect(union: Union) -> Rect<i32> {
+        match union {
+            Some((l, t, r, b)) => Rect::new(l, t, r - l, b - t),
+            None => Rect::new(0, 0, 1920, 1080),
+        }
+    }
+    let (mut all, mut local): (Union, Union) = (None, None);
+    for &id in &layout.main_zones {
+        let zone = &layout.arena[id];
+        grow(&mut all, zone.pixels_bounds());
+        if zone.host.is_none() {
+            grow(&mut local, zone.pixels_bounds());
+        }
+    }
+    (rect(all), rect(local))
 }
 
 /// Ask KWin for the real cursor position (logical coordinates, the same space
@@ -189,10 +190,14 @@ pub fn kwin_cursor_pos() -> Option<Point<i32>> {
     })
 }
 
-/// Centre of the first main zone, a guaranteed on-screen start point.
+/// Centre of the first main zone of this machine, a guaranteed on-screen start point.
 pub(super) fn first_zone_center(shared: &Shared) -> Option<Point<i32>> {
     let engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
-    let id = *engine.layout.main_zones.first()?;
+    let layout = &engine.layout;
+    let id = *layout
+        .main_zones
+        .iter()
+        .find(|&&id| layout.arena[id].host.is_none())?;
     let b = engine.layout.arena[id].pixels_bounds();
     Some(Point::new(
         b.left() + b.width() / 2,

@@ -16,6 +16,7 @@ use evdev::{Device, KeyCode, RelativeAxisCode};
 
 use crate::hook::linux::accel::PointerAccel;
 
+use super::keys::HeldSet;
 use super::uinput::is_ours;
 use super::BTN_MOUSE_RANGE;
 
@@ -157,6 +158,97 @@ pub(super) trait Grabbable {
     /// reached the compositor, which has already acted on them. Replaying them
     /// would move the cursor a second time.
     fn discard_queued(&mut self);
+}
+
+/// A node whose grab can be let go again: a keyboard, exclusive only while the pointer
+/// is on another machine. Generic so that the bookkeeping can be tested without a
+/// device.
+pub(super) trait Exclusive {
+    fn grab(&mut self) -> std::io::Result<()>;
+    fn ungrab(&mut self) -> std::io::Result<()>;
+}
+
+impl Exclusive for Device {
+    fn grab(&mut self) -> std::io::Result<()> {
+        Device::grab(self)
+    }
+
+    fn ungrab(&mut self) -> std::io::Result<()> {
+        Device::ungrab(self)
+    }
+}
+
+/// An observed keyboard. Read, never grabbed, while the pointer is here — the
+/// compositor keeps it, and only the ctrl state is taken from it; grabbed while the
+/// pointer is on another machine, once none of its keys is held (see the "Held keys
+/// and buttons" section of `pipeline`).
+pub(super) struct Keyboard<D = Device> {
+    pub(super) path: PathBuf,
+    pub(super) dev: D,
+    /// What is held on it, from its own stream, seeded at open from `EVIOCGKEY`.
+    pub(super) held: HeldSet,
+    grabbed: bool,
+    /// Its grab was refused — another program holds it (a key remapper) — since it
+    /// was last let go: not asked again every cycle.
+    refused: bool,
+}
+
+impl Keyboard<Device> {
+    /// An opened keyboard, with what is held on it right now: a key that is down when
+    /// it is opened has its release still to come, and that release decides when it
+    /// may be grabbed.
+    pub(super) fn open(path: PathBuf, dev: Device) -> Keyboard {
+        let mut held = HeldSet::default();
+        if let Ok(keys) = dev.get_key_state() {
+            for key in keys.iter() {
+                held.insert(key.0);
+            }
+        }
+        Keyboard::new(path, dev, held)
+    }
+}
+
+impl<D: Exclusive> Keyboard<D> {
+    pub(super) fn new(path: PathBuf, dev: D, held: HeldSet) -> Keyboard<D> {
+        Keyboard {
+            path,
+            dev,
+            held,
+            grabbed: false,
+            refused: false,
+        }
+    }
+
+    pub(super) fn grabbed(&self) -> bool {
+        self.grabbed
+    }
+
+    /// Grabs it if nothing is held on it: a key down now went to the compositor, and
+    /// its release has to go there too.
+    pub(super) fn grab_if_idle(&mut self) {
+        if self.grabbed || self.refused || !self.held.is_empty() {
+            return;
+        }
+        match self.dev.grab() {
+            Ok(()) => self.grabbed = true,
+            Err(error) => {
+                self.refused = true;
+                eprintln!(
+                    "[LittleBigMouse.Hook] evdev: cannot grab keyboard {:?}: {error}",
+                    self.path
+                );
+            }
+        }
+    }
+
+    /// Lets it go back to the compositor.
+    pub(super) fn release(&mut self) {
+        if self.grabbed {
+            let _ = self.dev.ungrab();
+            self.grabbed = false;
+        }
+        self.refused = false;
+    }
 }
 
 impl Grabbable for Device {
@@ -379,6 +471,80 @@ mod tests {
         }
         assert!(!slot_is_dead(libc::POLLIN));
         assert!(!slot_is_dead(0));
+    }
+
+    /// A keyboard that counts its grabs, and refuses them when told to.
+    #[derive(Default)]
+    struct Exclusivity {
+        grabs: usize,
+        ungrabs: usize,
+        busy: bool,
+    }
+
+    impl Exclusive for Exclusivity {
+        fn grab(&mut self) -> std::io::Result<()> {
+            if self.busy {
+                return Err(std::io::Error::from_raw_os_error(libc::EBUSY));
+            }
+            self.grabs += 1;
+            Ok(())
+        }
+
+        fn ungrab(&mut self) -> std::io::Result<()> {
+            self.ungrabs += 1;
+            Ok(())
+        }
+    }
+
+    fn keyboard(held: &[u16]) -> Keyboard<Exclusivity> {
+        let mut set = HeldSet::default();
+        for &code in held {
+            set.insert(code);
+        }
+        Keyboard::new(
+            PathBuf::from("/dev/input/event9"),
+            Exclusivity::default(),
+            set,
+        )
+    }
+
+    /// A key down when the pointer leaves went to the compositor: grabbing now would
+    /// take its release away from it, and the key would stay down there for good.
+    #[test]
+    fn a_keyboard_with_a_key_held_is_grabbed_only_once_it_is_let_go() {
+        const KEY_LEFTCTRL: u16 = 29;
+        let mut k = keyboard(&[KEY_LEFTCTRL]);
+        k.grab_if_idle();
+        assert!(!k.grabbed());
+        assert_eq!(k.dev.grabs, 0);
+
+        k.held.track(KEY_LEFTCTRL, 0);
+        k.grab_if_idle();
+        assert!(k.grabbed());
+        k.grab_if_idle();
+        assert_eq!(k.dev.grabs, 1, "grabbed once");
+
+        k.release();
+        assert!(!k.grabbed());
+        assert_eq!(k.dev.ungrabs, 1);
+        k.release();
+        assert_eq!(k.dev.ungrabs, 1, "nothing to let go twice");
+    }
+
+    /// Another program holding the keyboard (a key remapper) is asked once per stay
+    /// on the other machine, not on every cycle.
+    #[test]
+    fn a_refused_grab_is_not_asked_again_until_the_keyboard_is_let_go() {
+        let mut k = keyboard(&[]);
+        k.dev.busy = true;
+        k.grab_if_idle();
+        k.dev.busy = false;
+        k.grab_if_idle();
+        assert!(!k.grabbed());
+
+        k.release();
+        k.grab_if_idle();
+        assert!(k.grabbed());
     }
 
     /// Purging walks the slots from the highest down, so the indices it has not

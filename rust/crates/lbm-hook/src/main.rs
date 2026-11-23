@@ -65,6 +65,7 @@ fn main() {
     let input = match ipc::input::start(
         lbm_ipc::input::input_endpoint_beside(&endpoint),
         remote::platform_injector(shared),
+        shared.outlet.clone(),
     ) {
         Ok(input) => {
             eprintln!("[LittleBigMouse.Hook] input stream on {}", input.endpoint());

@@ -160,6 +160,9 @@ pub struct Agent<W> {
     driven_machine: Option<String>,
     /// The pointer is locked on the machine it is on (`PeersState::pointer_locked`).
     pointer_locked: bool,
+    /// The name of the master that drives this machine now (`PeersState::driven_by`),
+    /// for the state; `None` when none does.
+    driven_by: Option<String>,
     /// The pointer lock's shortcut the hook is to watch for: the one of the settings
     /// while the mode is on, none otherwise.
     pointer_lock: String,
@@ -237,6 +240,7 @@ impl<W: AgentWorld> Agent<W> {
             input_failures: Default::default(),
             has_master: false,
             driven_machine: None,
+            driven_by: None,
             pointer_locked: false,
             pointer_lock: String::new(),
             pointer_lock_sent: None,
@@ -356,6 +360,7 @@ impl<W: AgentWorld> Agent<W> {
             ),
             input_switch_failures: self.input_failures.current(),
             driven_machine: self.driven_machine.clone(),
+            driven_by: self.driven_by.clone(),
             pointer_locked: self.pointer_locked,
             input_sharing: self.input_sharing.clone(),
         }
@@ -1153,17 +1158,20 @@ impl<W: AgentWorld> Agent<W> {
             self.look_for_input_sharing(why);
         }
         self.has_master = has_master;
-        self.driven_machine = state
-            .driven
-            .as_ref()
-            .filter(|_| state.enabled)
-            .map(|driven| {
-                state
-                    .peers
-                    .iter()
-                    .find(|p| &p.peer.machine_id == driven)
-                    .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
-            });
+        let named = |machine_id: &Option<String>| {
+            machine_id
+                .as_ref()
+                .filter(|_| state.enabled)
+                .map(|machine_id| {
+                    state
+                        .peers
+                        .iter()
+                        .find(|p| &p.peer.machine_id == machine_id)
+                        .map_or_else(|| machine_id.clone(), |p| p.peer.name.clone())
+                })
+        };
+        self.driven_machine = named(&state.driven);
+        self.driven_by = named(&state.driven_by);
         self.pointer_locked = state.enabled && state.pointer_locked;
         self.pointer_lock = if state.enabled {
             state.pointer_lock_shortcut.clone()

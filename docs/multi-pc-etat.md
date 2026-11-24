@@ -39,7 +39,8 @@ qui va le pointeur quand il y entre.
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
-| Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
+| Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines ; côté esclave et icône du tray : voir la ligne suivante) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
+| Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
 | Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running » |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
@@ -85,6 +86,10 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
   provoqués sur les machines ;
+- l'indicateur côté esclave et l'icône du tray marquée (estompée / pastille) : ni la
+  pastille dans le tray Plasma ni l'icône redessinée dans la zone de notification
+  Windows n'ont été vues à l'écran ; le calcul des pixels et le changement d'icône sont
+  couverts par des tests ;
 - les trois fonctions de la PR #813 : l'indicateur, l'alignement des verrous (`GetKeyState`
   depuis le fil de l'injecteur Windows peut retarder sur l'état système ; un esclave
   Linux dont le hook a capturé les claviers lit des LED que le compositeur ne peut plus
@@ -100,6 +105,11 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
+- Deux maîtres liés au même esclave partagent sa connexion unique au hook (une session
+  par connexion). Quand le flux de l'un se termine, la connexion est fermée pour que le
+  hook relâche ce qu'il tenait : la session de l'autre, s'il pilotait, se termine aussi.
+  Il en est averti (`InputReset`, son pointeur rentre) et `DrivenBy` s'efface (revue de
+  la #816).
 - Le premier lien avec un esclave qui apporte des écrans inconnus crée un profil
   **désactivé** : le moteur s'arrête jusqu'à ce que l'utilisateur l'active.
 - Esclave Linux : si son propre backend evdev route, une souris locale reprend d'où ce
@@ -349,8 +359,11 @@ essayés sur matériel ; les autres ne sont pas commencés. Dans l'ordre d'utili
 2. **Raccourcis pour sauter d'une machine à l'autre** sans viser un bord, avec retour à
    la dernière position. Utile quand les écrans ne sont pas côte à côte.
 3. **Synchroniser les verrous** (Verr. Maj, Verr. Num) à l'entrée sur l'esclave *(livré, PR #813)*.
-4. **Indicateur de machine pilotée** *(livré, PR #813)* dans le tray et dans l'état de l'agent :
-   aujourd'hui seul le curseur dit où va le clavier.
+4. **Indicateur de machine pilotée** *(livré, PR #813, complété ensuite)* dans le tray et
+   dans l'état de l'agent. L'essai réel du 2026-11-24 a montré deux trous, comblés
+   depuis : l'esclave n'affichait rien (seul le maître savait), et l'infobulle du tray
+   ne se lit qu'en survolant l'icône, donc le pointeur sur le maître — jamais quand il
+   est ailleurs. D'où l'état « piloté par » de l'esclave et l'icône marquée.
 5. **Réveil de l'esclave** : Wake-on-LAN à l'approche du bord, et pas de mise en veille
    de l'écran de l'esclave pendant qu'on le pilote. Le WoL existe déjà dans le dépôt
    pour les téléviseurs.

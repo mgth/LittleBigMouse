@@ -13,6 +13,7 @@ pub mod blocking;
 pub mod coordinates;
 pub mod keymap;
 pub mod parking;
+pub mod stream;
 
 #[cfg(target_os = "linux")]
 mod linux;

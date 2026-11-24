@@ -303,6 +303,33 @@ pub async fn read_batch<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Vec<
     Ok(bytes)
 }
 
+/// [`read_batch`] for a blocking reader — the inherited pipe `lbm-inject` reads.
+/// `None` when the stream ends cleanly between two batches; an end inside one is an
+/// error, like a length over [`MAX_BATCH_SIZE`].
+pub fn read_batch_blocking<R: std::io::Read>(reader: &mut R) -> io::Result<Option<Vec<u8>>> {
+    let mut length = [0u8; 4];
+    let mut filled = 0;
+    while filled < length.len() {
+        match reader.read(&mut length[filled..]) {
+            Ok(0) if filled == 0 => return Ok(None),
+            Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+            Ok(read) => filled += read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    let length = u32::from_le_bytes(length) as usize;
+    if length > MAX_BATCH_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "input batch exceeds 64 KiB",
+        ));
+    }
+    let mut bytes = vec![0u8; length];
+    reader.read_exact(&mut bytes)?;
+    Ok(Some(bytes))
+}
+
 /// Writes one batch, prefix and payload in a single write.
 pub async fn write_batch<W: AsyncWrite + Unpin>(writer: &mut W, batch: &[u8]) -> io::Result<()> {
     if batch.len() > MAX_BATCH_SIZE {
@@ -321,6 +348,45 @@ pub async fn write_batch<W: AsyncWrite + Unpin>(writer: &mut W, batch: &[u8]) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn framed(batches: &[&[u8]]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for batch in batches {
+            bytes.extend_from_slice(&(batch.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(batch);
+        }
+        bytes
+    }
+
+    #[test]
+    fn a_blocking_read_gives_each_batch_then_none_at_a_clean_end() {
+        let bytes = framed(&[&[1, 2, 3], &[], &[4]]);
+        let mut reader = &bytes[..];
+        assert_eq!(
+            read_batch_blocking(&mut reader).unwrap(),
+            Some(vec![1, 2, 3])
+        );
+        assert_eq!(read_batch_blocking(&mut reader).unwrap(), Some(vec![]));
+        assert_eq!(read_batch_blocking(&mut reader).unwrap(), Some(vec![4]));
+        assert_eq!(read_batch_blocking(&mut reader).unwrap(), None);
+    }
+
+    #[test]
+    fn a_blocking_read_cut_inside_a_batch_is_an_error() {
+        let bytes = framed(&[&[1, 2, 3]]);
+        for cut in 1..bytes.len() {
+            let mut reader = &bytes[..cut];
+            assert!(read_batch_blocking(&mut reader).is_err(), "cut at {cut}");
+        }
+    }
+
+    #[test]
+    fn a_blocking_read_refuses_a_batch_over_the_bound_before_reading_it() {
+        let bytes = ((MAX_BATCH_SIZE + 1) as u32).to_le_bytes();
+        let mut reader = &bytes[..];
+        let error = read_batch_blocking(&mut reader).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
 
     const LOCKED: Locks = Locks {
         caps: Some(true),

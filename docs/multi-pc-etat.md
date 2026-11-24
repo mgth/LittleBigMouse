@@ -1,6 +1,6 @@
 # Mode multi-PC : état du travail et reste à faire
 
-État au 2026-11-24, branche `v6` (`cf2bc5c7`), après la fusion des PR #800 (le mode)
+État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `ca754824`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
 Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
@@ -34,7 +34,7 @@ qui va le pointeur quand il y entre.
 | Flux d'entrée | `lbm-ipc/src/input.rs` | Trames binaires `Enter/Leave/Motion/Button/Wheel/Key`, codes evdev, positions absolues en pixels du receveur |
 | Modèle | `lbm-layout`, `lbm-display`, `lbm-store`, `lbm-zones` | Machine portée par la source, clé de dalle inter-machines, fusion des écrans distants, zones avec hôte |
 | Agent | `lbm-agent/src/peers` | Gestion des pairs, API (`Peers`, `SetMultiPc`, `PeerConnect`…), relais du flux, un esclave « sélectionné » |
-| Hook maître | `lbm-hook/src/hook/linux/evdev` | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
+| Hook maître | `lbm-hook/src/hook/crossing` (règles, toutes plateformes), `lbm-hook/src/hook/linux/evdev` (seul client) | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
 | Hook esclave | `lbm-hook/src/remote` | Injection `SendInput` (Windows) et uinput (Linux), relâchement de tout ce qui est tenu en fin de session, curseur rangé |
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
@@ -66,7 +66,7 @@ rôle du maître (lignes marquées d'une PR : correctifs encore ouverts).
 | Esclave Linux (KWin 6, deux écrans d'échelles 1,66 et 1,25) : pointeur au pixel, clics gauche/droit/milieu, molette verticale et horizontale haute résolution, touches étendues, relâchement au `Leave` (bouton puis touches en ordre inverse) et à la chute du lien (1 ms si le maître meurt, 3 s par keepalive s'il se fige) | Vérifié avec `peer_drive`, après les deux correctifs de la PR #807 |
 | Fonds en direct, esclave Windows : diaporama, `SystemParametersInfo`, `IDesktopWallpaper`, clic dans Paramètres, Spotlight, passage en diaporama | Vérifié sur la vm124 : nouvelle vignette chez le maître en 1 à 2 s |
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
-| Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (branche locale, pas encore en PR) |
+| Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811, ouverte) |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
@@ -90,10 +90,6 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   le maître gardait son clavier capturé jusqu'à la traversée suivante. Avec #806, la
   fin de la connexion au hook déclenche un `InputReset` unique si une session était en
   cours. Prouvé par tests, pas provoqué sur les machines.
-- La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
-  hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
-  mauvais. *Corrigé par la PR #809, pas encore fusionnée* (identifiant facultatif dans
-  `Load`, renvoyé par `Loaded`/`LoadFailed`).
 - Fonds en mode « Span » sous Linux à une échelle différente de 1 : mal positionnés, y
   compris dans l'aperçu local.
 - Un échec de commutation d'entrée, ou un lien refusé, n'est visible que dans le
@@ -167,9 +163,12 @@ Windows actuel ne connaît pas les zones distantes.
   quelques raccourcis système ne peuvent pas être capturés.
 - **Curseur masqué** : la fenêtre d'un pixel de l'esclave Windows (`remote/windows/hider.rs`)
   est probablement réutilisable telle quelle.
-- **Automate de traversée** : aujourd'hui dans `hook/linux/evdev/pipeline.rs` (côté,
-  touches tenues, secours, retour maison). Le sortir du module evdev pour que les deux
-  systèmes partagent les mêmes règles et les mêmes tests, plutôt que le réécrire.
+- **Automate de traversée** : fait (PR #810). Les règles vivent dans `hook::crossing`.
+  Un maître Windows implémente le trait `Platform` (flux, claviers, curseur, pointeur)
+  et appelle `locate` après chaque mouvement routé. Points ouverts pour lui : pas de
+  capture par périphérique, donc avaler les touches dans le hook clavier bas niveau
+  sauf les relâchements de touches déjà enfoncées à l'`Enter` ; un « frame » de hook
+  bas niveau est un seul événement, laissé passer ou avalé.
 - **Identité des moniteurs** : nommer un écran distant par sa clé de dalle ne suffit pas
   sous Windows, dont les ids locaux ont une autre forme. Sans cela, un KVM crée un
   nouveau profil à chaque bascule.
@@ -187,7 +186,7 @@ Windows actuel ne connaît pas les zones distantes.
   non élevé, rien ne passe, pas même le mouvement ; depuis un agent élevé, tout passe.
   Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
   l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de
-  `--config-dir` (branche locale). Un utilisateur standard reste sans solution hors
+  `--config-dir` (PR #811). Un utilisateur standard reste sans solution hors
   service Windows.
 - **Bureau sécurisé** (UAC, écran de verrouillage, Ctrl+Alt+Suppr) : hors d'atteinte
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
@@ -226,7 +225,7 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
 - **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
   viendrait après.
-- **Pare-feu Windows** : fait sur une branche locale, pas encore en PR. L'installeur
+- **Pare-feu Windows** : PR #811, ouverte. L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
   `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
   d'un nouveau réseau sous Windows 11 : une règle « Privé » y resterait inactive ; à
@@ -241,7 +240,7 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 - **Tests de bout en bout** avec les vrais binaires sur deux machines : aujourd'hui les
   tests d'intégration tournent en boucle locale avec un faux hook, et la revue a montré
   deux fois que cette doublure masquait un défaut.
-- ~~Les deux faiblesses de protocole listées plus haut~~ : PR #806 et #809.
+- ~~Les deux faiblesses de protocole~~ : corrélation `Loaded` réglée (PR #809 : identifiant facultatif dans `Load`, renvoyé par `Loaded`/`LoadFailed`) ; `InputReset` en PR #806.
 
 ## Presse-papiers partagé
 
@@ -386,7 +385,7 @@ macOS n'a de sens qu'après.
 ## Ordre proposé
 
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
-2. Sortir l'automate de traversée du module evdev.
+2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
 3. Maître Windows.
 4. `InputReset` quand le hook de l'esclave tombe, corrélation `Loaded`, retour d'erreur
    vers l'interface, règle de pare-feu dans l'installeur.
@@ -407,10 +406,8 @@ les sections ci-dessus en tiennent compte.
 | `InputReset` quand le hook de l'esclave tombe | PR #806 | Ouverte |
 | Esclave Linux : pointeur injecté moteur arrêté, premiers événements gardés | PR #807 | Ouverte ; essayé sur matériel |
 | Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | PR #808 | Ouverte ; UI vue seulement par kittest |
-| Corrélation `Load`/`Loaded` par identifiant | PR #809 | Ouverte ; build Windows non vérifié |
-| Automate de traversée sorti du module evdev (`hook::crossing`, trait `Platform`) | PR #810 | Ouverte ; refactoring pur |
-| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil côté protocole, agent et esclave | `claude/multi-pc-small-features-v6-98ec02`, 2 commits locaux | Pas poussé. L'émission des verrous par le maître et le verrouillage du pointeur attendent la fusion de #810 |
-| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | `claude/multi-pc-windows-vm124-v6-8f4948`, 3 commits locaux | Pas poussé ; vérifié sur la vm124 |
+| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil côté protocole, agent et esclave | `claude/multi-pc-small-features-v6-98ec02`, pas poussée | Reprise sur v6 depuis la fusion de #810 : émission des verrous par le maître et verrouillage du pointeur en cours |
+| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | PR #811 | Ouverte, revue traitée ; vérifié sur la vm124 ; la configuration SignPath (signature de `lbm-agent.exe`) reste à mettre à jour à la main |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

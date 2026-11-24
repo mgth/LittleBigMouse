@@ -406,7 +406,7 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte, revue en cours (un P2 reste : une touche du secours tenue pendant qu'on change le secours est relâchée sous l'identité de la nouvelle touche, qui reste enfoncée chez l'esclave). CI verte sur d953c979. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
+| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte, revue en cours : le dernier P2 (touche du secours tenue pendant qu'on change le secours) est corrigé par 5af944bc, en attente de revue. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

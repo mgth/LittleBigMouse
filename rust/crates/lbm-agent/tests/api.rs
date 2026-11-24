@@ -3284,3 +3284,81 @@ fn a_panel_switched_to_a_machine_not_showing_it_yet_keeps_the_choice_until_it_do
     assert!(!world.switch_failed(SHARED_DELL, &dell_there));
     assert_eq!(shown(&world), dell_there);
 }
+
+/// The pointer lock: the hook is told its shortcut only while the mode is on, and the
+/// state says when the hook locked the pointer, until the hook goes down.
+#[tokio::test]
+async fn the_hook_watches_for_the_pointer_lock_only_while_the_mode_is_on() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let config = dir.path().join("config");
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let peers = lbm_agent::peers::Service::new(
+        config.clone(),
+        lbm_agent::peers::Setup {
+            bind: "127.0.0.1".parse().unwrap(),
+            input_endpoint: None,
+            options: lbm_net::link::Options::default(),
+        },
+    );
+    tokio::spawn(async move {
+        let world = Screens {
+            state: Enabled(None),
+            rebuilds: 0,
+        };
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_peers(peers);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+    let told = |want: &'static str| {
+        let fake = &fake;
+        async move {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while fake.pointer_lock() != want {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap_or_else(|_| {
+                panic!("the hook was told {want:?}, not {:?}", fake.pointer_lock())
+            });
+        }
+    };
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    frontend.ask(json!({ "Method": "Subscribe" })).await;
+    frontend.state(|s| s["HookConnected"] == true).await;
+
+    // Set while the mode is off: kept, and nothing is watched for.
+    let off = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": false,
+                     "PointerLockShortcut": "Ctrl+Alt+L" }))
+        .await["Result"]
+        .clone();
+    assert_eq!(off["PointerLockShortcut"], "Ctrl+Alt+L");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(fake.pointer_lock(), "");
+
+    let on = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0 }))
+        .await["Result"]
+        .clone();
+    assert_eq!(on["PointerLocked"], false);
+    told("Ctrl+Alt+L").await;
+
+    fake.broadcast(&Event::PointerLocked { locked: true });
+    frontend.state(|s| s["PointerLocked"] == true).await;
+    // The hook's routing goes down, and its lock with it.
+    fake.broadcast(&Event::Stopped);
+    frontend.state(|s| s["PointerLocked"] == false).await;
+
+    frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": false }))
+        .await;
+    told("").await;
+}

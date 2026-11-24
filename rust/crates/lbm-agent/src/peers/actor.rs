@@ -8,7 +8,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use lbm_ipc::input::InputEvent;
+use lbm_ipc::input::{InputEvent, LOCKS_CAPABILITY};
 use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
@@ -20,7 +20,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
-use super::hook_input::{HookInput, Sink};
+use super::hook_input::{HookInput, Sink, Target};
 use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
 
 /// The first wait before calling a remote back, doubled at every failure up to
@@ -68,6 +68,12 @@ pub(super) enum Command {
     },
     /// What the hook's zones are fit for (`Service::hook_ready`).
     HookReady(Option<u64>),
+    /// The pointer lock's shortcut changed; empty when there is none.
+    PointerLockShortcut(String),
+    /// The hook locked the pointer, or let it go (`Service::hook_locked`).
+    PointerLocked(bool),
+    /// Whether this machine's hook reads the lock keys' state (`Service::hook_reads_locks`).
+    HookReadsLocks(bool),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -127,6 +133,8 @@ pub(super) struct Start {
     pub bind: IpAddr,
     pub options: link::Options,
     pub input_endpoint: Option<String>,
+    pub hook_reads_locks: bool,
+    pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
 }
@@ -192,6 +200,10 @@ struct Actor {
     /// The remote the hook's stream is relayed to now: the selected one, once the hook's
     /// zones lead nowhere else (see [`Actor::retarget`]).
     relaying: Option<(String, u64)>,
+    /// What the state says of the pointer lock ([`PeersState::pointer_lock_shortcut`],
+    /// [`PeersState::pointer_locked`]).
+    pointer_lock_shortcut: String,
+    pointer_locked: bool,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
@@ -199,6 +211,13 @@ struct Actor {
     next_serial: u64,
     /// Connections being made or accepted, and timers (see [`Actor::spawn`]).
     tasks: JoinSet<()>,
+}
+
+/// What this node can do beyond the protocol's baseline: its hook reads the master's
+/// lock keys (the hook ships with this agent, which retires one of another protocol).
+fn with_capabilities(mut hello: Hello) -> Hello {
+    hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
+    hello
 }
 
 /// Runs the manager until it is told to stop or the agent drops its end. `started` is
@@ -210,7 +229,11 @@ pub(super) async fn run(
     started: oneshot::Sender<()>,
 ) {
     let (internal, mut internal_rx) = mpsc::unbounded_channel();
-    let hello = Hello::new(start.name.clone(), env!("CARGO_PKG_VERSION"), Role::Remote);
+    let hello = with_capabilities(Hello::new(
+        start.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+        Role::Remote,
+    ));
     // Every node with the mode on listens; whoever connects is a master, so this side
     // of those links says it is the remote.
     let mut listener = match link::listen(
@@ -255,11 +278,17 @@ pub(super) async fn run(
         wallpapers: Vec::new(),
         wallpaper_revision: 0,
         wallpaper_stamp: 0,
-        hook: HookInput::spawn(start.input_endpoint),
+        hook: {
+            let hook = HookInput::spawn(start.input_endpoint);
+            hook.set_reads_locks(start.hook_reads_locks);
+            hook
+        },
         selected: None,
         selection: SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1,
         hook_ready: None,
         relaying: None,
+        pointer_lock_shortcut: start.pointer_lock_shortcut,
+        pointer_locked: false,
         internal,
         notices: start.notices,
         published: None,
@@ -276,6 +305,8 @@ pub(super) async fn run(
     }
     let _ = started.send(());
     actor.call_remotes_back();
+    // The pointer going to the remote and coming back: only the state changes.
+    let mut driving = actor.hook.driving();
 
     loop {
         actor.publish();
@@ -306,13 +337,18 @@ pub(super) async fn run(
                 None => listener = None,
             },
             Some(internal) = internal_rx.recv() => actor.internal(internal),
+            Ok(()) = driving.changed() => {}
         }
     }
 }
 
 impl Actor {
     fn hello(&self) -> Hello {
-        Hello::new(self.name.clone(), env!("CARGO_PKG_VERSION"), Role::Master)
+        with_capabilities(Hello::new(
+            self.name.clone(),
+            env!("CARGO_PKG_VERSION"),
+            Role::Master,
+        ))
     }
 
     /// Tells the agent when what it would show changed.
@@ -386,6 +422,13 @@ impl Actor {
                 .as_ref()
                 .map(|(machine_id, _)| machine_id.clone()),
             selection: self.selection,
+            driven: self
+                .relaying
+                .as_ref()
+                .filter(|_| self.hook.driven())
+                .map(|(machine_id, _)| machine_id.clone()),
+            pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
+            pointer_locked: self.pointer_locked,
             peers,
         }
     }
@@ -420,6 +463,9 @@ impl Actor {
             Command::Wallpapers { machine_id, reply } => {
                 let _ = reply.send(self.remote_wallpapers(&machine_id));
             }
+            Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
+            Command::PointerLocked(locked) => self.pointer_locked = locked,
+            Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
                 self.retarget();
@@ -1009,7 +1055,15 @@ impl Actor {
         let sender = next
             .as_ref()
             .and_then(|(machine_id, _)| self.links.get(machine_id))
-            .map(|live| live.sender.clone());
+            .map(|live| Target {
+                link: live.sender.clone(),
+                reads_locks: live
+                    .info
+                    .hello
+                    .capabilities
+                    .iter()
+                    .any(|c| c == LOCKS_CAPABILITY),
+            });
         self.relaying = next;
         self.hook.set_target(sender);
     }

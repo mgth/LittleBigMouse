@@ -25,6 +25,11 @@ pub struct Settings {
     /// so that renaming the machine renames it here too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The shortcut that locks the pointer on the machine it is on, and unlocks it
+    /// (`lbm_hook::hook::crossing`, "The pointer lock"). Absent: none, and nothing
+    /// watches for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pointer_lock_shortcut: Option<String>,
 }
 
 fn default_port() -> u16 {
@@ -37,6 +42,7 @@ impl Default for Settings {
             enabled: false,
             port: default_port(),
             name: None,
+            pointer_lock_shortcut: None,
         }
     }
 }
@@ -125,12 +131,18 @@ mod tests {
             enabled: true,
             port: 30000,
             name: Some("desk".into()),
+            pointer_lock_shortcut: Some("Ctrl+Alt+L".into()),
         };
         settings.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), settings);
         assert_eq!(settings.effective_name(), "desk");
         let text = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
-        for key in ["\"Enabled\": true", "\"Port\": 30000", "\"Name\": \"desk\""] {
+        for key in [
+            "\"Enabled\": true",
+            "\"Port\": 30000",
+            "\"Name\": \"desk\"",
+            "\"PointerLockShortcut\": \"Ctrl+Alt+L\"",
+        ] {
             assert!(text.contains(key), "{key} in {text}");
         }
         let names: Vec<_> = std::fs::read_dir(dir.path())

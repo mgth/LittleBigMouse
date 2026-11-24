@@ -24,6 +24,7 @@ use crate::hook::crossing::Press;
 use crate::hook::linux::accel::{AccelConfig, PointerAccel};
 use crate::ipc::input::Driver;
 use crate::shared::Shared;
+use lbm_ipc::input::Locks;
 use lbm_ipc::protocol::Event;
 
 use super::cursor::EvdevCursor;
@@ -33,6 +34,7 @@ use super::devices::{
 };
 use super::frame::Frame;
 use super::hider::CursorHider;
+use super::leds;
 use super::pipeline::{Outputs, Pipeline};
 use super::probe::{
     device_bounds_blocking, first_zone_center, kwin_cursor_pos, layout_bounds_blocking,
@@ -212,6 +214,15 @@ impl Outputs for Outs<'_> {
 
     fn send_remote(&mut self, batch: Vec<u8>) -> bool {
         self.link.send(batch)
+    }
+
+    /// The LEDs of the keyboards already open: one ioctl each, at a crossing only.
+    fn locks(&self) -> Locks {
+        leds::locks_of(
+            self.keyboards
+                .iter()
+                .filter_map(|keyboard| leds::leds_of(&keyboard.dev)),
+        )
     }
 
     fn grab_keyboards(&mut self) {

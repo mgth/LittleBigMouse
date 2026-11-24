@@ -22,6 +22,7 @@ const KEY_M: u16 = 50;
 const KEY_LEFTCTRL: u16 = 29;
 const KEY_LEFTALT: u16 = 56;
 const KEY_LEFTSHIFT: u16 = 42;
+const KEY_L: u16 = 38;
 
 fn point((x, y): (i32, i32)) -> Point<i32> {
     Point::new(x, y)
@@ -51,6 +52,8 @@ struct Recording {
     shows: usize,
     /// What hides the cursor is in place, under this spot.
     spot: Option<Point<i32>>,
+    /// This machine's lock keys.
+    locks: Locks,
 }
 
 impl Platform for Recording {
@@ -65,6 +68,10 @@ impl Platform for Recording {
         self.sent
             .extend(decode(&batch).expect("a batch that decodes"));
         true
+    }
+
+    fn locks(&self) -> Locks {
+        self.locks
     }
 
     fn grab_keyboards(&mut self) {
@@ -166,6 +173,7 @@ impl Rig {
                 hides: Vec::new(),
                 shows: 0,
                 spot: None,
+                locks: Locks::default(),
             },
         }
     }
@@ -222,8 +230,29 @@ impl Rig {
     fn type_key(&mut self, code: u16, press: Press) {
         if self.m.grabbed {
             self.crossing.grabbed_key(code, press, Instant::now());
+        } else {
+            self.crossing.observed_key(code, press);
         }
         self.crossing.flush_keys(self.shared, &mut self.m);
+    }
+
+    /// The agent sets the pointer lock's shortcut; it is read at the next cycle.
+    fn set_lock_shortcut(&mut self, text: &str) {
+        *self.shared.pointer_lock_shortcut.lock().unwrap() = text.to_owned();
+        self.shared
+            .shortcuts_revision
+            .fetch_add(1, Ordering::SeqCst);
+        self.cycle(None, &[]);
+    }
+
+    /// Ctrl+Alt+L, pressed and released.
+    fn press_lock(&mut self) {
+        self.type_key(KEY_LEFTCTRL, Press::Down);
+        self.type_key(KEY_LEFTALT, Press::Down);
+        self.type_key(KEY_L, Press::Down);
+        self.type_key(KEY_L, Press::Up);
+        self.type_key(KEY_LEFTALT, Press::Up);
+        self.type_key(KEY_LEFTCTRL, Press::Up);
     }
 
     /// Where the last frame of this machine's pointer put it.
@@ -445,4 +474,246 @@ fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_hom
     // Home is where it left, not where it hid.
     rig.crossing.shut_down(&mut rig.m);
     assert_eq!(rig.local_cursor(), START);
+}
+
+#[test]
+fn the_lock_keys_of_here_follow_the_enter_and_nothing_is_said_of_those_unknown() {
+    let mut rig = Rig::new(true);
+    rig.m.locks = Locks {
+        caps: Some(true),
+        num: Some(false),
+        scroll: None,
+    };
+    rig.go_over();
+    assert_eq!(
+        rig.m.sent,
+        [Wire::Enter { x: 0, y: 500 }, Wire::Locks(rig.m.locks),]
+    );
+
+    // A platform that reads none says nothing: the other machine keeps its own.
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    assert_eq!(rig.m.sent, [Wire::Enter { x: 0, y: 500 }]);
+}
+
+#[test]
+fn locked_over_there_the_pointer_stays_there_until_unlocked() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    // Where the routing has the pointer on the other machine.
+    rig.m.here = Point::new(1950, 500);
+    rig.go_over();
+    rig.press_lock();
+    assert!(rig.crossing.is_locked());
+    assert!(
+        !rig.m
+            .sent
+            .iter()
+            .any(|e| matches!(e, Wire::Key { code: KEY_L, .. })),
+        "the shortcut's key stays here: {:?}",
+        rig.m.sent
+    );
+
+    // The engine takes it back here: it is put back where it was over there, and a
+    // click of that report goes over there.
+    rig.m.here = Point::new(1910, 500);
+    rig.m.sent.clear();
+    rig.cycle(Some(Place::Local), &[Input::Button(BTN_LEFT, Press::Down)]);
+    assert!(rig.crossing.is_remote(), "the pointer did not come back");
+    assert_eq!(rig.m.returned.last(), Some(&(1950, 500)));
+    assert_eq!(rig.crossing.resume_at(), Point::new(1950, 500));
+    assert_eq!(
+        rig.m.sent,
+        [Wire::Button {
+            code: BTN_LEFT,
+            pressed: true
+        }]
+    );
+    // Nor does a third machine take it.
+    rig.cycle(Some(Place::Away), &[]);
+    assert!(rig.crossing.is_remote());
+
+    rig.press_lock();
+    assert!(!rig.crossing.is_locked());
+    rig.come_back((1910, 500));
+}
+
+#[test]
+fn locked_here_the_borders_are_walls() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(rig.crossing.is_locked() && rig.crossing.walled_in());
+    rig.go_over_refused();
+    assert!(rig.m.sent.is_empty(), "{:?}", rig.m.sent);
+    assert!(rig.m.hides.is_empty());
+
+    rig.press_lock();
+    assert!(!rig.crossing.walled_in());
+    rig.go_over();
+}
+
+#[test]
+fn without_a_client_or_a_shortcut_nothing_locks() {
+    let mut rig = Rig::new(false);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(!rig.crossing.is_locked(), "nothing to lock it away from");
+
+    let mut rig = Rig::new(true);
+    rig.press_lock();
+    assert!(!rig.crossing.is_locked(), "no shortcut set");
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.set_lock_shortcut("");
+    rig.press_lock();
+    assert!(!rig.crossing.is_locked(), "the shortcut was taken away");
+}
+
+#[test]
+fn the_rescue_the_end_of_the_stream_and_going_away_let_the_lock_go() {
+    // The rescue.
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    rig.press_lock();
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_M, Press::Down);
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(!rig.crossing.is_remote() && !rig.crossing.is_locked());
+
+    // The stream's client going away, over there and here.
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    rig.press_lock();
+    rig.m.connected = false;
+    rig.cycle(None, &[]);
+    assert!(!rig.crossing.is_remote() && !rig.crossing.is_locked());
+
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    rig.m.client = 2;
+    rig.cycle(None, &[]);
+    assert!(!rig.crossing.is_locked(), "a new client never saw the lock");
+
+    // The master going away.
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    rig.press_lock();
+    rig.crossing.shut_down(&mut rig.m);
+    assert!(!rig.crossing.is_remote() && !rig.crossing.is_locked());
+    assert_eq!(rig.m.sent.last(), Some(&Wire::Leave));
+}
+
+#[test]
+fn a_lock_shortcut_that_is_the_rescues_leaves_the_rescue_working_over_there() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut(lbm_ipc::shortcut::DEFAULT);
+    rig.go_over();
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_M, Press::Down);
+    assert!(!rig.crossing.is_locked(), "the rescue's keys lock nothing");
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.crossing.is_remote(),
+        "the rescue brought the pointer home"
+    );
+}
+
+#[test]
+fn taking_the_shortcut_away_lets_a_lock_go() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(rig.crossing.walled_in());
+    rig.set_lock_shortcut("");
+    assert!(
+        !rig.crossing.walled_in(),
+        "nothing could let it go any more"
+    );
+    rig.go_over();
+
+    // Over there too, and for another shortcut.
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(rig.crossing.is_locked());
+    rig.set_lock_shortcut("Ctrl+Alt+K");
+    assert!(!rig.crossing.is_locked());
+    rig.come_back((1910, 500));
+}
+
+#[test]
+fn a_rescue_changed_to_the_lock_shortcut_during_a_crossing_still_brings_the_pointer_home() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    // A layout reload moves the rescue onto the pointer lock's keys, as the daemon
+    // adopts it, while the keyboards are grabbed over there.
+    *rig.shared.rescue_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
+    rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    rig.cycle(None, &[]);
+
+    rig.type_key(KEY_LEFTCTRL, Press::Down);
+    rig.type_key(KEY_LEFTALT, Press::Down);
+    rig.type_key(KEY_L, Press::Down);
+    assert!(!rig.crossing.is_locked(), "the rescue's keys lock nothing");
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.crossing.is_remote(),
+        "the new rescue brought the pointer home"
+    );
+    assert!(
+        !rig.m
+            .sent
+            .iter()
+            .any(|e| matches!(e, Wire::Key { code: KEY_L, .. })),
+        "{:?}",
+        rig.m.sent
+    );
+}
+
+#[test]
+fn a_key_held_while_the_rescue_is_rebound_goes_over_as_itself() {
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    // The old rescue's final key, kept back...
+    rig.type_key(KEY_M, Press::Down);
+    // ...while a reload moves the rescue elsewhere.
+    *rig.shared.rescue_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
+    rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    rig.cycle(None, &[]);
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(rig.crossing.is_remote(), "the old rescue no longer fires");
+    rig.type_key(KEY_M, Press::Up);
+    for code in [KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTCTRL] {
+        rig.type_key(code, Press::Up);
+    }
+
+    let key = |code, pressed| Wire::Key { code, pressed };
+    assert_eq!(
+        rig.m.sent[1..],
+        [
+            key(KEY_LEFTCTRL, true),
+            key(KEY_LEFTALT, true),
+            key(KEY_LEFTSHIFT, true),
+            key(KEY_M, true),
+            key(KEY_M, false),
+            key(KEY_LEFTSHIFT, false),
+            key(KEY_LEFTALT, false),
+            key(KEY_LEFTCTRL, false),
+        ]
+    );
 }

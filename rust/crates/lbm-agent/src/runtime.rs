@@ -44,6 +44,8 @@ fn hook_event(message: Event) -> HookEvent {
         Event::Rescued => HookEvent::Rescued,
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
         Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
+        // The peers' state carries it; the reconciler has nothing to do about it.
+        Event::PointerLocked { .. } => HookEvent::Unknown,
         // The handshake never comes through here: the connection answers it and
         // reports what it learned as `HookSignal::Greeted`. An event this version does
         // not know is one it has nothing to do about.
@@ -153,6 +155,17 @@ pub struct Agent<W> {
     /// Whether a master is linked: only then are the panels this machine alone has
     /// read, to tell it what selects this machine on them.
     has_master: bool,
+    /// The name of the remote that receives the input now (`PeersState::driven`), for
+    /// the state; `None` when this machine does.
+    driven_machine: Option<String>,
+    /// The pointer is locked on the machine it is on (`PeersState::pointer_locked`).
+    pointer_locked: bool,
+    /// The pointer lock's shortcut the hook is to watch for: the one of the settings
+    /// while the mode is on, none otherwise.
+    pointer_lock: String,
+    /// What the hook was last told of it on this connection; `None` is nothing, which
+    /// to a hook is none.
+    pointer_lock_sent: Option<String>,
     /// The selected remote of the last `Peers` state, with that state's number for the
     /// choice (`PeersState::selection`); `None` before any. The zones this agent hands
     /// the hook never lead to another remote ([`Agent::zones_fit`]).
@@ -213,6 +226,10 @@ impl<W: AgentWorld> Agent<W> {
             read_failures: Default::default(),
             input_failures: Default::default(),
             has_master: false,
+            driven_machine: None,
+            pointer_locked: false,
+            pointer_lock: String::new(),
+            pointer_lock_sent: None,
             selection_seen: None,
             hook_zones: crate::hook_zones::HookZones::new(),
             told_hook_ready: None,
@@ -302,6 +319,8 @@ impl<W: AgentWorld> Agent<W> {
                 self.world.rescue_shortcut().as_deref(),
             ),
             input_switch_failures: self.input_failures.current(),
+            driven_machine: self.driven_machine.clone(),
+            pointer_locked: self.pointer_locked,
         }
     }
 
@@ -722,6 +741,7 @@ impl<W: AgentWorld> Agent<W> {
                 enabled,
                 port,
                 name,
+                pointer_lock_shortcut,
             } => {
                 return self.ask_peers(
                     id,
@@ -730,6 +750,7 @@ impl<W: AgentWorld> Agent<W> {
                         enabled,
                         port,
                         name,
+                        pointer_lock_shortcut,
                     },
                 )
             }
@@ -1083,6 +1104,24 @@ impl<W: AgentWorld> Agent<W> {
             });
         let master_linked = has_master && !self.has_master;
         self.has_master = has_master;
+        self.driven_machine = state
+            .driven
+            .as_ref()
+            .filter(|_| state.enabled)
+            .map(|driven| {
+                state
+                    .peers
+                    .iter()
+                    .find(|p| &p.peer.machine_id == driven)
+                    .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
+            });
+        self.pointer_locked = state.enabled && state.pointer_locked;
+        self.pointer_lock = if state.enabled {
+            state.pointer_lock_shortcut.clone()
+        } else {
+            String::new()
+        };
+        self.tell_pointer_lock();
         self.selection_seen = Some((
             state.selection,
             state.selected_remote.clone().filter(|_| state.enabled),
@@ -1394,6 +1433,28 @@ impl<W: AgentWorld> Agent<W> {
         self.bound = Some(bound);
     }
 
+    /// Tells the hook the pointer lock's shortcut, when it is not what it was last told.
+    /// A hook told nothing watches for none, so none is not said to a new one.
+    fn tell_pointer_lock(&mut self) {
+        if !self.hook_connected
+            || self.pointer_lock_sent.as_deref().unwrap_or("") == self.pointer_lock
+        {
+            return;
+        }
+        eprintln!("[lbm-agent] -> PointerLock({:?})", self.pointer_lock);
+        self.hook.send(protocol::frame(&[Command::PointerLock {
+            shortcut: self.pointer_lock.clone(),
+        }]));
+        self.pointer_lock_sent = Some(self.pointer_lock.clone());
+    }
+
+    /// The hook locked the pointer or let it go — or is down, which lets it go.
+    fn hook_locked(&mut self, locked: bool) {
+        if let Some(peers) = &mut self.peers {
+            peers.hook_locked(locked);
+        }
+    }
+
     fn tell_shortcut(&mut self) {
         if !cfg!(windows) {
             return;
@@ -1573,6 +1634,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.shortcut_unavailable = None;
                         self.on_the_wire = None;
                         self.bound = None;
+                        self.pointer_lock_sent = None;
                         self.excluded = None;
                         self.desktop_told = None;
                         self.hook_greeted = false;
@@ -1582,7 +1644,14 @@ impl<W: AgentWorld> Agent<W> {
                         }
                         Input::Hook(HookEvent::Connected)
                     }
-                    Some(HookSignal::Greeted { layout }) => {
+                    Some(HookSignal::Greeted {
+                        layout,
+                        reads_locks,
+                    }) => {
+                        // What a master's input relayed to it may carry.
+                        if let Some(peers) = &mut self.peers {
+                            peers.hook_reads_locks(reads_locks);
+                        }
                         eprintln!(
                             "[lbm-agent] hook greeting: layout {}",
                             if layout.is_empty() { "none" } else { &layout }
@@ -1594,6 +1663,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.tell_excluded();
                         self.hook_greeted = true;
                         self.tell_desktop();
+                        self.tell_pointer_lock();
                         self.hook_greeted_with(&layout);
                         Input::Hook(HookEvent::Greeted(layout))
                     }
@@ -1620,6 +1690,11 @@ impl<W: AgentWorld> Agent<W> {
                                 self.hook_zones.load_failed(*id);
                                 self.tell_peers_the_hook_zones();
                             }
+                            Event::PointerLocked { locked } => self.hook_locked(*locked),
+                            // The hook's routing went down, and its lock with it.
+                            Event::Stopped | Event::Paused | Event::Suspended => {
+                                self.hook_locked(false);
+                            }
                             _ => {}
                         }
                         self.forward(message.name(), &message.payload());
@@ -1633,6 +1708,12 @@ impl<W: AgentWorld> Agent<W> {
                         self.hook_greeted = false;
                         self.shortcut_unavailable = None;
                         self.on_the_wire = None;
+                        self.pointer_lock_sent = None;
+                        self.hook_locked(false);
+                        // The next hook says again what it reads.
+                        if let Some(peers) = &mut self.peers {
+                            peers.hook_reads_locks(false);
+                        }
                         self.hook_zones_unknown();
                         Input::Hook(HookEvent::Dead)
                     }

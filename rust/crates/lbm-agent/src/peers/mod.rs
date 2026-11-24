@@ -183,6 +183,20 @@ pub struct PeersState {
     /// then says nothing about this one. Not in the API.
     #[serde(skip)]
     pub selection: u64,
+    /// The machine id of the remote that receives the input now — the pointer crossed
+    /// to it and has not come back — or `None` when this machine does. Changes as the
+    /// pointer crosses, by the stream's own `Enter` and `Leave`. Absent from the state
+    /// of an older agent, which means "this machine".
+    #[serde(default)]
+    pub driven: Option<String>,
+    /// The shortcut that locks the pointer on the machine it is on; empty when there
+    /// is none. Absent from the state of an older agent.
+    #[serde(default)]
+    pub pointer_lock_shortcut: String,
+    /// The pointer is locked on the machine it is on: [`Self::driven`], or this one.
+    /// Said by the hook; absent from the state of an older agent.
+    #[serde(default)]
+    pub pointer_locked: bool,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -267,6 +281,8 @@ pub enum PeerRequest {
         enabled: bool,
         port: Option<u16>,
         name: Option<String>,
+        /// Replaces the pointer lock's shortcut when given; empty takes it away.
+        pointer_lock_shortcut: Option<String>,
     },
     Connect(String),
     Accept(String),
@@ -342,6 +358,8 @@ pub struct Service {
     displays: Vec<PeerDisplay>,
     notices: mpsc::UnboundedSender<Notice>,
     notices_rx: Option<mpsc::UnboundedReceiver<Notice>>,
+    /// What this machine's hook last said it reads ([`Service::hook_reads_locks`]).
+    hook_reads_locks: bool,
 }
 
 impl Service {
@@ -359,6 +377,7 @@ impl Service {
             displays: Vec::new(),
             notices,
             notices_rx: Some(notices_rx),
+            hook_reads_locks: false,
         };
         if service.settings.enabled {
             service.start(None);
@@ -456,6 +475,22 @@ impl Service {
     /// manager connects only while this names its current selection, or a crossing into
     /// the zone of a remote no longer selected would send its `Enter`, clicks and keys to
     /// the one that is.
+    /// Whether this machine's hook reads the lock keys' state in the input stream: until
+    /// it says it does, the manager strips it from what a master sends to be injected
+    /// here — an older hook would refuse the whole batch, the crossing with it.
+    pub fn hook_reads_locks(&mut self, reads: bool) {
+        self.hook_reads_locks = reads;
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::HookReadsLocks(reads));
+        }
+    }
+
+    pub fn hook_locked(&mut self, locked: bool) {
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::PointerLocked(locked));
+        }
+    }
+
     pub fn hook_ready(&mut self, selection: Option<u64>) {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::HookReady(selection));
@@ -475,7 +510,8 @@ impl Service {
                 enabled,
                 port,
                 name,
-            } => self.set(enabled, port, name),
+                pointer_lock_shortcut,
+            } => self.set(enabled, port, name, pointer_lock_shortcut),
             PeerRequest::State => match &self.running {
                 Some(running) => {
                     let (reply, answer) = oneshot::channel();
@@ -535,8 +571,18 @@ impl Service {
 
     /// `SetMultiPc`: saved, then the manager (re)started or stopped to match. The
     /// answer is the state once that is done.
-    fn set(&mut self, enabled: bool, port: Option<u16>, name: Option<String>) -> Answer {
+    fn set(
+        &mut self,
+        enabled: bool,
+        port: Option<u16>,
+        name: Option<String>,
+        pointer_lock_shortcut: Option<String>,
+    ) -> Answer {
         let mut next = self.settings.clone();
+        if let Some(shortcut) = pointer_lock_shortcut {
+            let shortcut = shortcut.trim().to_owned();
+            next.pointer_lock_shortcut = (!shortcut.is_empty()).then_some(shortcut);
+        }
         next.enabled = enabled;
         if let Some(port) = port {
             next.port = port;
@@ -548,8 +594,19 @@ impl Service {
         if let Err(error) = next.save(&self.directory) {
             return Answer::Now(Err(format!("cannot save the multi-PC settings: {error}")));
         }
-        let unchanged = next == self.settings && (self.running.is_some() || !enabled);
+        // The shortcut alone is no reason to restart the manager and drop its links.
+        let shortcut = next.pointer_lock_shortcut.clone();
+        let same_links = Settings {
+            pointer_lock_shortcut: self.settings.pointer_lock_shortcut.clone(),
+            ..next.clone()
+        } == self.settings;
+        let unchanged = same_links && (self.running.is_some() || !enabled);
         self.settings = next;
+        if let Some(running) = self.running.as_ref().filter(|_| unchanged) {
+            let _ = running
+                .commands
+                .send(Command::PointerLockShortcut(shortcut.unwrap_or_default()));
+        }
         if unchanged {
             return self.request(PeerRequest::State);
         }
@@ -611,6 +668,12 @@ impl Service {
             bind: self.setup.bind,
             options: self.setup.options.clone(),
             input_endpoint: self.setup.input_endpoint.clone(),
+            hook_reads_locks: self.hook_reads_locks,
+            pointer_lock_shortcut: self
+                .settings
+                .pointer_lock_shortcut
+                .clone()
+                .unwrap_or_default(),
             displays: self.displays.clone(),
             notices: self.notices.clone(),
         };
@@ -642,6 +705,13 @@ impl Service {
             error: self.failure.clone(),
             selected_remote: None,
             selection: 0,
+            driven: None,
+            pointer_lock_shortcut: self
+                .settings
+                .pointer_lock_shortcut
+                .clone()
+                .unwrap_or_default(),
+            pointer_locked: false,
             peers: PeerStore::load(&self.directory)
                 .peers()
                 .iter()
@@ -713,6 +783,9 @@ mod tests {
             error: None,
             selected_remote: Some(selected.to_owned()),
             selection: 1,
+            driven: None,
+            pointer_lock_shortcut: String::new(),
+            pointer_locked: false,
             peers,
         }
     }

@@ -50,7 +50,9 @@ pub enum HookSignal {
     /// The hook said who it is, and which layout it holds (empty: none). Always
     /// before the state that follows it: the opening frame asks `Hello` then
     /// `Listen`, and the hook answers a frame's commands in the order they are in it.
-    Greeted { layout: String },
+    /// `reads_locks`: it reads the lock keys' state in the input stream
+    /// (`lbm_ipc::input::LOCKS_CAPABILITY`).
+    Greeted { layout: String, reads_locks: bool },
     /// An event from the hook (unknown ones are dropped, as C# does).
     Message(Event),
     /// The connection dropped; it is being re-established.
@@ -290,7 +292,7 @@ where
                         // only whether it is ours matters, and that is decided here.
                         // The layout it names is not: what to do about a hook already
                         // applying one is the reconciler's to decide.
-                        Some(Event::Hello { protocol: theirs, version, layout }) => {
+                        Some(Event::Hello { protocol: theirs, version, layout, capabilities }) => {
                             greeted = true;
                             if theirs != protocol::PROTOCOL {
                                 eprintln!(
@@ -300,7 +302,10 @@ where
                                 );
                                 break Served::Foreign;
                             }
-                            if signal(HookSignal::Greeted { layout }).is_err() {
+                            let reads_locks = capabilities
+                                .iter()
+                                .any(|c| c == lbm_ipc::input::LOCKS_CAPABILITY);
+                            if signal(HookSignal::Greeted { layout, reads_locks }).is_err() {
                                 break Served::Closed;
                             }
                         }

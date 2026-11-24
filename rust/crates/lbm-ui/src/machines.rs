@@ -38,6 +38,8 @@ pub struct Peer {
     pub displays: usize,
     /// What went wrong with the link, in words, while it stands.
     pub problem: Option<String>,
+    /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
+    pub driven: bool,
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -53,6 +55,10 @@ pub struct State {
     pub listen_address: Option<String>,
     /// Why the mode is not fully working, when it is not.
     pub error: Option<String>,
+    /// The shortcut that locks the pointer on the machine it is on; empty for none.
+    pub pointer_lock_shortcut: String,
+    /// The pointer is locked on the machine it is on.
+    pub pointer_locked: bool,
     pub peers: Vec<Peer>,
 }
 
@@ -63,6 +69,8 @@ pub struct Panel {
     pub address: String,
     /// This machine's name while it is being edited; `None` shows the agent's.
     pub name: Option<String>,
+    /// The pointer lock's shortcut is being recorded.
+    pub recording_lock: bool,
 }
 
 /// What the user asked for.
@@ -72,6 +80,9 @@ pub enum Did {
     Enable(bool),
     /// `SetMultiPc { Enabled, Name }`, the mode left as it is.
     Rename(String),
+    /// `SetMultiPc { Enabled, PointerLockShortcut }`, the mode left as it is; empty
+    /// for none.
+    LockShortcut(String),
     /// `PeerConnect { Address }`.
     Connect(String),
     /// `PeerAccept { MachineId }`.
@@ -119,11 +130,133 @@ fn printed_fingerprint(ui: &mut egui::Ui, whose: &str, machine_id: &str) {
     });
 }
 
-/// The Machines page. `busy` greys the controls while a request is out; `error` is the
-/// last request the agent refused.
+/// Which machine the mouse and keyboard go to, in words: said once a remote is linked,
+/// the only time it can be anything but this machine.
+pub fn input_goes_to(state: &State) -> Option<String> {
+    if !state.enabled {
+        return None;
+    }
+    if let Some(peer) = state.peers.iter().find(|peer| peer.driven) {
+        let name = if peer.name.is_empty() {
+            "an unnamed machine"
+        } else {
+            peer.name.as_str()
+        };
+        return Some(locked(
+            state,
+            format!("The mouse and keyboard are on {name}"),
+        ));
+    }
+    state
+        .peers
+        .iter()
+        .any(|peer| peer.role == Role::Remote && peer.connected && !peer.pending)
+        .then(|| {
+            locked(
+                state,
+                "The mouse and keyboard are on this machine".to_owned(),
+            )
+        })
+}
+
+/// `words`, and that the pointer stays there when it is locked.
+fn locked(state: &State, words: String) -> String {
+    if state.pointer_locked {
+        format!("{words}, locked there until the shortcut is pressed again")
+    } else {
+        words
+    }
+}
+
+/// The pointer lock's shortcut: shown, recorded, taken away. Returns what the user
+/// chose, empty for none.
+fn lock_shortcut(
+    ui: &mut egui::Ui,
+    shortcut: &str,
+    rescue: &str,
+    recording: &mut bool,
+) -> Option<String> {
+    use lbm_ipc::shortcut::Shortcut;
+    let is_rescue =
+        |text: &str| Shortcut::parse(text).is_some_and(|s| Some(s) == Shortcut::parse(rescue));
+    let mut chosen = None;
+    ui.horizontal_wrapped(|ui| {
+        let label = if *recording {
+            "Press a combination…"
+        } else if shortcut.is_empty() {
+            "None"
+        } else {
+            shortcut
+        };
+        let button = ui
+            .add(egui::Button::selectable(*recording, label))
+            .on_hover_text("Click, then press the combination; Escape leaves it as it is.");
+        button.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                ui.is_enabled(),
+                format!("Pointer lock shortcut: {label}"),
+            )
+        });
+        if button.clicked() {
+            *recording = !*recording;
+        }
+        ui.label("Pointer lock shortcut");
+        if !shortcut.is_empty() && ui.button("No shortcut").clicked() {
+            *recording = false;
+            chosen = Some(String::new());
+        }
+    });
+    if *recording {
+        let pressed = ui.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => Some((*modifiers, *key)),
+                _ => None,
+            })
+        });
+        if let Some((modifiers, key)) = pressed {
+            if key == egui::Key::Escape && modifiers.is_none() {
+                *recording = false;
+            } else {
+                // A bare key on the way to the combination is not the answer.
+                let spelled = crate::shortcut::spell(modifiers, key);
+                if Shortcut::parse(&spelled).is_some() && !is_rescue(&spelled) {
+                    *recording = false;
+                    chosen = Some(spelled);
+                }
+            }
+        }
+    }
+    if *recording {
+        crate::options::note(ui, &format!("Any combination but {rescue}, the rescue's."));
+    }
+    if is_rescue(shortcut) {
+        // A configuration saved before: the hook does not watch for it either.
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            "This is the rescue shortcut: it stays the rescue's, and locks nothing.",
+        );
+    }
+    crate::options::note(
+        ui,
+        "Locks the pointer on the machine it is on, and unlocks it. The rescue \
+         shortcut always brings it home.",
+    );
+    chosen
+}
+
+/// The Machines page. `rescue` is the rescue shortcut, which the pointer lock's may not
+/// be; `busy` greys the controls while a request is out; `error` is the last request the
+/// agent refused.
 pub fn panel(
     ui: &mut egui::Ui,
     state: Option<&State>,
+    rescue: &str,
     draft: &mut Panel,
     busy: bool,
     error: Option<&str>,
@@ -185,6 +318,18 @@ pub fn panel(
             }
             if let Some(why) = &state.error {
                 ui.colored_label(ui.visuals().error_fg_color, why);
+            }
+            if let Some(whereabouts) = input_goes_to(state) {
+                ui.label(whereabouts);
+            }
+            ui.separator();
+            if let Some(shortcut) = lock_shortcut(
+                ui,
+                &state.pointer_lock_shortcut,
+                rescue,
+                &mut draft.recording_lock,
+            ) {
+                did = Some(Did::LockShortcut(shortcut));
             }
         });
 
@@ -250,6 +395,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
             ("Disconnected", crate::theme::MUTED)
         };
         crate::theme::status(ui, status, colour);
+        if peer.driven {
+            crate::theme::status(ui, "Has the mouse and keyboard", crate::theme::ACCENT);
+        }
     });
     let role = match (peer.role, peer.pending) {
         (_, true) => "Waiting for you to accept it",
@@ -378,6 +526,55 @@ pub fn on_another_machine(ui: &mut egui::Ui, machine: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_page_says_where_the_mouse_and_keyboard_are() {
+        let laptop = Peer {
+            machine_id: "aa".into(),
+            name: "laptop".into(),
+            address: String::new(),
+            connected: true,
+            role: Role::Remote,
+            pending: false,
+            displays: 1,
+            driven: false,
+            problem: None,
+        };
+        let mut state = State {
+            enabled: true,
+            peers: vec![laptop.clone()],
+            ..State::default()
+        };
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on this machine")
+        );
+        state.peers[0].driven = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on laptop")
+        );
+        state.pointer_locked = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on laptop, locked there until the shortcut is pressed again")
+        );
+        state.peers[0].driven = false;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on this machine, locked there until the shortcut is pressed again")
+        );
+        state.pointer_locked = false;
+        // Nothing to say with no remote linked, or with the mode off.
+        state.peers[0] = Peer {
+            connected: false,
+            ..laptop
+        };
+        assert_eq!(input_goes_to(&state), None);
+        state.enabled = false;
+        state.peers.clear();
+        assert_eq!(input_goes_to(&state), None);
+    }
 
     #[test]
     fn a_fingerprint_reads_in_groups_of_four_eight_to_a_line() {

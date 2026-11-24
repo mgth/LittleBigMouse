@@ -100,6 +100,7 @@ mod cursor;
 mod devices;
 mod frame;
 mod hider;
+pub(crate) mod leds;
 mod pipeline;
 pub(crate) mod probe;
 mod router;

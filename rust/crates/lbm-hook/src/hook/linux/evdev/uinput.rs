@@ -32,7 +32,7 @@ pub(crate) const REMOTE_KEYBOARD_NAME: &str = "LittleBigMouse virtual keyboard (
 /// must never grab its own pointer — it would route its own output — nor read the
 /// remote keyboard for the ctrl-override: that is the master's ctrl, not the ctrl
 /// of this machine's user.
-pub(super) fn is_ours(name: &str) -> bool {
+pub(crate) fn is_ours(name: &str) -> bool {
     name.starts_with(OURS)
 }
 

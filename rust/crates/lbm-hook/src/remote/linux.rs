@@ -27,7 +27,7 @@ use evdev::uinput::VirtualDevice;
 use evdev::{AbsoluteAxisCode, EventType, InputEvent, RelativeAxisCode};
 
 use crate::geometry::Rect;
-use crate::hook::linux::evdev::{probe, uinput};
+use crate::hook::linux::evdev::{leds, probe, uinput};
 use crate::shared::Shared;
 
 use super::coordinates::desktop_relative;
@@ -362,6 +362,19 @@ impl Gate {
     }
 }
 
+/// This machine's lock keys, as the LEDs of its keyboards show them (see
+/// [`leds`]): the state a tap of the virtual keyboard toggles. Read when a master
+/// asks, at a crossing: the devices are listed then, not watched. A lock no keyboard
+/// has a LED for is unknown, and left alone.
+fn keyboard_locks() -> lbm_ipc::input::Locks {
+    leds::locks_of(evdev::enumerate().filter_map(|(_, device)| {
+        if device.name().is_some_and(uinput::is_ours) {
+            return None;
+        }
+        leds::leds_of(&device)
+    }))
+}
+
 /// Two values for one code cannot share a frame — the second would overwrite the
 /// first — so a press and release of the same key, or two positions, are split.
 fn conflicts(frame: &[InputEvent], event: &InputEvent) -> bool {
@@ -386,6 +399,7 @@ fn flush(frame: &mut Vec<InputEvent>, device: Option<&mut VirtualDevice>) {
 
 impl Injector for UinputInjector {
     fn inject(&mut self, batch: &[Injection]) {
+        let batch = &*super::expand_locks(batch, keyboard_locks);
         let pointer = batch.iter().any(|i| !matches!(i, Injection::Key { .. }));
         if pointer {
             self.ensure_pointer();
@@ -485,8 +499,9 @@ impl UinputInjector {
                 Injection::Key { code, pressed } => {
                     self.queue_keyboard(InputEvent::new(EventType::KEY.0, code, pressed as i32));
                 }
-                // Delivered through park/begin (super::deliver), never in a batch.
-                Injection::Park | Injection::Unpark => {}
+                // Turned into keys above (expand_locks), or delivered through
+                // park/begin (super::deliver), never in a batch.
+                Injection::Locks(_) | Injection::Park | Injection::Unpark => {}
             }
         }
         flush(

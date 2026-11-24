@@ -36,6 +36,7 @@ async fn next(signals: &mut HookSignals) -> HookSignal {
 fn greeting_holding_nothing() -> HookSignal {
     HookSignal::Greeted {
         layout: String::new(),
+        reads_locks: false,
     }
 }
 
@@ -232,6 +233,7 @@ async fn a_hook_that_speaks_another_protocol_is_retired_not_talked_to() {
                             protocol: protocol::PROTOCOL + 99,
                             version: "ancient".to_owned(),
                             layout: String::new(),
+                            capabilities: Vec::new(),
                         });
                         let _ = write_frame(&mut writer, &answer).await;
                     }
@@ -337,7 +339,8 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
     assert_eq!(
         next(&mut signals).await,
         HookSignal::Greeted {
-            layout: String::new()
+            layout: String::new(),
+            reads_locks: false,
         }
     );
     assert_eq!(event(&mut signals).await, Event::Stopped);
@@ -360,7 +363,8 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
     assert_eq!(
         next(&mut theirs).await,
         HookSignal::Greeted {
-            layout: protocol::fingerprint(ZONES)
+            layout: protocol::fingerprint(ZONES),
+            reads_locks: false,
         }
     );
 

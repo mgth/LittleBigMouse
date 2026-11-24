@@ -26,6 +26,15 @@
 //! ([`Platform::cursor_hiding_spot`]) and stays there; coming home starts from where it
 //! left, not from there.
 //!
+//! ## The lock keys
+//!
+//! Caps Lock, Num Lock and Scroll Lock are per machine: typing over there with the
+//! state of here would type the wrong case. Right after the `Enter`, the batch says
+//! which of them are on here ([`Platform::locks`]), and the other machine taps its own
+//! into line (`remote::lock_taps`). A lock this machine cannot read is not sent; one
+//! the other machine cannot read is left alone there. A tap while the pointer is over
+//! there is a key like any other, and toggles the lock over there only.
+//!
 //! ## Held keys and buttons
 //!
 //! One rule, in both directions: **a release goes where its press went.** Each side
@@ -69,6 +78,27 @@
 //! home. Its final key is kept back while it is held, so the other machine never sees
 //! it; given up early, it is forwarded late, in order.
 //!
+//! ## The pointer lock
+//!
+//! A shortcut, off unless the user sets one (`Command::PointerLock`), locks the pointer
+//! on the machine it is on, and unlocks it. It is watched for in every key this master
+//! reads ([`keys::ToggleKeys`]), grabbed or not, and fires on the press. Over there,
+//! its final key is never forwarded; here, the desktop sees it too, as it sees any key
+//! of a keyboard that is not grabbed.
+//!
+//! * Locked over there, the pointer does not come back: a report that would take it
+//!   here, or to a third machine, leaves it where it was on the machine it is on, and
+//!   the routing starts again from there ([`Platform::return_pointer`]). What the
+//!   report pressed still goes over there.
+//! * Locked here, the other machines' borders are walls, as without a client.
+//! * The lock never keeps the pointer from coming home: the rescue, the end of a hop
+//!   of the stream and the master going away bring it home and let the lock go, and so
+//!   does the stream's client going away or being replaced while it is locked here.
+//! * Each change is said to the agent (`Event::PointerLocked`), at the end of the step
+//!   that made it.
+//! * The shortcut grammar (`lbm_ipc::shortcut`) has no lock key, so the shortcut never
+//!   toggles a lock key the crossing aligns.
+//!
 //! ## One remote
 //!
 //! Batches carry no destination: the agent relays them to the one remote it drives. A
@@ -80,15 +110,17 @@
 // and it is compiled there all the same, so that it stays platform-neutral.
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use lbm_ipc::input::InputEvent as Wire;
+use lbm_ipc::input::{InputEvent as Wire, Locks};
+use lbm_ipc::protocol::Event;
 
 use crate::geometry::Point;
 use crate::shared::Shared;
 use crate::zones::{HostPoint, ZonesLayout};
 
-use keys::{HeldSet, RescueKeys, Verdict};
+use keys::{HeldSet, RescueKeys, Toggle, ToggleKeys, Verdict};
 
 pub(crate) mod keys;
 #[cfg(test)]
@@ -193,6 +225,13 @@ pub(crate) trait Platform {
 
     // --- the keyboards ---
 
+    /// This machine's lock keys, read as the pointer crosses out: the machine it goes
+    /// to aligns its own on them. A lock the platform cannot read is unknown, and the
+    /// other machine leaves its own alone.
+    fn locks(&self) -> Locks {
+        Locks::default()
+    }
+
     /// Grabs every keyboard that has no key held and is not grabbed yet.
     fn grab_keyboards(&mut self);
     /// Lets every keyboard go.
@@ -214,7 +253,8 @@ pub(crate) trait Platform {
     /// Where the pointer is on this machine, as the platform last committed it.
     fn pointer(&self) -> Point<i32>;
     /// Puts the pointer back at `home`, whatever the routing thought, and has the
-    /// routing start afresh from there before it routes again. Emits nothing.
+    /// routing start afresh from [`Crossing::resume_at`] before it routes again — the
+    /// same point, unless the pointer is locked on another machine. Emits nothing.
     fn return_pointer(&mut self, home: Point<i32>);
     /// Emits the frame's pointer part — its buttons and wheels, if any — with this
     /// machine's pointer at `at`.
@@ -256,6 +296,18 @@ pub(crate) struct Crossing {
     /// Buttons and keys pressed on the other machine and not released there yet.
     remote_held: HeldSet,
     rescue: RescueKeys,
+    /// The pointer stays on the machine it is on.
+    locked: bool,
+    /// Whether the agent was last told it is locked.
+    reported: bool,
+    /// The pointer lock's shortcut was pressed since the keys were last flushed.
+    toggled: bool,
+    toggle: ToggleKeys,
+    /// The revision of the shared shortcut `toggle` was set from.
+    toggle_revision: Option<u32>,
+    /// Where the routing last had the pointer on the machine being driven, in the
+    /// routing's coordinates: where a lock holds it.
+    remote_pos: Point<i32>,
     /// The batch being composed; reused.
     wire: Vec<Wire>,
 }
@@ -272,6 +324,12 @@ impl Crossing {
             client: None,
             remote_held: HeldSet::default(),
             rescue: RescueKeys::default(),
+            locked: false,
+            reported: false,
+            toggled: false,
+            toggle: ToggleKeys::default(),
+            toggle_revision: None,
+            remote_pos: home,
             wire: Vec::with_capacity(16),
         }
     }
@@ -283,6 +341,28 @@ impl Crossing {
     /// The last position the pointer had on this machine.
     pub(crate) fn home(&self) -> Point<i32> {
         self.home
+    }
+
+    /// Where the routing starts afresh after [`Platform::return_pointer`]: home, or,
+    /// while the pointer is locked over there, where it was there.
+    pub(crate) fn resume_at(&self) -> Point<i32> {
+        if self.is_remote() {
+            self.remote_pos
+        } else {
+            self.home
+        }
+    }
+
+    /// Whether the pointer is locked on the machine it is on.
+    #[cfg(test)]
+    pub(crate) fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Whether the other machines' borders are walls because the pointer is locked
+    /// here: the routing is to treat them as it does without a client.
+    pub(crate) fn walled_in(&self) -> bool {
+        self.locked && !self.is_remote()
     }
 
     /// The pointer moved here without being routed — the engine was busy.
@@ -324,7 +404,32 @@ impl Crossing {
             );
             self.go_home(m);
         }
+        if self.locked && client != self.client {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the input stream's client changed, the pointer lock is let go"
+            );
+            self.locked = false;
+        }
+        let revision = shared.shortcuts_revision.load(Ordering::SeqCst);
+        if self.toggle_revision != Some(revision) {
+            // Never waited for: a contended read is tried again next cycle.
+            if let (Ok(text), Ok(rescue)) = (
+                shared.pointer_lock_shortcut.try_lock(),
+                shared.rescue_shortcut.try_lock(),
+            ) {
+                // At once, even with the pointer over there: a rescue changed by a
+                // reload in the middle of a crossing is the one held down now.
+                self.rescue.set(&rescue);
+                let rescue_changed = self.toggle.avoid(&rescue);
+                let changed = self.toggle.set(&text) || rescue_changed;
+                self.toggle_revision = Some(revision);
+                if changed {
+                    self.shortcut_changed();
+                }
+            }
+        }
         self.check_rescue(shared, Instant::now(), m);
+        self.report(shared);
         connected
     }
 
@@ -370,6 +475,17 @@ impl Crossing {
             }
         }
         self.check_rescue(shared, Instant::now(), m);
+        self.report(shared);
+    }
+
+    /// Tells the agent the lock changed, if it did.
+    fn report(&mut self, shared: &Shared) {
+        if self.locked != self.reported {
+            self.reported = self.locked;
+            shared.broadcast(&Event::PointerLocked {
+                locked: self.locked,
+            });
+        }
     }
 
     /// The master is going away — Stop, pause, suspend, the rescue's unhook, quit: the
@@ -389,6 +505,11 @@ impl Crossing {
         m: &mut impl Platform,
     ) {
         match (self.side, place) {
+            (Side::Local, Some(Place::Enter { .. })) if self.locked => {
+                // Locked here: the border is a wall.
+                self.go_home(m);
+                self.local_leftovers(m);
+            }
             (Side::Local, Some(Place::Enter { pixel, host })) => {
                 if !(m.remote_connected() && self.enter(shared, pixel, host, m)) {
                     // Nobody to take it — the client left between the cycle's start
@@ -400,6 +521,13 @@ impl Crossing {
             (Side::Local, _) => self.local_frame(m),
             (Side::Remote, None) => self.remote_frame(None, m),
             (Side::Remote, Some(Place::Remote(pixel))) => self.remote_frame(Some(pixel), m),
+            (Side::Remote, Some(Place::Local | Place::Enter { .. } | Place::Away))
+                if self.locked =>
+            {
+                // Locked over there: it stays where it was there.
+                m.return_pointer(self.remote_pos);
+                self.remote_frame(None, m);
+            }
             (Side::Remote, Some(Place::Local)) => {
                 // The engine brought it back across a border: it landed where it is.
                 self.wire.clear();
@@ -425,6 +553,8 @@ impl Crossing {
                 &mut self.wire,
                 &mut self.remote_held,
                 &mut self.rescue,
+                &mut self.toggle,
+                &mut self.toggled,
                 code,
                 press,
                 now,
@@ -432,8 +562,20 @@ impl Crossing {
         }
     }
 
+    /// One key of a keyboard that is not grabbed: the compositor has it, and only the
+    /// pointer lock's shortcut is looked for in it.
+    pub(crate) fn observed_key(&mut self, code: u16, press: Press) {
+        if self.toggle.filter(code, press) == Toggle::Fired {
+            self.toggled = true;
+        }
+    }
+
     /// Sends the keys [`Self::grabbed_key`] collected from one keyboard's drain.
     pub(crate) fn flush_keys(&mut self, shared: &'static Shared, m: &mut impl Platform) {
+        if std::mem::take(&mut self.toggled) {
+            self.toggle_lock(m);
+            self.report(shared);
+        }
         if self.wire.is_empty() {
             return;
         }
@@ -444,6 +586,40 @@ impl Crossing {
             self.go_home(m);
         }
         self.check_rescue(shared, Instant::now(), m);
+    }
+
+    /// The pointer lock's shortcut is another, or none: a lock it took can no longer be
+    /// let go by it, so it goes now.
+    fn shortcut_changed(&mut self) {
+        if self.locked {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the pointer lock's shortcut changed, the lock is let go"
+            );
+            self.locked = false;
+        }
+    }
+
+    /// The pointer lock's shortcut was pressed: locks the pointer where it is, or lets
+    /// it go. Here, only with a machine to lock it away from.
+    fn toggle_lock(&mut self, m: &mut impl Platform) {
+        if self.locked {
+            self.locked = false;
+        } else if self.is_remote() {
+            self.locked = true;
+        } else if let Some(client) = m.remote_client() {
+            self.locked = true;
+            self.client = Some(client);
+        } else {
+            return;
+        }
+        eprintln!(
+            "[LittleBigMouse.Hook] multi-PC: the pointer is {}",
+            match (self.locked, self.is_remote()) {
+                (false, _) => "no longer locked",
+                (true, true) => "locked over there",
+                (true, false) => "locked here",
+            }
+        );
     }
 
     /// Fires the rescue if its shortcut has been held long enough in the grabbed
@@ -493,17 +669,26 @@ impl Crossing {
         // leaves the shortcut that was last read.
         if let Ok(text) = shared.rescue_shortcut.try_lock() {
             self.rescue.set(&text);
+            // Not locked: the pointer is only now crossing out of here, where a lock
+            // would have walled it in.
+            self.toggle.avoid(&text);
         }
         self.rescue.reset();
         self.side = Side::Remote;
         self.host = host;
         self.client = m.remote_client();
         self.sent = pixel;
+        self.remote_pos = m.pointer();
         self.wire.clear();
         self.wire.push(Wire::Enter {
             x: pixel.x(),
             y: pixel.y(),
         });
+        // Read before the keyboards are grabbed: the compositor still lights them.
+        let locks = m.locks();
+        if locks != Locks::default() {
+            self.wire.push(Wire::Locks(locks));
+        }
         self.take_remote_events(Instant::now(), m);
         if !self.send(m) {
             self.side = Side::Local;
@@ -525,6 +710,9 @@ impl Crossing {
     /// released there, to the other machine; what it released of this one, here.
     fn remote_frame(&mut self, pixel: Option<Point<i32>>, m: &mut impl Platform) {
         self.wire.clear();
+        if pixel.is_some() {
+            self.remote_pos = m.pointer();
+        }
         if let Some(pixel) = pixel.filter(|&p| p != self.sent) {
             self.sent = pixel;
             self.wire.push(Wire::Motion {
@@ -562,11 +750,15 @@ impl Crossing {
             wire,
             remote_held,
             rescue,
+            toggle,
+            toggled,
             ..
         } = self;
         let (horizontal, vertical) = m.take_remote_events(|input| match input {
             Input::Button(code, press) => route_button(wire, remote_held, code, press),
-            Input::Key(code, press) => route_key(wire, remote_held, rescue, code, press, now),
+            Input::Key(code, press) => {
+                route_key(wire, remote_held, rescue, toggle, toggled, code, press, now)
+            }
         });
         if (horizontal, vertical) != (0, 0) {
             wire.push(Wire::Wheel {
@@ -596,6 +788,7 @@ impl Crossing {
         self.remote_held.clear();
         self.rescue.reset();
         self.parked = None;
+        self.locked = false;
         m.show_cursor();
         m.release_keyboards();
         eprintln!("[LittleBigMouse.Hook] multi-PC: the pointer is back");
@@ -628,15 +821,27 @@ fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, press: Pres
 }
 
 /// A key of the grabbed stream while the pointer is away: `true` when it was taken —
-/// into the batch, or kept back as the rescue's final key.
+/// into the batch, kept back as the rescue's final key, or the pointer lock's
+/// (`toggled` then says it fired).
+#[allow(clippy::too_many_arguments)]
 fn route_key(
     wire: &mut Vec<Wire>,
     held: &mut HeldSet,
     rescue: &mut RescueKeys,
+    toggle: &mut ToggleKeys,
+    toggled: &mut bool,
     code: u16,
     press: Press,
     now: Instant,
 ) -> bool {
+    match toggle.filter(code, press) {
+        Toggle::Fired => {
+            *toggled = true;
+            return true;
+        }
+        Toggle::Swallow => return true,
+        Toggle::Pass => {}
+    }
     match rescue.filter(code, press, now) {
         Verdict::Hold => return true,
         Verdict::Release(kept) => {

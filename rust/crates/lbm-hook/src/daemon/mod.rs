@@ -41,6 +41,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
                             .clone(),
+                        capabilities: vec![lbm_ipc::input::LOCKS_CAPABILITY.to_owned()],
                     },
                 );
             }
@@ -117,6 +118,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             Command::BindToAgent { bound } => {
                 shared.bound_to_agent.store(bound, Ordering::SeqCst);
             }
+            Command::PointerLock { shortcut } => adopt_pointer_lock(shared, shortcut),
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);
@@ -152,6 +154,19 @@ pub fn rescue_fired(shared: &'static Shared) {
     shared.paused.store(false, Ordering::SeqCst);
 }
 
+/// Adopt the pointer lock's shortcut; the routing thread picks it up at the next key
+/// it reads (`hook::crossing`).
+fn adopt_pointer_lock(shared: &Shared, wanted: String) {
+    let mut current = shared
+        .pointer_lock_shortcut
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if *current != wanted {
+        *current = wanted;
+        shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
 /// Adopt the panic shortcut a freshly loaded layout names, and tell the listener.
 /// It travels with the layout like every other daemon-side setting, so it arrives
 /// with the startup `LoadFromFile` too.
@@ -170,6 +185,9 @@ fn adopt_rescue_shortcut(shared: &Shared, wanted: &str) {
             false
         } else {
             *current = wanted.to_string();
+            // The routing thread reads it again, for the rescue it watches for in the
+            // grabbed stream and for the pointer lock's that may not be it.
+            shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
             true
         }
     };
@@ -561,6 +579,15 @@ mod tests {
             *shared.rescue_shortcut.lock().unwrap(),
             "Ctrl+Alt+F9",
             "the daemon must adopt what the layout names"
+        );
+        // And the routing thread reads it again, crossing or not.
+        let revision = shared.shortcuts_revision.load(Ordering::SeqCst);
+        assert_ne!(revision, 0);
+        load_layout(&shared, &layout, false);
+        assert_eq!(
+            shared.shortcuts_revision.load(Ordering::SeqCst),
+            revision,
+            "the same shortcut again changes nothing"
         );
     }
 

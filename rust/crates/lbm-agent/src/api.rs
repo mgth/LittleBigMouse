@@ -45,8 +45,10 @@
 //! The multi-PC mode (capability `MultiPc`, additive to version 3; docs/multi-pc.md):
 //!
 //! ```text
-//! -> {"Id": 9, "Method": "SetMultiPc", "Enabled": true, "Port": 24817, "Name": "desk"}
+//! -> {"Id": 9, "Method": "SetMultiPc", "Enabled": true, "Port": 24817, "Name": "desk",
+//!     "PointerLockShortcut": "Ctrl+Alt+L"}                    // each optional but Enabled
 //! <- {"Id": 9, "Result": {"Enabled": true, "Port": 24817, "Name": "desk",
+//!                         "PointerLockShortcut": "Ctrl+Alt+L", "PointerLocked": false,
 //!                         "MachineId": "<sha-256 hex>", "ListenAddress": "0.0.0.0:24817",
 //!                         "Error": null, "Peers": [...]}}
 //! -> {"Id": 10, "Method": "PeerConnect", "Address": "192.168.1.30"}
@@ -280,6 +282,14 @@ pub enum Request {
         port: Option<u16>,
         #[serde(rename = "Name", default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+        /// The shortcut that locks the pointer on the machine it is on; empty takes it
+        /// away. Changing it alone leaves the links up.
+        #[serde(
+            rename = "PointerLockShortcut",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pointer_lock_shortcut: Option<String>,
     },
     /// Connects to a machine as its master (`host`, `host:port`; the default port
     /// otherwise). Answered once it said who it is: the machine, `Pending` until the
@@ -373,6 +383,15 @@ pub struct Snapshot {
     /// a window opened later must still see it. Additive; absent when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub input_switch_failures: Vec<crate::input_switch::Failure>,
+    /// The other machine that receives the mouse and the keyboard now, by the name it
+    /// goes by here (multi-PC mode, this machine its master); `None` when this machine
+    /// does. Follows the pointer across the border. Additive.
+    #[serde(default)]
+    pub driven_machine: Option<String>,
+    /// The pointer is locked on the machine it is on — [`Self::driven_machine`], or
+    /// this one — by the multi-PC pointer lock's shortcut. Additive.
+    #[serde(default)]
+    pub pointer_locked: bool,
 }
 
 /// An answer to request `id`.

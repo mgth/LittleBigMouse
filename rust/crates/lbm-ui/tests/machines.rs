@@ -25,6 +25,8 @@ fn state(peers: Vec<Peer>) -> State {
         machine_id: Some(DESK.into()),
         listen_address: Some("0.0.0.0:24817".into()),
         error: None,
+        pointer_lock_shortcut: String::new(),
+        pointer_locked: false,
         peers,
     }
 }
@@ -39,6 +41,7 @@ fn laptop(pending: bool) -> Peer {
         pending,
         displays: 2,
         problem: None,
+        driven: false,
     }
 }
 
@@ -54,9 +57,14 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
         .build_ui_state(
             |ui, page| {
                 lbm_ui::theme::install(ui.ctx());
-                if let Some(did) =
-                    machines::panel(ui, page.state.as_ref(), &mut page.draft, false, None)
-                {
+                if let Some(did) = machines::panel(
+                    ui,
+                    page.state.as_ref(),
+                    lbm_ipc::shortcut::DEFAULT,
+                    &mut page.draft,
+                    false,
+                    None,
+                ) {
                     page.did = Some(did);
                 }
             },
@@ -442,4 +450,54 @@ fn a_shared_panel_cannot_be_switched_while_the_layout_cannot_change() {
         });
     h.run();
     assert!(h.get_by_label("Show laptop").accesskit_node().is_disabled());
+}
+
+#[test]
+fn the_pointer_lock_shortcut_is_recorded_and_taken_away_by_asking_the_agent() {
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    h.get_by_label("Pointer lock shortcut: None").click();
+    h.run();
+    // A bare letter on the way to the combination is not the answer.
+    h.key_press(egui::Key::L);
+    h.run();
+    assert_eq!(h.state().did, None);
+    h.key_press_modifiers(egui::Modifiers::CTRL | egui::Modifiers::ALT, egui::Key::L);
+    h.run();
+    assert_eq!(h.state().did, Some(Did::LockShortcut("Ctrl+Alt+L".into())));
+
+    let mut set = state(Vec::new());
+    set.pointer_lock_shortcut = "Ctrl+Alt+L".into();
+    let mut h = page(Some(set));
+    h.run();
+    assert!(h
+        .query_by_label("Pointer lock shortcut: Ctrl+Alt+L")
+        .is_some());
+    h.get_by_label("No shortcut").click();
+    h.run();
+    assert_eq!(h.state().did, Some(Did::LockShortcut(String::new())));
+}
+
+#[test]
+fn the_rescue_combination_is_not_taken_for_the_pointer_lock() {
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    h.get_by_label("Pointer lock shortcut: None").click();
+    h.run();
+    // The default rescue, Ctrl+Alt+Shift+M: still waiting.
+    h.key_press_modifiers(
+        egui::Modifiers::CTRL | egui::Modifiers::ALT | egui::Modifiers::SHIFT,
+        egui::Key::M,
+    );
+    h.run();
+    assert_eq!(h.state().did, None);
+
+    // Saved before: said so.
+    let mut saved = state(Vec::new());
+    saved.pointer_lock_shortcut = lbm_ipc::shortcut::DEFAULT.into();
+    let mut h = page(Some(saved));
+    h.run();
+    assert!(h
+        .query_by_label("This is the rescue shortcut: it stays the rescue's, and locks nothing.")
+        .is_some());
 }

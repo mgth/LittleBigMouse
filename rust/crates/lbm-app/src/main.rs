@@ -3515,9 +3515,16 @@ impl eframe::App for App {
                     // Not a layout setting: it does not wait for displays, and a reload
                     // pending is not a reason to keep a machine from being accepted.
                     let busy = self.machines.busy();
+                    let rescue = self
+                        .layout
+                        .as_ref()
+                        .map_or(lbm_ipc::shortcut::DEFAULT, |l| {
+                            l.options.rescue_shortcut.as_str()
+                        });
                     machines_did = lbm_ui::machines::panel(
                         ui,
                         self.machines.state.as_ref(),
+                        rescue,
                         &mut self.machines.panel,
                         busy,
                         self.machines.error.as_deref(),

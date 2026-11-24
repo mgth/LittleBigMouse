@@ -104,6 +104,7 @@ impl Node {
                 enabled: true,
                 port: Some(port),
                 name: Some(name.into()),
+                pointer_lock_shortcut: None,
             })
             .await
             .unwrap();
@@ -204,6 +205,7 @@ async fn with_the_mode_off_nothing_listens_and_no_identity_is_made() {
         enabled: false,
         port,
         name: None,
+        pointer_lock_shortcut: None,
     }
     .save(dir.path())
     .unwrap();
@@ -571,6 +573,7 @@ async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends(
         enabled: false,
         port: None,
         name: None,
+        pointer_lock_shortcut: None,
     })
     .await
     .unwrap();
@@ -1046,16 +1049,23 @@ async fn a_remote(
     name: &str,
     options: link::Options,
 ) -> (tempfile::TempDir, Identity, link::Listener) {
+    a_remote_able(name, options, &[]).await
+}
+
+/// [`a_remote`], saying it can do `capabilities`.
+#[cfg(unix)]
+async fn a_remote_able(
+    name: &str,
+    options: link::Options,
+    capabilities: &[&str],
+) -> (tempfile::TempDir, Identity, link::Listener) {
     let directory = tempfile::tempdir().unwrap();
     let identity = Identity::load_or_create(directory.path()).unwrap();
-    let listener = link::listen(
-        "127.0.0.1:0",
-        &identity,
-        Hello::new(name, "0", Role::Remote),
-        options,
-    )
-    .await
-    .unwrap();
+    let mut hello = Hello::new(name, "0", Role::Remote);
+    hello.capabilities = capabilities.iter().map(|c| (*c).to_owned()).collect();
+    let listener = link::listen("127.0.0.1:0", &identity, hello, options)
+        .await
+        .unwrap();
     (directory, identity, listener)
 }
 
@@ -1376,6 +1386,119 @@ async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from
         next_input(&mut laptop_link).await,
         [InputEvent::Enter { x: 20, y: 20 }]
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_lock_keys_go_only_to_a_remote_that_reads_them() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent, Locks, LOCKS_CAPABILITY};
+    let enter = InputEvent::Enter { x: 10, y: 10 };
+    let locks = InputEvent::Locks(Locks {
+        caps: Some(true),
+        num: Some(true),
+        scroll: None,
+    });
+    let older: &[InputEvent] = &[enter];
+    let newer: &[InputEvent] = &[enter, locks];
+    for (capabilities, expected) in [(&[][..], older), (&[LOCKS_CAPABILITY][..], newer)] {
+        let (_laptop_dir, laptop, mut listener) =
+            a_remote_able("laptop", link::Options::default(), capabilities).await;
+        let desk_dir = tempfile::tempdir().unwrap();
+        pair(
+            desk_dir.path(),
+            laptop.fingerprint(),
+            &listener.local_addr().to_string(),
+            Role::Remote,
+        );
+        let hook_path = desk_dir.path().join("desk-input.sock");
+        let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+        let mut desk = Node::new(
+            desk_dir.path(),
+            Some(hook_path.to_string_lossy().into_owned()),
+        );
+        desk.turn_on(0, "desk").await;
+        let mut laptop_link = linked_from(&mut listener).await;
+        assert!(
+            laptop_link
+                .peer()
+                .hello
+                .capabilities
+                .iter()
+                .any(|c| c == LOCKS_CAPABILITY),
+            "this agent says its hook reads them"
+        );
+        desk.hook_ready_for(laptop.fingerprint()).await;
+        let (mut hook, _) = tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap();
+        write_batch(&mut hook, &encode(&[enter, locks]))
+            .await
+            .unwrap();
+        assert_eq!(next_input(&mut laptop_link).await, expected);
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_state_says_which_machine_has_the_mouse_and_keyboard() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let on = desk.turn_on(0, "desk").await;
+    assert_eq!(on.driven, None, "the pointer starts here");
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+    let laptop_id = laptop.fingerprint().to_owned();
+
+    // Motion alone is not a crossing; the Enter is.
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Motion { x: 11, y: 10 },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, crossing);
+    desk.until(|s| s.driven.as_deref() == Some(laptop_id.as_str()))
+        .await;
+
+    // Home again by the stream's own Leave.
+    write_batch(&mut hook, &encode(&[InputEvent::Leave]))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    desk.until(|s| s.driven.is_none()).await;
+
+    // Over there again, then the hook goes: its end brings the pointer home too.
+    write_batch(&mut hook, &encode(&[InputEvent::Enter { x: 5, y: 5 }]))
+        .await
+        .unwrap();
+    assert_eq!(
+        next_input(&mut laptop_link).await,
+        [InputEvent::Enter { x: 5, y: 5 }]
+    );
+    desk.until(|s| s.driven.is_some()).await;
+    drop(hook);
+    desk.until(|s| s.driven.is_none()).await;
 }
 
 #[cfg(unix)]
@@ -1815,5 +1938,104 @@ async fn a_crossing_the_remotes_hook_is_not_there_for_makes_the_remote_say_input
     assert!(
         !reset_within(&mut link, Duration::from_millis(300)).await,
         "an InputReset for a crossing the hook took"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_is_in_the_state() {
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    let on = desk.turn_on(0, "desk").await;
+    assert_eq!(on.pointer_lock_shortcut, "", "none unless set");
+    let _link = linked_from(&mut listener).await;
+    let laptop_id = laptop.fingerprint().to_owned();
+    desk.until(|s| linked(s, &laptop_id)).await;
+
+    let set = |shortcut: &str| PeerRequest::Set {
+        enabled: true,
+        port: None,
+        name: None,
+        pointer_lock_shortcut: Some(shortcut.to_owned()),
+    };
+    let state: PeersState =
+        serde_json::from_value(desk.ask(set(" Ctrl+Alt+L ")).await.unwrap()).unwrap();
+    assert_eq!(state.pointer_lock_shortcut, "Ctrl+Alt+L");
+    assert!(linked(&state, &laptop_id), "the link stayed up");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), listener.next())
+            .await
+            .is_err(),
+        "the master did not connect again"
+    );
+    assert_eq!(
+        Settings::load(desk_dir.path())
+            .pointer_lock_shortcut
+            .as_deref(),
+        Some("Ctrl+Alt+L")
+    );
+
+    // The hook says it locked the pointer, then let it go.
+    desk.service.hook_locked(true);
+    desk.until(|s| s.pointer_locked).await;
+    desk.service.hook_locked(false);
+    desk.until(|s| !s.pointer_locked).await;
+
+    // Empty takes the shortcut away.
+    let state: PeersState = serde_json::from_value(desk.ask(set("")).await.unwrap()).unwrap();
+    assert_eq!(state.pointer_lock_shortcut, "");
+    assert_eq!(Settings::load(desk_dir.path()).pointer_lock_shortcut, None);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_strips_the_lock_keys_for_a_hook_that_has_not_said_it_reads_them() {
+    use lbm_ipc::input::{encode, read_batch, InputEvent, Locks};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let hook_path = tower_dir.path().join("input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+    let sender = link.sender();
+    let enter = InputEvent::Enter { x: 0, y: 0 };
+    let locks = InputEvent::Locks(Locks {
+        caps: Some(true),
+        num: None,
+        scroll: None,
+    });
+
+    // An older hook, or one that has not greeted yet: the Enter alone.
+    sender.input(&encode(&[enter, locks])).await.unwrap();
+    let mut hook = hook_client(&hook_listener).await;
+    assert_eq!(read_batch(&mut hook).await.unwrap(), encode(&[enter]));
+
+    // A hook that said it reads them gets them.
+    tower.service.hook_reads_locks(true);
+    sender
+        .input(&encode(&[InputEvent::Leave, enter, locks]))
+        .await
+        .unwrap();
+    assert_eq!(
+        read_batch(&mut hook).await.unwrap(),
+        encode(&[InputEvent::Leave, enter, locks])
     );
 }

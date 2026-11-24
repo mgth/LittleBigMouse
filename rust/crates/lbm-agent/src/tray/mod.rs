@@ -141,6 +141,14 @@ impl TrayModel {
             _ => "No hook",
         }
         .to_owned();
+        // Multi-PC: the cursor alone says where the keyboard goes, and it may be on a
+        // screen nobody is looking at.
+        if let Some(machine) = state["DrivenMachine"].as_str() {
+            self.state = format!("{} · mouse and keyboard on {machine}", self.state);
+        }
+        if state["PointerLocked"] == true {
+            self.state = format!("{} · pointer locked", self.state);
+        }
     }
 
     pub fn icon(&self) -> TrayIcon {
@@ -263,6 +271,34 @@ mod tests {
         assert_eq!((tray.icon(), tray.state()), (TrayIcon::On, "Running"));
         tray.show(&json!({ "Engine": "Running", "Suspended": true }));
         assert_eq!(tray.icon(), TrayIcon::Paused);
+    }
+
+    #[test]
+    fn the_words_say_which_machine_has_the_mouse_and_keyboard() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": "laptop" }));
+        assert_eq!(tray.state(), "Running · mouse and keyboard on laptop");
+        assert_eq!(tray.icon(), TrayIcon::On, "the icon is the engine's");
+        // Back home, and an older agent's state, say nothing about it.
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": null }));
+        assert_eq!(tray.state(), "Running");
+        tray.show(&json!({ "Engine": "Running" }));
+        assert_eq!(tray.state(), "Running");
+    }
+
+    #[test]
+    fn the_words_say_the_pointer_is_locked() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": "laptop",
+                           "PointerLocked": true }));
+        assert_eq!(
+            tray.state(),
+            "Running · mouse and keyboard on laptop · pointer locked"
+        );
+        tray.show(&json!({ "Engine": "Running", "PointerLocked": true }));
+        assert_eq!(tray.state(), "Running · pointer locked");
+        tray.show(&json!({ "Engine": "Running", "PointerLocked": false }));
+        assert_eq!(tray.state(), "Running");
     }
 
     #[tokio::test]

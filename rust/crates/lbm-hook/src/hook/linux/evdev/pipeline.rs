@@ -69,6 +69,7 @@ use crate::engine::MouseEngine;
 use crate::geometry::{Point, Rect};
 use crate::hook::hot_path::{count_event, route_move_then, Routed};
 use crate::shared::Shared;
+use lbm_ipc::input::Locks;
 
 use super::cursor::EvdevCursor;
 use super::frame::PumpBuffers;
@@ -92,6 +93,10 @@ pub(crate) trait Outputs {
     }
     /// See [`crossing::Platform::send_remote`].
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
+    /// See [`crossing::Platform::locks`].
+    fn locks(&self) -> Locks {
+        Locks::default()
+    }
     /// See [`crossing::Platform::grab_keyboards`].
     fn grab_keyboards(&mut self);
     /// See [`crossing::Platform::release_keyboards`].
@@ -140,6 +145,10 @@ impl<O: Outputs> Platform for Machine<'_, O> {
 
     fn send_remote(&mut self, batch: Vec<u8>) -> bool {
         self.out.send_remote(batch)
+    }
+
+    fn locks(&self) -> Locks {
+        self.out.locks()
     }
 
     fn grab_keyboards(&mut self) {
@@ -301,7 +310,10 @@ impl Pipeline {
             // A no-op unless the client came or went, or a Load brought a layout in
             // which the other machines are not in play yet. Rebuilding allocates, but
             // only on such a change, never per report.
-            engine.layout.set_remote_enterable(connected);
+            // Locked here, the other machines' borders are walls, as without a client.
+            engine
+                .layout
+                .set_remote_enterable(connected && !self.crossing.walled_in());
             {
                 let pos = self.env.virtual_pos;
                 let (crossing, mut machine) = self.split(out);
@@ -448,9 +460,11 @@ impl Pipeline {
     /// it is this process's to forward.
     pub(super) fn keyboard_key(&mut self, code: u16, value: i32, grabbed: bool, now: Instant) {
         self.env.track_ctrl(code, value);
+        let press = Press::from_ev_key(value);
         if grabbed {
-            self.crossing
-                .grabbed_key(code, Press::from_ev_key(value), now);
+            self.crossing.grabbed_key(code, press, now);
+        } else {
+            self.crossing.observed_key(code, press);
         }
     }
 
@@ -473,11 +487,12 @@ impl Pipeline {
         crossing.check_rescue(shared, now, &mut machine);
     }
 
-    /// Drops the engine's crossing history and puts the cursor back at home: the next
+    /// Drops the engine's crossing history and puts the cursor back where the routing
+    /// resumes (home, or where a lock holds it over there): the next
     /// report starts afresh from the zone it is in.
     fn resync_with(&mut self, engine: &mut MouseEngine) {
         engine.begin_touch(&mut self.env);
-        self.env.virtual_pos = self.crossing.home();
+        self.env.virtual_pos = self.crossing.resume_at();
         self.resync = false;
     }
 }
@@ -803,6 +818,60 @@ mod tests {
             Some(&Wire::Leave),
             "nothing more over there"
         );
+    }
+
+    /// Sets the pointer lock's shortcut, Ctrl+Alt+L, and presses it once.
+    fn lock(rig: &mut Rig) {
+        const KEY_L: u16 = 38;
+        if rig.shared.pointer_lock_shortcut.lock().unwrap().is_empty() {
+            *rig.shared.pointer_lock_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
+            rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+            rig.cycle(&[]);
+        }
+        for (code, value) in [
+            (KEY_LEFTCTRL, 1),
+            (KEY_LEFTALT, 1),
+            (KEY_L, 1),
+            (KEY_L, 0),
+            (KEY_LEFTALT, 0),
+            (KEY_LEFTCTRL, 0),
+        ] {
+            rig.type_key(code, value);
+        }
+    }
+
+    #[test]
+    fn locked_over_there_the_engine_routes_on_from_where_it_was_held() {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.move_by(10, 0);
+        lock(&mut rig);
+        rig.out.sent.clear();
+
+        // Back across the border: held on There, at (10, 500).
+        rig.move_by(-60, 0);
+        assert!(rig.pipe.is_remote(), "the pointer did not come back");
+        assert!(!rig.out.sent.contains(&Wire::Leave), "{:?}", rig.out.sent);
+        // And routed on from there: no jump to where the engine had put it here.
+        rig.move_by(5, 2);
+        assert_eq!(rig.out.sent.last(), Some(&Wire::Motion { x: 15, y: 502 }));
+
+        lock(&mut rig);
+        rig.move_by(-60, 0);
+        assert!(!rig.pipe.is_remote(), "unlocked, it comes back");
+    }
+
+    #[test]
+    fn locked_here_the_border_is_a_wall_for_the_engine() {
+        let mut rig = Rig::new(true);
+        lock(&mut rig);
+        // The wall goes up at the next cycle's look at the layout.
+        rig.cycle(&[]);
+        rig.move_by(30, 0);
+        rig.move_by(300, 0);
+        assert!(!rig.pipe.is_remote());
+        assert!(rig.out.sent.is_empty(), "{:?}", rig.out.sent);
+        assert_eq!(rig.local_cursor(), (1919, 500));
     }
 
     #[test]

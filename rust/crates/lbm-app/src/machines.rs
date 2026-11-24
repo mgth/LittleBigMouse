@@ -43,6 +43,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
     let selected = object
         .get("SelectedRemote")
         .map(|selected| selected.as_str().unwrap_or_default());
+    // The remote the pointer is on; an agent older than the indicator says nothing.
+    let driven = value["Driven"].as_str();
     for entry in value["Peers"].as_array().into_iter().flatten() {
         let machine_id = text(entry, "MachineId");
         if machine_id.is_empty() {
@@ -70,6 +72,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
                 displays: displays.clone(),
             });
         }
+        let driven = driven == Some(machine_id.as_str()) && !pending;
         peers.push(Peer {
             machine_id,
             name: text(entry, "Name"),
@@ -77,6 +80,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             connected,
             role,
             pending,
+            driven,
             displays: displays.len(),
             problem: link_problem(&entry["Problem"]),
         });
@@ -99,6 +103,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         machine_id: value["MachineId"].as_str().map(str::to_owned),
         listen_address: value["ListenAddress"].as_str().map(str::to_owned),
         error: value["Error"].as_str().map(str::to_owned),
+        pointer_lock_shortcut: text(value, "PointerLockShortcut"),
+        pointer_locked: value["PointerLocked"].as_bool().unwrap_or(false),
         peers,
     };
     Some((state, remotes))
@@ -404,6 +410,10 @@ impl Controller {
         match did {
             Did::Enable(on) => ("SetMultiPc", json!({ "Enabled": on })),
             Did::Rename(name) => ("SetMultiPc", json!({ "Enabled": enabled, "Name": name })),
+            Did::LockShortcut(shortcut) => (
+                "SetMultiPc",
+                json!({ "Enabled": enabled, "PointerLockShortcut": shortcut }),
+            ),
             Did::Connect(address) => ("PeerConnect", json!({ "Address": address })),
             Did::Accept(id) => ("PeerAccept", json!({ "MachineId": id })),
             Did::Refuse(id) => ("PeerRefuse", json!({ "MachineId": id })),
@@ -564,6 +574,47 @@ mod tests {
         let mut none = state(peers);
         none["SelectedRemote"] = Value::Null;
         assert!(read(&none).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn the_driven_remote_is_marked_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut driven = state(
+            json!([{"MachineId": "0a", "Name": "laptop", "Connected": true,
+            "Role": "Remote", "State": "Paired", "Displays": [display("eDP-1")]}]),
+        );
+        assert!(machines.heard(&driven));
+        assert!(
+            !read(&driven).unwrap().0.peers[0].driven,
+            "an older agent says nothing"
+        );
+        driven["Driven"] = json!("0a");
+        assert!(read(&driven).unwrap().0.peers[0].driven);
+        assert!(
+            !machines.heard(&driven),
+            "crossing is no reason to rebuild the map"
+        );
+        driven["PointerLockShortcut"] = json!("Ctrl+Alt+L");
+        driven["PointerLocked"] = json!(true);
+        let (read, _) = read(&driven).unwrap();
+        assert_eq!(read.pointer_lock_shortcut, "Ctrl+Alt+L");
+        assert!(read.pointer_locked);
+        assert!(!machines.heard(&driven), "nor is the lock");
+    }
+
+    #[test]
+    fn the_pointer_lock_shortcut_is_set_with_the_mode_left_as_it_is() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        machines.heard(&state(json!([])));
+        assert_eq!(
+            machines.request(&Did::LockShortcut("Ctrl+Alt+L".into())),
+            (
+                "SetMultiPc",
+                json!({ "Enabled": true, "PointerLockShortcut": "Ctrl+Alt+L" })
+            )
+        );
     }
 
     #[test]

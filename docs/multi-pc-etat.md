@@ -112,7 +112,7 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 | | Maître | Esclave |
 |---|---|---|
-| **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, jamais essayé sur matériel |
+| **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, vérifié sous KWin 6 avec `peer_drive` comme maître (correctifs en PR #807) |
 | **Linux, backend portail Wayland ou X11** | Absent : les zones distantes ne sont jamais franchissables | Livré si `/dev/uinput` est accessible en écriture, jamais essayé sur matériel |
 | **Windows** | Absent | Livré, vérifié |
 | **macOS** | Absent | Absent |
@@ -131,7 +131,7 @@ Et par fonction annexe :
 |---|---|---|
 | Publication des écrans | KScreen, sinon XRandR | Oui |
 | Lecture du fond d'écran | Plasma seulement | Oui |
-| Suivi du fond en direct | Plasma seulement | Codé, jamais exécuté |
+| Suivi du fond en direct | Plasma seulement | Oui, vérifié sur la vm124 |
 | Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Sans objet tant qu'il n'y a pas de maître Windows |
 | Curseur rangé, côté esclave | Rien de visible | Oui |
 | DDC/CI | `ddcutil` | dxva2 |

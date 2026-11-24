@@ -154,11 +154,18 @@ async fn a_withdrawal_closes_the_link_of_the_master_driving_at_once() {
     // Withdrawn, while another stays approved: the port stays open.
     let (_other_dir, other) = identity();
     network.trust(approving(&[&other]));
+    // What it still sends while its connection closes is not handed over.
+    let _ = link.sender().input(&motion(3)).await;
+    assert_eq!(next(&heard).await, Stream::Ended { link: 1 });
     assert!(
         closed(&mut link).await,
         "the withdrawn master's link stays open"
     );
-    assert_eq!(next(&heard).await, Stream::Ended { link: 1 });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        heard.try_recv().is_err(),
+        "something of the withdrawn master's stream followed its end"
+    );
 }
 
 #[tokio::test]

@@ -29,6 +29,7 @@ use windows_service::service_dispatcher;
 use super::launch;
 use crate::network::{self, Network, Stream};
 use crate::supervisor::{Action, Supervisor};
+use crate::writer::Writer;
 use crate::SERVICE_NAME;
 
 /// How long an injector whose input ended may take to release and leave.
@@ -224,9 +225,13 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
             Event::Net(Stream::Ended { link }) => {
                 if driving == Some(link) {
                     driving = None;
-                    let leave = lbm_ipc::input::encode(&[lbm_ipc::input::InputEvent::Leave]);
-                    if let Some(running) = &running {
-                        running.writer.send(&leave);
+                    // A `Leave` the queue has no room for must not leave a key down: the
+                    // injector is stopped instead, and the end of its input releases all.
+                    if running.as_ref().is_some_and(|r| !r.writer.end()) {
+                        if let Some(gone) = running.take() {
+                            supervisor.exited(gone.launch);
+                            gone.stop(STOP_GRACE);
+                        }
                     }
                 }
             }
@@ -315,7 +320,13 @@ fn start_injector(
             // Without its exit watched, an injector that leaves would never be
             // launched again in this session: a failed watch is a failed start.
             match started.notify_exit(launch, exits.clone()) {
-                Ok(()) => match Writer::start(&started.input) {
+                Ok(()) => match started
+                    .input
+                    .try_clone()
+                    .inspect_err(|e| eprintln!("[lbm-service] the injector's pipe: {e}"))
+                    .ok()
+                    .map(Writer::start)
+                {
                     Some(writer) => Some(Active {
                         launch,
                         injector: started,
@@ -340,10 +351,6 @@ fn start_injector(
     }
 }
 
-/// Batches waiting for the injector: a few dozen milliseconds of a fast mouse. Beyond
-/// it the injector is not reading, and its session is ended rather than waited on.
-const WRITE_QUEUE: usize = 64;
-
 /// The injector running, and what writes to its pipe.
 struct Active {
     launch: u64,
@@ -357,39 +364,6 @@ impl Active {
     fn stop(self, grace: Duration) {
         drop(self.writer);
         self.injector.stop(grace);
-    }
-}
-
-/// Writes batches to the injector's pipe on a thread of its own, from a bounded queue:
-/// a pipe write blocks while the injector does not read, and the deciding loop, which
-/// also serves the SCM's stop, the session changes and the withdrawals, must not.
-struct Writer {
-    frames: mpsc::SyncSender<Vec<u8>>,
-}
-
-impl Writer {
-    fn start(input: &std::fs::File) -> Option<Writer> {
-        let mut pipe = input
-            .try_clone()
-            .inspect_err(|e| eprintln!("[lbm-service] the injector's pipe: {e}"))
-            .ok()?;
-        let (frames, queued) = mpsc::sync_channel::<Vec<u8>>(WRITE_QUEUE);
-        std::thread::spawn(move || {
-            use std::io::Write;
-            for frame in queued {
-                if pipe.write_all(&frame).is_err() {
-                    break;
-                }
-            }
-        });
-        Some(Writer { frames })
-    }
-
-    /// Queues one batch, framed; `false` when the queue is full or the writer gone.
-    fn send(&self, batch: &[u8]) -> bool {
-        let mut frame = (batch.len() as u32).to_le_bytes().to_vec();
-        frame.extend_from_slice(batch);
-        self.frames.try_send(frame).is_ok()
     }
 }
 

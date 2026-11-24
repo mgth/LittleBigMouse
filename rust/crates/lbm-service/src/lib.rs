@@ -10,11 +10,13 @@
 //! - [`supervisor`]: which session gets an injector, and when it is stopped. Pure.
 //! - [`trust`]: the masters an administrator approved. Pure.
 //! - [`network`]: where approved masters send the stream; portable, tested on loopback.
+//! - [`writer`]: the injector's pipe, written from a bounded queue.
 //! - `win`: the service itself, and the launch.
 
 pub mod network;
 pub mod supervisor;
 pub mod trust;
+pub mod writer;
 
 #[cfg(windows)]
 pub mod win;

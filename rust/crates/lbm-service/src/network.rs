@@ -166,11 +166,21 @@ async fn serve(
                     Err(error) => eprintln!("[lbm-service] cannot listen on {bind}: {error}"),
                 }
             }
-            // Withdrawn: closed at once; the end of its stream follows from its reader.
-            for linked in links.values() {
-                if !store.allows(&linked.fingerprint) {
-                    let sender = linked.sender.clone();
-                    tokio::spawn(async move { sender.close("no longer approved").await });
+            // Withdrawn: forgotten here at once — whatever of its stream is still on its
+            // way finds no link and is dropped — its session ended once if it drove, and
+            // its connection closed in the background.
+            let withdrawn: Vec<u64> = links
+                .iter()
+                .filter(|(_, linked)| !store.allows(&linked.fingerprint))
+                .map(|(id, _)| *id)
+                .collect();
+            for id in withdrawn {
+                if let Some(linked) = links.remove(&id) {
+                    tokio::spawn(async move { linked.sender.close("no longer approved").await });
+                }
+                if driving == Some(id) {
+                    driving = None;
+                    let _ = out.send(Stream::Ended { link: id });
                 }
             }
         }

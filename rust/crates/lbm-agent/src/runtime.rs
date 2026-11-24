@@ -58,9 +58,11 @@ enum VcpEvent {
         rebuild: u64,
         results: Vec<(InputRead, Result<u16, String>)>,
     },
-    /// A switch this machine attempted.
+    /// A switch this machine attempted, as the attempt numbered `attempt`
+    /// (`input_switch::Failures::begin`).
     Switched {
         switch: Box<InputSwitch>,
+        attempt: u64,
         outcome: Outcome,
     },
     /// A switch this machine's master `from` asked for, and whether it wrote.
@@ -752,12 +754,15 @@ impl<W: AgentWorld> Agent<W> {
                 .set_active_source(&layout_id, &monitor, &source)
                 .map(|switch| {
                     eprintln!("[lbm-agent] {monitor} now shows {source}");
+                    // Numbered now, not once this machine's DDC/CI has had its go: what
+                    // is said meanwhile of an earlier choice is no news about this one.
+                    let attempt = self.input_failures.begin(&monitor);
                     // A panel wired to both machines on two inputs is switched too, away
                     // from the loop: the answer never waits on a monitor. Without a known
                     // input value only the routing follows the choice, which is all a
                     // hardware KVM needs.
                     if let Some(switch) = switch {
-                        self.switch_input(switch);
+                        self.switch_input(switch, attempt);
                     }
                     // The zone of the panel has changed hands: a running engine must
                     // route it to the machine now shown.
@@ -888,7 +893,7 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     /// Switches a panel's input for the user's choice, away from the loop.
-    fn switch_input(&mut self, switch: InputSwitch) {
+    fn switch_input(&mut self, switch: InputSwitch, attempt: u64) {
         eprintln!(
             "[lbm-agent] switching {} to input {:#04x}",
             switch.monitor, switch.value
@@ -903,14 +908,23 @@ impl<W: AgentWorld> Agent<W> {
             }
             let _ = events.send(VcpEvent::Switched {
                 switch: Box::new(switch),
+                attempt,
                 outcome,
             });
         });
     }
 
-    fn input_switched(&mut self, switch: InputSwitch, outcome: Outcome) {
-        let request = self.input_failures.switched(&switch, &outcome);
+    fn input_switched(&mut self, switch: InputSwitch, attempt: u64, outcome: Outcome) {
         let (monitor, value) = (&switch.monitor, switch.value);
+        if !self.input_failures.switched(&switch, attempt, &outcome) {
+            // The panel was chosen again since: this result is no longer the user's
+            // choice, and acting on it could give the latest one up.
+            eprintln!(
+                "[lbm-agent] {monitor}: a switch overtaken by a newer choice went {outcome:?}"
+            );
+            return;
+        }
+        let request = Some(attempt);
         match outcome {
             Outcome::AlreadyShown => {
                 eprintln!("[lbm-agent] {monitor} already shows input {value:#04x}")
@@ -1489,8 +1503,8 @@ impl<W: AgentWorld> Agent<W> {
                         Some(VcpEvent::Read { rebuild, results }) => {
                             self.inputs_read(rebuild, results)
                         }
-                        Some(VcpEvent::Switched { switch, outcome }) => {
-                            self.input_switched(*switch, outcome)
+                        Some(VcpEvent::Switched { switch, attempt, outcome }) => {
+                            self.input_switched(*switch, attempt, outcome)
                         }
                         Some(VcpEvent::Selected { from, display, value, request, result }) => {
                             self.selected(from, display, value, request, result)

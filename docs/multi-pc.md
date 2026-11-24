@@ -66,7 +66,8 @@ screen), Windows as master, the portal and X11 backends as master.
     master ignores it as an unknown type
   - `InputSwitched { Display, Value, Request?, Error? }` — remote → master: how the
     `SelectInput` numbered `Request` went, `Error` saying why it failed; the master
-    heeds only the answer to its latest request for that panel (see "Input
+    numbers each choice it accepts for a panel at once, and heeds only what is said of
+    its latest choice for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
@@ -446,7 +447,7 @@ What lot 8 does (`lbm-agent/src/input_switch.rs`, `vcp.rs`):
   why this machine could not (DDC/CI's words), and, when a remote was asked, which one
   and why it could not either. In the state rather than an event because the switch is
   carried out after `SetActiveSource` is answered; a panel's entry, and what was asked
-  about it, goes when it is switched or leaves the layout (plugged back, it starts with
+  about it, goes when it is chosen again, switched or leaves the layout (plugged back, it starts with
   nothing said). The window shows it on the panel's badge and under its
   switch. A remote that sends no `InputSwitched` (an older one) leaves nothing to show.
 

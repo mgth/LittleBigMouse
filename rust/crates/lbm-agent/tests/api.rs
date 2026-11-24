@@ -3032,6 +3032,71 @@ async fn choosing_the_machine_a_shared_panel_shows_switches_its_input_and_nothin
         .frontend
         .state(|s| s.get("InputSwitchFailures").is_none())
         .await;
+
+    // The laptop again, and while that is asked of the laptop the user changes their
+    // mind: the retry is accepted, and this machine's own go at it is held. The laptop's
+    // failure for the earlier choice, arriving meanwhile, is not the retry's.
+    let choose = |source: String| {
+        json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": source,
+        })
+    };
+    let selected =
+        |c: &lbm_net::wire::Control| matches!(c, lbm_net::wire::Control::SelectInput { .. });
+    let there = master.frontend.ask(choose(dell_there.clone())).await;
+    assert_eq!(there["Result"], Value::Null, "{there}");
+    let lbm_net::wire::Control::SelectInput {
+        request: earlier, ..
+    } = next_control_where(&mut link, selected).await
+    else {
+        unreachable!()
+    };
+    let gate = master.ddc.hold("DP-1");
+    let back = master.frontend.ask(choose(SHARED_DELL.to_owned())).await;
+    assert_eq!(back["Result"], Value::Null, "{back}");
+    link.sender()
+        .control(&lbm_net::wire::Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: ON_HDMI,
+            request: earlier,
+            error: Some("busy".into()),
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let now = master.frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(
+        now["Result"].get("InputSwitchFailures").is_none(),
+        "an earlier choice's failure shown for the retry: {now}"
+    );
+    // Let go, the retry is asked of the laptop under its own number, and settled by
+    // its own answer.
+    gate.add_permits(16);
+    let lbm_net::wire::Control::SelectInput {
+        request: retry,
+        value,
+        ..
+    } = next_control_where(&mut link, selected).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(value, ON_DP);
+    assert_ne!(retry, earlier);
+    link.sender()
+        .control(&lbm_net::wire::Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: ON_DP,
+            request: retry,
+            error: None,
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let now = master.frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(now["Result"].get("InputSwitchFailures").is_none(), "{now}");
 }
 
 #[tokio::test]

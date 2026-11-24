@@ -117,6 +117,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             Command::BindToAgent { bound } => {
                 shared.bound_to_agent.store(bound, Ordering::SeqCst);
             }
+            Command::PointerLock { shortcut } => adopt_pointer_lock(shared, shortcut),
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);
@@ -150,6 +151,19 @@ pub fn rescue_fired(shared: &'static Shared) {
     shared.broadcast(&Event::Rescued);
     hook::request_unhook(shared);
     shared.paused.store(false, Ordering::SeqCst);
+}
+
+/// Adopt the pointer lock's shortcut; the routing thread picks it up at the next key
+/// it reads (`hook::crossing`).
+fn adopt_pointer_lock(shared: &Shared, wanted: String) {
+    let mut current = shared
+        .pointer_lock_shortcut
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if *current != wanted {
+        *current = wanted;
+        shared.pointer_lock_revision.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 /// Adopt the panic shortcut a freshly loaded layout names, and tell the listener.

@@ -46,6 +46,8 @@ struct State {
     shortcut: String,
     /// Whether it was last told it belongs to the agent driving it.
     bound: bool,
+    /// The pointer lock's shortcut it was last told; empty until it is told one.
+    pointer_lock: String,
     /// The exclusion list it was last handed; `None` until it is handed one.
     excluded: Option<Vec<String>>,
     received: Vec<Command>,
@@ -116,6 +118,11 @@ impl FakeHook {
     /// The panic shortcut it was last told to adopt; empty until it is told one.
     pub fn shortcut(&self) -> String {
         self.state.lock().unwrap().shortcut.clone()
+    }
+
+    /// The pointer lock's shortcut it was last told; empty until it is told one.
+    pub fn pointer_lock(&self) -> String {
+        self.state.lock().unwrap().pointer_lock.clone()
     }
 
     /// Whether it was last told it belongs to the agent driving it.
@@ -328,6 +335,7 @@ async fn connection<S>(
                     Command::Excluded { processes } => s.excluded = Some(processes),
                     // Arms nothing: only recorded, with every other command.
                     Command::Desktop { .. } => {}
+                    Command::PointerLock { shortcut } => s.pointer_lock = shortcut,
                     Command::Unknown => {}
                 }
             }

@@ -104,6 +104,7 @@ impl Node {
                 enabled: true,
                 port: Some(port),
                 name: Some(name.into()),
+                pointer_lock_shortcut: None,
             })
             .await
             .unwrap();
@@ -204,6 +205,7 @@ async fn with_the_mode_off_nothing_listens_and_no_identity_is_made() {
         enabled: false,
         port,
         name: None,
+        pointer_lock_shortcut: None,
     }
     .save(dir.path())
     .unwrap();
@@ -571,6 +573,7 @@ async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends(
         enabled: false,
         port: None,
         name: None,
+        pointer_lock_shortcut: None,
     })
     .await
     .unwrap();
@@ -1935,4 +1938,58 @@ async fn a_crossing_the_remotes_hook_is_not_there_for_makes_the_remote_say_input
         !reset_within(&mut link, Duration::from_millis(300)).await,
         "an InputReset for a crossing the hook took"
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_is_in_the_state()
+{
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    let on = desk.turn_on(0, "desk").await;
+    assert_eq!(on.pointer_lock_shortcut, "", "none unless set");
+    let _link = linked_from(&mut listener).await;
+    let laptop_id = laptop.fingerprint().to_owned();
+    desk.until(|s| linked(s, &laptop_id)).await;
+
+    let set = |shortcut: &str| PeerRequest::Set {
+        enabled: true,
+        port: None,
+        name: None,
+        pointer_lock_shortcut: Some(shortcut.to_owned()),
+    };
+    let state: PeersState =
+        serde_json::from_value(desk.ask(set(" Ctrl+Alt+L ")).await.unwrap()).unwrap();
+    assert_eq!(state.pointer_lock_shortcut, "Ctrl+Alt+L");
+    assert!(linked(&state, &laptop_id), "the link stayed up");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), listener.next())
+            .await
+            .is_err(),
+        "the master did not connect again"
+    );
+    assert_eq!(
+        Settings::load(desk_dir.path())
+            .pointer_lock_shortcut
+            .as_deref(),
+        Some("Ctrl+Alt+L")
+    );
+
+    // The hook says it locked the pointer, then let it go.
+    desk.service.hook_locked(true);
+    desk.until(|s| s.pointer_locked).await;
+    desk.service.hook_locked(false);
+    desk.until(|s| !s.pointer_locked).await;
+
+    // Empty takes the shortcut away.
+    let state: PeersState = serde_json::from_value(desk.ask(set("")).await.unwrap()).unwrap();
+    assert_eq!(state.pointer_lock_shortcut, "");
+    assert_eq!(Settings::load(desk_dir.path()).pointer_lock_shortcut, None);
 }

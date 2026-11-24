@@ -146,6 +146,9 @@ impl TrayModel {
         if let Some(machine) = state["DrivenMachine"].as_str() {
             self.state = format!("{} · mouse and keyboard on {machine}", self.state);
         }
+        if state["PointerLocked"] == true {
+            self.state = format!("{} · pointer locked", self.state);
+        }
     }
 
     pub fn icon(&self) -> TrayIcon {
@@ -280,6 +283,21 @@ mod tests {
         tray.show(&json!({ "Engine": "Running", "DrivenMachine": null }));
         assert_eq!(tray.state(), "Running");
         tray.show(&json!({ "Engine": "Running" }));
+        assert_eq!(tray.state(), "Running");
+    }
+
+    #[test]
+    fn the_words_say_the_pointer_is_locked() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": "laptop",
+                           "PointerLocked": true }));
+        assert_eq!(
+            tray.state(),
+            "Running · mouse and keyboard on laptop · pointer locked"
+        );
+        tray.show(&json!({ "Engine": "Running", "PointerLocked": true }));
+        assert_eq!(tray.state(), "Running · pointer locked");
+        tray.show(&json!({ "Engine": "Running", "PointerLocked": false }));
         assert_eq!(tray.state(), "Running");
     }
 

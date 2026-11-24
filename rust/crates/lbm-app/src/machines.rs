@@ -103,6 +103,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         machine_id: value["MachineId"].as_str().map(str::to_owned),
         listen_address: value["ListenAddress"].as_str().map(str::to_owned),
         error: value["Error"].as_str().map(str::to_owned),
+        pointer_lock_shortcut: text(value, "PointerLockShortcut"),
+        pointer_locked: value["PointerLocked"].as_bool().unwrap_or(false),
         peers,
     };
     Some((state, remotes))
@@ -408,6 +410,10 @@ impl Controller {
         match did {
             Did::Enable(on) => ("SetMultiPc", json!({ "Enabled": on })),
             Did::Rename(name) => ("SetMultiPc", json!({ "Enabled": enabled, "Name": name })),
+            Did::LockShortcut(shortcut) => (
+                "SetMultiPc",
+                json!({ "Enabled": enabled, "PointerLockShortcut": shortcut }),
+            ),
             Did::Connect(address) => ("PeerConnect", json!({ "Address": address })),
             Did::Accept(id) => ("PeerAccept", json!({ "MachineId": id })),
             Did::Refuse(id) => ("PeerRefuse", json!({ "MachineId": id })),
@@ -588,6 +594,26 @@ mod tests {
         assert!(
             !machines.heard(&driven),
             "crossing is no reason to rebuild the map"
+        );
+        driven["PointerLockShortcut"] = json!("Ctrl+Alt+L");
+        driven["PointerLocked"] = json!(true);
+        let (read, _) = read(&driven).unwrap();
+        assert_eq!(read.pointer_lock_shortcut, "Ctrl+Alt+L");
+        assert!(read.pointer_locked);
+        assert!(!machines.heard(&driven), "nor is the lock");
+    }
+
+    #[test]
+    fn the_pointer_lock_shortcut_is_set_with_the_mode_left_as_it_is() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        machines.heard(&state(json!([])));
+        assert_eq!(
+            machines.request(&Did::LockShortcut("Ctrl+Alt+L".into())),
+            (
+                "SetMultiPc",
+                json!({ "Enabled": true, "PointerLockShortcut": "Ctrl+Alt+L" })
+            )
         );
     }
 

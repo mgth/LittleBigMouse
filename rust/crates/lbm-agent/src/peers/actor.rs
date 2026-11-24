@@ -68,6 +68,10 @@ pub(super) enum Command {
     },
     /// What the hook's zones are fit for (`Service::hook_ready`).
     HookReady(Option<u64>),
+    /// The pointer lock's shortcut changed; empty when there is none.
+    PointerLockShortcut(String),
+    /// The hook locked the pointer, or let it go (`Service::hook_locked`).
+    PointerLocked(bool),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -127,6 +131,7 @@ pub(super) struct Start {
     pub bind: IpAddr,
     pub options: link::Options,
     pub input_endpoint: Option<String>,
+    pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
 }
@@ -192,6 +197,10 @@ struct Actor {
     /// The remote the hook's stream is relayed to now: the selected one, once the hook's
     /// zones lead nowhere else (see [`Actor::retarget`]).
     relaying: Option<(String, u64)>,
+    /// What the state says of the pointer lock ([`PeersState::pointer_lock_shortcut`],
+    /// [`PeersState::pointer_locked`]).
+    pointer_lock_shortcut: String,
+    pointer_locked: bool,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
@@ -271,6 +280,8 @@ pub(super) async fn run(
         selection: SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1,
         hook_ready: None,
         relaying: None,
+        pointer_lock_shortcut: start.pointer_lock_shortcut,
+        pointer_locked: false,
         internal,
         notices: start.notices,
         published: None,
@@ -409,6 +420,8 @@ impl Actor {
                 .as_ref()
                 .filter(|_| self.hook.driven())
                 .map(|(machine_id, _)| machine_id.clone()),
+            pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
+            pointer_locked: self.pointer_locked,
             peers,
         }
     }
@@ -443,6 +456,8 @@ impl Actor {
             Command::Wallpapers { machine_id, reply } => {
                 let _ = reply.send(self.remote_wallpapers(&machine_id));
             }
+            Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
+            Command::PointerLocked(locked) => self.pointer_locked = locked,
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
                 self.retarget();

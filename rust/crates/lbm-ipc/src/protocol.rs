@@ -98,6 +98,15 @@ pub enum Command {
         #[serde(rename = "Bound")]
         bound: bool,
     },
+    /// The shortcut that locks the pointer on the machine it is on, and unlocks it
+    /// (the hook's crossing rules, "The pointer lock"); empty when there is none, which
+    /// is the default. Only a multi-PC master watches for it. Sent on every connection,
+    /// and again when it changes: an older agent never sends it, and its hook then
+    /// watches for nothing.
+    PointerLock {
+        #[serde(rename = "Shortcut")]
+        shortcut: String,
+    },
     /// Leave.
     Quit,
     /// A command this version does not know. Kept rather than refused: a frame is
@@ -214,6 +223,13 @@ pub enum Event {
         #[serde(rename = "Shortcut")]
         shortcut: String,
     },
+    /// The pointer was locked on the machine it is on, or let go
+    /// ([`Command::PointerLock`]). Said on every change, and never for a lock that was
+    /// never taken: a hook that never says it holds none.
+    PointerLocked {
+        #[serde(rename = "Locked")]
+        locked: bool,
+    },
     /// An event this version does not know. A newer hook must leave a client's idea
     /// of the state unchanged rather than move it to the wrong one, which is what
     /// mapping an unknown name onto a known event would do.
@@ -242,6 +258,7 @@ impl Event {
             Event::Rescued => "Rescued",
             Event::ShortcutUnavailable { .. } => "ShortcutUnavailable",
             Event::ShortcutAvailable { .. } => "ShortcutAvailable",
+            Event::PointerLocked { .. } => "PointerLocked",
             Event::Unknown => "Unknown",
         }
     }
@@ -263,6 +280,9 @@ impl Event {
             Event::LoadFailed { .. } => "the layout could not be parsed".to_owned(),
             Event::ShortcutUnavailable { shortcut } | Event::ShortcutAvailable { shortcut } => {
                 shortcut.clone()
+            }
+            Event::PointerLocked { locked } => {
+                if *locked { "locked" } else { "unlocked" }.to_owned()
             }
             _ => String::new(),
         }
@@ -403,6 +423,16 @@ mod tests {
             parse(&frame(&[Command::Excluded { processes: vec![] }])),
             [Command::Excluded { processes: vec![] }]
         );
+    }
+
+    #[test]
+    fn a_pointer_lock_shortcut_reads_back_as_itself_including_none() {
+        for shortcut in ["Ctrl+Alt+L", ""] {
+            let command = Command::PointerLock {
+                shortcut: shortcut.to_owned(),
+            };
+            assert_eq!(parse(&frame(std::slice::from_ref(&command))), [command]);
+        }
     }
 
     #[test]
@@ -559,6 +589,8 @@ mod tests {
             Event::ShortcutAvailable {
                 shortcut: "Ctrl+Alt+Shift+M".to_owned(),
             },
+            Event::PointerLocked { locked: true },
+            Event::PointerLocked { locked: false },
         ] {
             assert_eq!(parse_event(&event(&original)), Some(original.clone()));
         }

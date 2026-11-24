@@ -1,5 +1,5 @@
-//! Keys on a master while the pointer is on another machine: which ones are held, and
-//! the rescue shortcut recognised in the grabbed stream.
+//! Keys on a master while the pointer is on another machine: which ones are held, the
+//! rescue shortcut recognised in the grabbed stream, and the pointer lock's.
 //!
 //! While the keyboards are grabbed the compositor sees no key at all, and the desktop's
 //! global shortcuts — the portal the rescue listens through on Linux
@@ -70,6 +70,62 @@ impl HeldSet {
     }
 }
 
+/// A shortcut as a master reads it below any layout: the modifier bits
+/// (`lbm_ipc::shortcut`) and the Linux code of its final key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Combination {
+    modifiers: u32,
+    key: u16,
+}
+
+impl Combination {
+    /// The shortcut as the layout or the agent spells it; `None` for an empty or
+    /// unreadable text, and for a final key with no fixed place on a keyboard.
+    pub(crate) fn parse(text: &str) -> Option<Combination> {
+        let shortcut = Shortcut::parse(text)?;
+        Some(Combination {
+            modifiers: shortcut.modifiers,
+            key: key_of_virtual_key(shortcut.key)?,
+        })
+    }
+}
+
+/// The modifier keys held in a key stream, by class.
+#[derive(Debug, Default)]
+struct Modifiers(HeldSet);
+
+impl Modifiers {
+    fn track(&mut self, code: u16, press: Press) {
+        if is_modifier(code) {
+            self.0.track(code, press);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// The modifier bits of the classes of which a key is held.
+    fn bits(&self) -> u32 {
+        const CLASSES: [(u32, [u16; 2]); 4] = [
+            (MOD_CONTROL, [KEY_LEFTCTRL, KEY_RIGHTCTRL]),
+            (MOD_SHIFT, [KEY_LEFTSHIFT, KEY_RIGHTSHIFT]),
+            (MOD_ALT, [KEY_LEFTALT, KEY_RIGHTALT]),
+            (MOD_WIN, [KEY_LEFTMETA, KEY_RIGHTMETA]),
+        ];
+        CLASSES
+            .iter()
+            .filter(|(_, codes)| codes.iter().any(|&c| self.0.contains(c)))
+            .fold(0, |bits, (bit, _)| bits | bit)
+    }
+
+    /// Whether `code`, pressed now, is the final key of `combination`: exactly its
+    /// modifiers are held.
+    fn completes(&self, combination: Combination, code: u16, press: Press) -> bool {
+        code == combination.key && press == Press::Down && self.bits() == combination.modifiers
+    }
+}
+
 /// What to do with one key event of the grabbed stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Verdict {
@@ -86,14 +142,13 @@ pub(crate) enum Verdict {
 /// The rescue shortcut, watched for in the grabbed key stream.
 #[derive(Debug, Default)]
 pub(crate) struct RescueKeys {
-    /// The modifier bits and the Linux key code of the final key; `None` when the
-    /// configured text names a key with no fixed place on a keyboard.
-    wanted: Option<(u32, u16)>,
+    /// `None` when the configured text names a key with no fixed place on a keyboard.
+    wanted: Option<Combination>,
     /// The text `wanted` was parsed from, so a re-read that finds the same text does
     /// not parse it again.
     text: String,
     /// Modifier keys held in the grabbed stream.
-    modifiers: HeldSet,
+    modifiers: Modifiers,
     /// Since when the final key has been held, kept back.
     since: Option<Instant>,
 }
@@ -105,8 +160,7 @@ impl RescueKeys {
             return;
         }
         self.text = text.to_owned();
-        self.wanted = Shortcut::parse(text)
-            .and_then(|shortcut| Some((shortcut.modifiers, key_of_virtual_key(shortcut.key)?)));
+        self.wanted = Combination::parse(text);
     }
 
     /// The grabbed stream starts or stops: nothing is held in it any more.
@@ -115,25 +169,10 @@ impl RescueKeys {
         self.since = None;
     }
 
-    fn held_modifiers(&self) -> u32 {
-        const CLASSES: [(u32, [u16; 2]); 4] = [
-            (MOD_CONTROL, [KEY_LEFTCTRL, KEY_RIGHTCTRL]),
-            (MOD_SHIFT, [KEY_LEFTSHIFT, KEY_RIGHTSHIFT]),
-            (MOD_ALT, [KEY_LEFTALT, KEY_RIGHTALT]),
-            (MOD_WIN, [KEY_LEFTMETA, KEY_RIGHTMETA]),
-        ];
-        CLASSES
-            .iter()
-            .filter(|(_, codes)| codes.iter().any(|&c| self.modifiers.contains(c)))
-            .fold(0, |bits, (bit, _)| bits | bit)
-    }
-
     /// Reads one key event of the grabbed stream.
     pub(crate) fn filter(&mut self, code: u16, press: Press, now: Instant) -> Verdict {
-        if is_modifier(code) {
-            self.modifiers.track(code, press);
-        }
-        let Some((modifiers, key)) = self.wanted else {
+        self.modifiers.track(code, press);
+        let Some(wanted) = self.wanted else {
             return Verdict::Pass;
         };
         if self.since.is_some() {
@@ -145,9 +184,9 @@ impl RescueKeys {
             // typing, not asking for a rescue. What was kept goes first, so the other
             // machine sees the keys in the order they were pressed.
             self.since = None;
-            return Verdict::Release(key);
+            return Verdict::Release(wanted.key);
         }
-        if code == key && press == Press::Down && self.held_modifiers() == modifiers {
+        if self.modifiers.completes(wanted, code, press) {
             self.since = Some(now);
             return Verdict::Hold;
         }
@@ -163,6 +202,61 @@ impl RescueKeys {
             }
             _ => false,
         }
+    }
+}
+
+/// What the pointer lock's shortcut does with one key event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Toggle {
+    /// Not the shortcut's: forward it.
+    Pass,
+    /// The shortcut was just pressed: the lock toggles, and the key is not forwarded.
+    Fired,
+    /// The autorepeat or the release of the key that fired: not forwarded either.
+    Swallow,
+}
+
+/// The pointer lock's shortcut, watched for in every key a master reads, grabbed or
+/// not: it locks the pointer where it is and unlocks it, wherever it is. A toggle
+/// fires on the press, with no hold: it is undone by the same keys.
+#[derive(Debug, Default)]
+pub(crate) struct ToggleKeys {
+    wanted: Option<Combination>,
+    /// The text `wanted` was parsed from (see [`RescueKeys::set`]).
+    text: String,
+    modifiers: Modifiers,
+    /// The key that fired is still down.
+    kept: bool,
+}
+
+impl ToggleKeys {
+    /// Adopts the shortcut as the agent spells it; an empty text is none.
+    pub(crate) fn set(&mut self, text: &str) {
+        if text == self.text {
+            return;
+        }
+        self.text = text.to_owned();
+        self.wanted = Combination::parse(text);
+        self.kept = false;
+    }
+
+    /// Reads one key event.
+    pub(crate) fn filter(&mut self, code: u16, press: Press) -> Toggle {
+        self.modifiers.track(code, press);
+        let Some(wanted) = self.wanted else {
+            return Toggle::Pass;
+        };
+        if self.kept && code == wanted.key {
+            if press == Press::Up {
+                self.kept = false;
+            }
+            return Toggle::Swallow;
+        }
+        if self.modifiers.completes(wanted, code, press) {
+            self.kept = true;
+            return Toggle::Fired;
+        }
+        Toggle::Pass
     }
 }
 
@@ -284,7 +378,10 @@ mod tests {
     fn the_default_shortcut_is_ctrl_alt_shift_and_the_key_right_of_n() {
         assert_eq!(
             rescue().wanted,
-            Some((MOD_CONTROL | MOD_ALT | MOD_SHIFT, KEY_M))
+            Some(Combination {
+                modifiers: MOD_CONTROL | MOD_ALT | MOD_SHIFT,
+                key: KEY_M
+            })
         );
         assert_eq!(key_of_virtual_key(0x70), Some(59), "F1");
         assert_eq!(key_of_virtual_key(0x7B), Some(88), "F12");
@@ -360,5 +457,29 @@ mod tests {
         press_modifiers(&mut keys, start);
         keys.filter(KEY_LEFTMETA, Press::Down, start);
         assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Pass);
+    }
+
+    #[test]
+    fn the_lock_toggles_on_the_press_and_keeps_its_key_to_itself() {
+        const KEY_L: u16 = 38;
+        let mut keys = ToggleKeys::default();
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass, "none set");
+        keys.filter(KEY_L, Press::Up);
+
+        keys.set("Ctrl+Alt+L");
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass, "no modifier");
+        keys.filter(KEY_L, Press::Up);
+        keys.filter(KEY_LEFTCTRL, Press::Down);
+        keys.filter(KEY_LEFTALT, Press::Down);
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Fired);
+        assert_eq!(keys.filter(KEY_L, Press::Repeat), Toggle::Swallow);
+        assert_eq!(keys.filter(KEY_L, Press::Up), Toggle::Swallow);
+        assert_eq!(keys.filter(KEY_A, Press::Down), Toggle::Pass);
+        keys.filter(KEY_A, Press::Up);
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Fired, "and back");
+
+        keys.set("");
+        assert_eq!(keys.wanted, None);
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass);
     }
 }

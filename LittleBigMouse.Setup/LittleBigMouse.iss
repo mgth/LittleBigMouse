@@ -215,31 +215,62 @@ begin
   RunSystem('netsh.exe', 'advfirewall firewall delete rule name="' + InputServiceRuleName + '"');
 end;
 
+function InputServiceExists: Boolean;
+begin
+  Result := RunSystem('sc.exe', 'query ' + InputServiceName);
+end;
+
+{ Said in a message box and in the log; a silent install with /SUPPRESSMSGBOXES logs it
+  as answered. The service task's steps cannot fail the install itself: by then the
+  files are in place. }
+procedure InputServiceFailed(const Step: String);
+begin
+  Log('Input service: ' + Step + ' failed');
+  SuppressibleMsgBox('Little Big Mouse input service: ' + Step + ' failed. ' +
+                     'Another PC will not be able to drive this one on the secure desktop ' +
+                     'until it is fixed; see the setup log, or run the setup again.',
+                     mbError, MB_OK, IDOK);
+end;
+
 procedure InstallInputService;
 var
-  Exe: String;
+  Exe, Config: String;
 begin
   Exe := ExpandConstant('{app}\lbm-service.exe');
-  { Over an older install: the same name, made anew with this version's path. }
-  RemoveInputService;
-  if not RunSystem('sc.exe', 'create ' + InputServiceName +
-                   ' binPath= "\"' + Exe + '\" run" start= delayed-auto' +
-                   ' DisplayName= "Little Big Mouse input service"') then begin
-    SuppressibleMsgBox('The Little Big Mouse input service could not be installed.',
-                       mbError, MB_OK, IDOK);
+  Config := ' binPath= "\"' + Exe + '\" run" start= delayed-auto' +
+            ' DisplayName= "Little Big Mouse input service"';
+  { An existing service is reconfigured, not deleted and made again: a deletion only
+    marks it while anything holds a handle to it (services.msc, a monitoring tool),
+    and the create that followed would fail on the name, then lose the service when
+    that handle closed. }
+  if InputServiceExists then begin
+    StopInputService;
+    if not RunSystem('sc.exe', 'config ' + InputServiceName + Config) then begin
+      InputServiceFailed('updating the service');
+      Exit;
+    end;
+  end else if not RunSystem('sc.exe', 'create ' + InputServiceName + Config) then begin
+    InputServiceFailed('creating the service');
     Exit;
   end;
   RunSystem('sc.exe', 'description ' + InputServiceName +
             ' "Lets an approved multi-PC master drive this PC everywhere, UAC prompts and the lock screen included."');
-  { Restarted after a crash, at most twice a day before giving up until the next boot. }
+  { Restarted after a crash twice at most, then left stopped: the SCM repeats the last
+    action for every later failure, hence the third one, which does nothing. The count
+    starts again after a day without failure. }
   RunSystem('sc.exe', 'failure ' + InputServiceName +
-            ' reset= 86400 actions= restart/5000/restart/30000');
+            ' reset= 86400 actions= restart/5000/restart/30000/""/0');
   { Same shape as the agent's rule: inbound TCP, this port, this program, the local
-    subnet; the link is mutual TLS and admits approved masters only. }
-  RunSystem('netsh.exe', 'advfirewall firewall add rule name="' + InputServiceRuleName + '"' +
-            ' dir=in action=allow protocol=TCP localport=' + InputServicePort +
-            ' program="' + Exe + '" remoteip=localsubnet profile=any enable=yes');
-  RunSystem('net.exe', 'start ' + InputServiceName);
+    subnet; the link is mutual TLS and admits approved masters only. Deleted first:
+    "add rule" never replaces. }
+  RunSystem('netsh.exe', 'advfirewall firewall delete rule name="' + InputServiceRuleName + '"');
+  if not RunSystem('netsh.exe', 'advfirewall firewall add rule name="' + InputServiceRuleName + '"' +
+                   ' dir=in action=allow protocol=TCP localport=' + InputServicePort +
+                   ' program="' + Exe + '" remoteip=localsubnet profile=any enable=yes') then
+    InputServiceFailed('the firewall rule');
+  { It refuses to start where others than administrators can change its files. }
+  if not RunSystem('net.exe', 'start ' + InputServiceName) then
+    InputServiceFailed('starting the service');
 end;
 
 procedure StopLittleBigMouse;

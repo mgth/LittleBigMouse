@@ -250,6 +250,40 @@ public class WallpaperSlotOrderTests
     }
 
     [Fact]
+    public void Plan_DetachedEntryBesideAFailedLookup_KeepsTheCertainPairs()
+    {
+        // Three active monitors (Left, Right, Primary) and a historical one. The historical
+        // one answers S_FALSE (not attached), Right fails: Right is the hole, not the
+        // historical entry, and the Left slot is still known to paint the primary.
+        var desktop = new FakeDesktop((PathL, Left), (@"\\?\DISPLAY#OLD#1", new WinDef.Rect()), (PathR, Right), (PathP, Primary))
+        {
+            Detached = { @"\\?\DISPLAY#OLD#1" },
+            RectFailures = { [PathR] = int.MaxValue },
+        };
+
+        var plan = PlanOf(desktop, 3);
+
+        Assert.False(plan.Complete);
+        Assert.Equal([(PathL, PathP)], plan.Pairs.Select(p => (p.Filed.DevicePath, p.Painted.DevicePath)));
+    }
+
+    [Fact]
+    public void Write_DetachedEntryBesideAFailedLookup_WritesOnlyTheCertainPair()
+    {
+        var desktop = new FakeDesktop((PathL, Left), (@"\\?\DISPLAY#OLD#1", new WinDef.Rect()), (PathR, Right), (PathP, Primary))
+        {
+            Detached = { @"\\?\DISPLAY#OLD#1" },
+            RectFailures = { [PathR] = int.MaxValue },
+        };
+
+        WindowsWallpaperService.WriteImages(desktop,
+            [Screen(Left, "left.png", PathL), Screen(Right, "right.png", PathR), Screen(Primary, "primary.png", PathP)],
+            3, NoDelay);
+
+        Assert.Equal([(PathL, "primary.png")], desktop.Writes);
+    }
+
+    [Fact]
     public void Plan_CountThatDoesNotAddUp_IsUnusable()
     {
         // Two unreadable slots, one missing monitor: which one is on the desktop is unknown.
@@ -305,6 +339,8 @@ public class WallpaperSlotOrderTests
         /// <summary>Per path, how many GetMonitorRECT calls fail before it succeeds.</summary>
         public Dictionary<string, int> RectFailures { get; } = [];
         public bool CountFails { get; init; }
+        /// <summary>Paths whose GetMonitorRECT answers S_FALSE: listed, not attached.</summary>
+        public HashSet<string> Detached { get; } = [];
 
         public HResult SetWallpaper(string monitorId, string wallpaper)
         {
@@ -336,6 +372,7 @@ public class WallpaperSlotOrderTests
 
         public HResult GetMonitorRECT(string monitorId, ref WinDef.Rect displayRect)
         {
+            if (Detached.Contains(monitorId)) return HResult.False;
             if (RectFailures.TryGetValue(monitorId, out var left) && left > 0)
             {
                 RectFailures[monitorId] = left - 1;

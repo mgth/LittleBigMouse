@@ -27,6 +27,7 @@ fn state(peers: Vec<Peer>) -> State {
         error: None,
         pointer_lock_shortcut: String::new(),
         pointer_locked: false,
+        clipboard: Default::default(),
         peers,
     }
 }
@@ -214,6 +215,48 @@ fn this_machine_shows_its_name_fingerprint_and_address() {
     assert_eq!(
         h.get_by_label("Name").accesskit_node().value().as_deref(),
         Some("desk")
+    );
+}
+
+#[test]
+fn each_way_of_the_clipboard_is_asked_of_the_agent_on_its_own() {
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    h.get_by_role_and_label(
+        egui::accesskit::Role::CheckBox,
+        "Receive the others' clipboards",
+    )
+    .click();
+    h.run();
+    assert_eq!(
+        h.state().did,
+        Some(Did::Clipboard {
+            send: false,
+            receive: true
+        })
+    );
+    let mut sharing = state(Vec::new());
+    sharing.clipboard = machines::Clipboard {
+        send: true,
+        receive: true,
+        active: false,
+        problem: Some("the compositor does not let the clipboard be shared".into()),
+    };
+    h.state_mut().state = Some(sharing);
+    h.state_mut().did = None;
+    h.run();
+    assert!(h
+        .query_by_label("the compositor does not let the clipboard be shared")
+        .is_some());
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Send this clipboard")
+        .click();
+    h.run();
+    assert_eq!(
+        h.state().did,
+        Some(Did::Clipboard {
+            send: false,
+            receive: true
+        })
     );
 }
 

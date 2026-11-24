@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use lbm_ipc::peer::PeerDisplay;
 use lbm_layout::model::Layout;
-use lbm_ui::machines::{Blocked, Did, Peer, Role, State};
+use lbm_ui::machines::{Blocked, Clipboard, Did, Peer, Role, State};
 use serde_json::{json, Value};
 
 /// The agent's capability for everything here.
@@ -118,6 +118,12 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         error: value["Error"].as_str().map(str::to_owned),
         pointer_lock_shortcut: text(value, "PointerLockShortcut"),
         pointer_locked: value["PointerLocked"].as_bool().unwrap_or(false),
+        clipboard: Clipboard {
+            send: value["Clipboard"]["Send"].as_bool().unwrap_or(false),
+            receive: value["Clipboard"]["Receive"].as_bool().unwrap_or(false),
+            active: value["Clipboard"]["Active"].as_bool().unwrap_or(false),
+            problem: value["Clipboard"]["Problem"].as_str().map(str::to_owned),
+        },
         peers,
     };
     Some((state, remotes))
@@ -427,6 +433,10 @@ impl Controller {
                 "SetMultiPc",
                 json!({ "Enabled": enabled, "PointerLockShortcut": shortcut }),
             ),
+            Did::Clipboard { send, receive } => (
+                "SetMultiPc",
+                json!({ "Enabled": enabled, "ClipboardSend": send, "ClipboardReceive": receive }),
+            ),
             Did::Connect(address) => ("PeerConnect", json!({ "Address": address })),
             Did::Accept(id) => ("PeerAccept", json!({ "MachineId": id })),
             Did::Refuse(id) => ("PeerRefuse", json!({ "MachineId": id })),
@@ -691,6 +701,40 @@ mod tests {
         assert!(!machines.heard(&driven), "being driven rebuilds no map");
         driven["DrivenBy"] = Value::Null;
         assert_eq!(drives(&driven), [false, false]);
+    }
+
+    #[test]
+    fn the_clipboard_is_read_from_the_state_and_set_with_the_mode_left_as_it_is() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut value = state(json!([]));
+        assert_eq!(
+            read(&value).unwrap().0.clipboard,
+            Clipboard::default(),
+            "an older agent says nothing: not shared"
+        );
+        value["Clipboard"] = json!({"Send": true, "Receive": false, "MaxBytes": 1,
+                                    "Active": true, "Problem": "too large"});
+        assert_eq!(
+            read(&value).unwrap().0.clipboard,
+            Clipboard {
+                send: true,
+                receive: false,
+                active: true,
+                problem: Some("too large".into()),
+            }
+        );
+        machines.heard(&value);
+        assert_eq!(
+            machines.request(&Did::Clipboard {
+                send: true,
+                receive: true
+            }),
+            (
+                "SetMultiPc",
+                json!({ "Enabled": true, "ClipboardSend": true, "ClipboardReceive": true })
+            )
+        );
     }
 
     #[test]

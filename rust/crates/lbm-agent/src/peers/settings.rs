@@ -30,6 +30,17 @@ pub struct Settings {
     /// watches for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pointer_lock_shortcut: Option<String>,
+    /// What is copied here is offered to the other machines (docs/multi-pc-etat.md,
+    /// "Presse-papiers partagé"). Off unless the user turned it on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clipboard_send: bool,
+    /// What is copied on the other machines can be pasted here. Off unless the user
+    /// turned it on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clipboard_receive: bool,
+    /// The largest clipboard that crosses, either way. Absent: 64 MiB.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clipboard_max_bytes: Option<u64>,
 }
 
 fn default_port() -> u16 {
@@ -43,11 +54,25 @@ impl Default for Settings {
             port: default_port(),
             name: None,
             pointer_lock_shortcut: None,
+            clipboard_send: false,
+            clipboard_receive: false,
+            clipboard_max_bytes: None,
         }
     }
 }
 
 impl Settings {
+    /// What the shared clipboard may do.
+    pub fn clipboard(&self) -> super::clipboard::Options {
+        super::clipboard::Options {
+            send: self.clipboard_send,
+            receive: self.clipboard_receive,
+            max_bytes: self
+                .clipboard_max_bytes
+                .unwrap_or(super::clipboard::DEFAULT_MAX_BYTES),
+        }
+    }
+
     /// The settings kept in `directory`. A missing or unreadable file is the defaults —
     /// the mode off — rather than an error: the agent has nothing better to do with it,
     /// and the next change replaces it.
@@ -117,6 +142,15 @@ mod tests {
         assert_eq!(settings, Settings::default());
         assert!(!settings.enabled);
         assert_eq!(settings.port, lbm_net::DEFAULT_PORT);
+        let clipboard = settings.clipboard();
+        assert!(
+            !clipboard.send && !clipboard.receive,
+            "the clipboard is not shared"
+        );
+        assert_eq!(
+            clipboard.max_bytes,
+            super::super::clipboard::DEFAULT_MAX_BYTES
+        );
         assert!(!settings.effective_name().is_empty());
         assert!(
             std::fs::read_dir(dir.path()).unwrap().next().is_none(),
@@ -132,6 +166,7 @@ mod tests {
             port: 30000,
             name: Some("desk".into()),
             pointer_lock_shortcut: Some("Ctrl+Alt+L".into()),
+            ..Settings::default()
         };
         settings.save(dir.path()).unwrap();
         assert_eq!(Settings::load(dir.path()), settings);

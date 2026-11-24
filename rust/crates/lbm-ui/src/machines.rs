@@ -115,6 +115,10 @@ pub struct Clipboard {
     pub active: bool,
     /// Why it cannot be shared here, or why the last transfer failed.
     pub problem: Option<String>,
+    /// Where the files of another machine are fetched to before they are pasted.
+    pub reception: String,
+    /// The size of the files being fetched now.
+    pub fetching: Option<u64>,
 }
 
 /// What the user is typing on the page, kept between frames.
@@ -526,6 +530,21 @@ fn clipboard(ui: &mut egui::Ui, state: &Clipboard) -> Option<Did> {
             });
         }
         crate::options::note(ui, &clipboard_note(state));
+        if state.receive && !state.reception.is_empty() {
+            crate::options::note(
+                ui,
+                &format!(
+                    "Files from another machine are fetched to {} before they are pasted.",
+                    state.reception
+                ),
+            );
+        }
+        if let Some(bytes) = state.fetching {
+            ui.label(format!(
+                "Receiving files ({}); paste again once they are here.",
+                size(bytes)
+            ));
+        }
         if let Some(problem) = &state.problem {
             ui.colored_label(ui.visuals().warn_fg_color, problem);
         }
@@ -533,10 +552,25 @@ fn clipboard(ui: &mut egui::Ui, state: &Clipboard) -> Option<Did> {
     did
 }
 
+/// A size in bytes as people read it.
+pub fn size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    if bytes < 1000 {
+        return format!("{bytes} bytes");
+    }
+    let mut value = bytes as f64 / 1000.0;
+    let mut unit = 0;
+    while value >= 1000.0 && unit + 1 < UNITS.len() {
+        value /= 1000.0;
+        unit += 1;
+    }
+    format!("{value:.1} {}", UNITS[unit])
+}
+
 /// What the clipboard's group says under its switches.
 pub fn clipboard_note(state: &Clipboard) -> String {
     if !state.send && !state.receive {
-        "Text and pictures. The content crosses only when it is pasted.".to_owned()
+        "Text, pictures and files. The content crosses only when it is pasted.".to_owned()
     } else if state.active {
         "Shared with the machines linked now. The content crosses only when it is pasted."
             .to_owned()

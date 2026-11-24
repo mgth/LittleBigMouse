@@ -310,8 +310,9 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 - **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
-- **Presse-papiers** : palier 1 (texte et image) codé, essayé sur la paire réelle : il
-  passe dans les deux sens ; voir la section suivante. Fichiers et glisser-déposer viennent après.
+- **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
+  dans les deux sens ; les fichiers (PR #822) passent aussi ;
+  glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
 - ~~**Pare-feu Windows**~~ : fait (PR #811). L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
   `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
@@ -333,7 +334,8 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 ## Presse-papiers partagé
 
-Palier 1 (**texte et image**, dans les deux sens) codé : PR « presse-papiers, palier 1 ».
+Palier 1 (**texte et image**, dans les deux sens) codé : PR #821. Palier 3 (**fichiers**)
+codé : PR #822. Les trois passent sur la paire réelle. Glisser-déposer étudié, non codé.
 Le contrat est dans [`multi-pc.md`](multi-pc.md), « Shared clipboard ». Ce qui suit dit
 ce qui a été tranché, et ce qui n'a jamais tourné.
 
@@ -384,14 +386,107 @@ pris en charge, l'état le dit. GNOME n'a ni l'un ni l'autre.
 
 | Palier | Contenu | Windows | Linux | État |
 |---|---|---|---|---|
-| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé, passe dans les deux sens (essai réel du 2026-11-24) |
-| 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé, passe dans les deux sens (essai réel du 2026-11-24) |
+| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
+| 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
 | 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | Pas commencé ; l'en-tête de `HTML Format` (décalages) est à reconstruire |
-| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Voir la PR suivante |
-| 4 | Glisser-déposer entre machines | — | — | Dépend du palier 3 |
+| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Codé (PR #822), fonctionne sur la paire réelle (essai du 2026-11-24) |
+| 4 | Glisser-déposer entre machines | — | — | Étudié, non codé : voir plus bas |
 
 Le texte brut d'une source qui n'offre que du HTML n'est pas proposé : la plupart des
 applications offrent déjà `text/plain` à côté.
+
+### Fichiers (palier 3)
+
+Le contrat est dans `multi-pc.md`. Ce qui a décidé de la forme :
+
+- **Les deux presse-papiers de fichiers ne portent que des chemins.** Dolphin lit
+  `text/uri-list` puis copie depuis ces chemins ; l'explorateur lit `CF_HDROP` puis fait
+  de même. Les fichiers doivent donc exister localement au moment où l'application lit :
+  ils sont rapatriés d'abord dans un dossier propre au collage, sous le dossier de
+  réception, et c'est de là que l'application copie. Conséquence assumée : les fichiers
+  existent deux fois sur la machine qui colle (le dossier de réception n'est pas vidé,
+  un collage pouvant encore y lire).
+- **Combien de temps un lecteur attend.** Vérifié dans les sources : une application Qt
+  sous Wayland abandonne après **une seconde sans données**, délai remis à zéro à chaque
+  paquet, et bloque son fil d'interface pendant ce temps
+  (`QWaylandMimeData::readData`, qtwayland 6.8) ; GTK 4 n'a pas de délai. Windows
+  abandonne `WM_RENDERFORMAT` après **30 s**, non réglable (Raymond Chen, *The Old New
+  Thing*, 2022-06-09). Garder le tuyau ouvert en y écrivant des commentaires `#` de
+  `text/uri-list` pendant le transfert aurait contourné la seconde de Qt, mais **Klipper
+  lit les URI de chaque sélection**, dans plasmashell : il l'aurait figé pendant tout le
+  transfert. D'où le choix : le rapatriement démarre à la première lecture et continue
+  seul ; une lecture qui abandonne avant ne coûte rien ; le collage suivant obtient les
+  fichiers aussitôt. L'interface dit « Réception des fichiers (taille) ; collez à
+  nouveau une fois arrivés ». Avec Klipper, le rapatriement démarre donc dès la copie,
+  dans la borne de 4 Gio.
+- **`CFSTR_FILEDESCRIPTOR` / `CFSTR_FILECONTENTS`** (collage différé sous Windows) : ce
+  serait la forme juste côté Windows — l'explorateur lit alors le contenu en flux, avec
+  sa propre fenêtre de progression et son bouton Annuler, sans copie intermédiaire. Mais
+  ces formats ne passent que par un `IDataObject` posé avec `OleSetClipboard` (un objet
+  COM, un `IStream` par fichier), ce qui remplace tout le rendu différé de la fenêtre
+  message-only, et rien de cela ne peut être vérifié sans exécuter sous Windows. Laissé
+  pour une PR qui l'essaiera sur la vm124. Sous Linux il n'y a pas d'équivalent sans
+  système de fichiers virtuel (FUSE, kio-fuse).
+- **Annulation** : changer de copie, couper la réception ou perdre le lien arrête le
+  rapatriement, prévient l'autre machine (`ClipboardAbort`) et supprime ce qui avait été
+  écrit. L'application qui attendait reçoit un échec. Il n'y a pas de bouton Annuler.
+
+**Essayé le 2026-11-24 sur la paire du mainteneur** (KDE Plasma 6.8.3 Wayland ↔
+Windows 11 vm124, `f1c04196`) : **les fichiers passent.** Non relevé : le sens ou les
+deux, les applications, la taille, ni si le premier collage a échoué avant l'arrivée des
+fichiers. Avant cela, les essais étaient deux agents en boucle locale (dossier, sous-dossier, fichier de plus d'une plage,
+fichier vide, second collage servi sans nouveau transfert, borne, nom hors du dossier
+refusé, émetteur parti en plein transfert) et les conversions `CF_HDROP` ↔ chemins et
+`text/uri-list` ↔ chemins.
+
+### Glisser-déposer entre machines : étude (palier 4)
+
+Conclusion : **pas faisable proprement aujourd'hui ; non codé.** Le copier-coller de
+fichiers couvre le besoin sans les contorsions ci-dessous.
+
+**Ce que font les autres.** Ni Deskflow ni Input Leap ne copient de fichiers par le
+presse-papiers (leurs formats : texte, HTML, images). Synergy 1.x avait un glisser-déposer
+Windows/macOS, désactivé par défaut, qu'Input Leap garde en l'état et que **Deskflow a
+supprimé en mai 2025** (commit `5365e34f`, « broken on all platforms »). Son principe sous
+Windows : quand le pointeur quitte l'écran bouton tenu, déplacer une petite fenêtre
+cachée, cible OLE (`RegisterDragDrop`), sous le curseur, simuler Échap puis le relâchement
+du bouton pour **voler le dépôt** et apprendre le chemin, puis envoyer le fichier (un
+seul). Côté cible, seul macOS recréait un glisser (vue Cocoa factice) ; sous Windows le
+fichier était simplement écrit sur le Bureau. Linux n'a jamais été pris en charge.
+
+**Détecter qu'un glisser franchit le bord.**
+- Windows (source) : le hook voit le bouton tenu, pas ce qui est glissé. Il faudrait une
+  cible OLE sous le curseur au moment du franchissement (une bande au bord, montrée
+  seulement bouton tenu) : `DragEnter` donne l'`IDataObject`, d'où `CF_HDROP`, sans
+  déposer. Reste la boucle `DoDragDrop` de la source, qui garde la capture : pendant que
+  le pointeur est sur l'autre machine le hook avale les entrées, la source ne voit jamais
+  le relâchement, et il faut l'annuler (Échap simulé) au retour ou au dépôt distant.
+- Wayland (source) : un client ne voit un glisser d'un autre client que quand il passe
+  sur **sa propre surface** (`wl_data_device.enter`) ; `ext-data-control-v1` ne parle
+  pas du tout de glisser. Il faudrait une surface layer-shell en bande au bord, montrée
+  seulement bouton tenu, sinon elle volerait les clics du bord (barres de défilement).
+  Faisable sous KWin, fragile, et sans équivalent sous GNOME.
+
+**Reprendre le glisser côté cible.**
+- Windows : `DoDragDrop` sur le fil de l'agent avec un `IDataObject` à nous ; il suit le
+  bouton injecté par `SendInput`, ce qui fonctionne en principe. Mais au dépôt
+  l'explorateur demande `CF_HDROP` (fichiers locaux, donc rapatriés avant de répondre,
+  interface figée) ou `CFSTR_FILEDESCRIPTOR`/`FILECONTENTS` (le même objet COM que pour
+  le collage différé, plus `IDataObjectAsyncCapability`). Synergy n'a jamais fait cette
+  moitié.
+- Wayland : `wl_data_device.start_drag` exige le *serial* d'un appui de bouton **sur une
+  surface du client** (prise implicite). L'agent devrait montrer une surface sous le
+  pointeur à l'entrée, y faire arriver l'appui injecté, puis lancer le glisser :
+  l'équivalent de la vue factice de Synergy sous macOS, contraire au fonctionnement
+  normal du compositeur. Aucun protocole ne permet à un client sans focus de démarrer un
+  glisser.
+
+**Ce qui rendrait la chose propre** : côté Windows, l'objet COM
+`FILEDESCRIPTOR`/`FILECONTENTS` (utile d'abord au collage, voir plus haut) ; côté Wayland,
+un protocole de glisser pour les outils de partage d'entrée (rien n'existe, ni dans
+`wayland-protocols` ni dans le portail `InputCapture`). Sans les deux, un glisser
+partiel (Windows → Windows seulement) serait possible, au prix de la bande cible et des
+Échap simulés de Synergy ; je ne le recommande pas.
 
 ### Garde-fous en place
 
@@ -487,8 +582,8 @@ macOS n'a de sens qu'après.
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
    Windows ») ; reste le service Windows pour le bureau sécurisé et l'utilisateur
    standard (conception : [`multi-pc-service-windows.md`](multi-pc-service-windows.md)).
-6. Presse-papiers : essayer le palier 1 sur la paire réelle, puis les fichiers (palier 3),
-   puis le palier 2.
+6. Presse-papiers : texte, image et fichiers passent sur la paire réelle ; suivent
+   `FILEDESCRIPTOR`/`FILECONTENTS` sous Windows, puis le palier 2.
 7. Plusieurs esclaves.
 8. GNOME, X11, portail `InputCapture`.
 9. macOS esclave, si quelqu'un peut l'essayer.

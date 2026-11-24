@@ -241,12 +241,17 @@ fn each_way_of_the_clipboard_is_asked_of_the_agent_on_its_own() {
         receive: true,
         active: false,
         problem: Some("the compositor does not let the clipboard be shared".into()),
+        reception: "/home/me/Downloads/LittleBigMouse".into(),
+        fetching: Some(12_400_000),
     };
     h.state_mut().state = Some(sharing);
     h.state_mut().did = None;
     h.run();
     assert!(h
         .query_by_label("the compositor does not let the clipboard be shared")
+        .is_some());
+    assert!(h
+        .query_by_label("Receiving files (12.4 MB); paste again once they are here.")
         .is_some());
     h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Send this clipboard")
         .click();

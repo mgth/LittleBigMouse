@@ -438,6 +438,36 @@ sees it.
   reason (the clipboard changed since, the bound, sending off). The clipboard does not
   follow the pointer: syncing at the crossing would tie it to the input path, and the
   on-demand transfer already keeps an unread copy off the network.
+- **Files** (palier 3): `Files` is `text/uri-list` (and `x-special/gnome-copied-files`
+  when offered) under Wayland, `CF_HDROP` on Windows. The offer lists every entry,
+  folders walked, links not followed (`Files: [{ Path: "photos/2026/a.jpg", Size,
+  Folder }]`, `/`-separated, a folder before its content), within a bound for the whole
+  set (`ClipboardFilesMaxBytes`, 4 GiB by default, 10 000 entries). Both systems' file
+  clipboards hold paths, not content, so the receiver fetches every file first, range by
+  range (`ClipboardRequest { Item, Offset, Length }`, at most 4 MiB a range, the next one
+  asked once the last is written), into a folder of its own under the reception folder,
+  created new for that paste (a name taken, by another agent sharing the folder say, is
+  never reused, and an abandon removes only the folder it created)
+  (`ClipboardFolder`, `Downloads/LittleBigMouse` by default), then hands the application
+  those paths; it copies from there. A name that would land outside that folder (`..`,
+  an absolute path, a drive) refuses the whole offer, and so do two entries that would
+  land on one file (`Photo.jpg` and `photo.jpg` where case is ignored, or after names
+  Windows cannot hold were made fit); and since the volume of the reception folder may
+  ignore case where the system does not (a share), every entry is created only if absent,
+  and one landing on another fails the paste rather than overwrite it. A name that is not
+  UTF-8 is not offered: the wire carries names as text; a narrow `CF_HDROP` is decoded in
+  the ANSI code page, and one it cannot decode is not read. Every range is read from the
+  very file that was listed — not a link since, the same file (device and inode on Unix,
+  volume and file index on Windows), size and time, checked before and after the read —
+  or the paste fails rather than mix two versions; the size announced is that very
+  file's. A copy emptied or replaced while its files are listed is never offered, nor
+  one whose listing outlived the clipboard closing. A list too large for one control message is not offered,
+  and the copier's state says so. Paths go between the system clipboard and the sharing
+  NUL-separated, exactly as the system has them. The fetch starts at the first read and is not tied to it: the reader may
+  give up first (a Qt application under Wayland after one second without data, Windows
+  after 30 s), and a paste once the files are here gets them at once. A fetch is stopped,
+  and what it wrote removed, when the offer is replaced or its machine leaves; what a fetch
+  finished stays, as a paste may be copying from it.
 - **Formats** (palier 1): `Text` (UTF-8, `\n` line ends; `CF_UNICODETEXT` with `\r\n` on
   Windows, `text/plain;charset=utf-8` and its aliases under Wayland) and `Png` (`image/png`;
   on Windows the registered `PNG` format when the source offers one, else `CF_DIB`

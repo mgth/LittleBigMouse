@@ -36,6 +36,7 @@
 
 mod actor;
 pub mod clipboard;
+pub mod clipboard_files;
 pub mod hook_input;
 pub mod local;
 pub mod overlay;
@@ -318,6 +319,8 @@ impl PeersState {
 
 /// What the manager tells the agent.
 #[derive(Clone, Debug)]
+// The state is the notice sent most: boxing it would cost every one of them.
+#[allow(clippy::large_enum_variant)]
 pub enum Notice {
     /// The state changed (a machine connected, paired, left, or reported its screens).
     Peers(PeersState),
@@ -366,11 +369,14 @@ pub enum PeerRequest {
 }
 
 /// What `SetMultiPc` changes of the shared clipboard; `None` leaves a field as it is.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ClipboardChange {
     pub send: Option<bool>,
     pub receive: Option<bool>,
     pub max_bytes: Option<u64>,
+    pub files_max_bytes: Option<u64>,
+    /// The reception folder; empty goes back to the default.
+    pub folder: Option<String>,
 }
 
 /// An answer now, or one to await (in a task of the caller's, never its loop).
@@ -708,6 +714,13 @@ impl Service {
         if let Some(max_bytes) = clipboard.max_bytes {
             next.clipboard_max_bytes = Some(max_bytes);
         }
+        if let Some(max_bytes) = clipboard.files_max_bytes {
+            next.clipboard_files_max_bytes = Some(max_bytes);
+        }
+        if let Some(folder) = clipboard.folder {
+            let folder = folder.trim();
+            next.clipboard_folder = (!folder.is_empty()).then(|| PathBuf::from(folder));
+        }
         if let Some(shortcut) = pointer_lock_shortcut {
             let shortcut = shortcut.trim().to_owned();
             next.pointer_lock_shortcut = (!shortcut.is_empty()).then_some(shortcut);
@@ -731,6 +744,8 @@ impl Service {
             clipboard_send: self.settings.clipboard_send,
             clipboard_receive: self.settings.clipboard_receive,
             clipboard_max_bytes: self.settings.clipboard_max_bytes,
+            clipboard_files_max_bytes: self.settings.clipboard_files_max_bytes,
+            clipboard_folder: self.settings.clipboard_folder.clone(),
             ..next.clone()
         } == self.settings;
         let unchanged = same_links && (self.running.is_some() || !enabled);
@@ -858,6 +873,9 @@ impl Service {
                     send: options.send,
                     receive: options.receive,
                     max_bytes: options.max_bytes,
+                    files_max_bytes: options.files_max_bytes,
+                    reception: options.reception.to_string_lossy().into_owned(),
+                    fetching: None,
                     active: false,
                     problem: None,
                 }

@@ -57,6 +57,10 @@ impl Node {
         self._dir.path()
     }
 
+    fn reception(&self) -> std::path::PathBuf {
+        self.dir().join("reception")
+    }
+
     async fn ask(&mut self, request: PeerRequest) -> Result<Value, String> {
         match self.service.request(request) {
             Answer::Now(result) => result,
@@ -66,7 +70,11 @@ impl Node {
         }
     }
 
-    async fn set(&mut self, port: Option<u16>, clipboard: ClipboardChange) -> PeersState {
+    async fn set(&mut self, port: Option<u16>, mut clipboard: ClipboardChange) -> PeersState {
+        // Never the developer's own downloads.
+        clipboard
+            .folder
+            .get_or_insert_with(|| self.reception().to_string_lossy().into_owned());
         let state = self
             .ask(PeerRequest::Set {
                 enabled: true,
@@ -100,6 +108,7 @@ fn both_ways(max_bytes: Option<u64>) -> ClipboardChange {
         send: Some(true),
         receive: Some(true),
         max_bytes,
+        ..ClipboardChange::default()
     }
 }
 
@@ -200,7 +209,7 @@ async fn a_machine_that_only_sends_takes_nothing_from_the_other() {
     let send_only = ClipboardChange {
         send: Some(true),
         receive: Some(false),
-        max_bytes: None,
+        ..ClipboardChange::default()
     };
     let (desk, tower) = linked_pair(both_ways(None), send_only).await;
     desk.clipboard
@@ -283,6 +292,192 @@ async fn turning_sending_off_takes_the_offer_back_from_the_other_machine() {
     .expect("the offer taken back");
 }
 
+/// A folder with a file larger than one range, and a lone file, under `dir`.
+fn some_files(dir: &Path) -> (Vec<std::path::PathBuf>, Vec<u8>) {
+    let photos = dir.join("photos");
+    std::fs::create_dir_all(photos.join("2026")).unwrap();
+    let large: Vec<u8> = (0..(lbm_agent::peers::clipboard_files::RANGE as usize * 2 + 77))
+        .map(|i| (i % 253) as u8)
+        .collect();
+    std::fs::write(photos.join("2026/été.raw"), &large).unwrap();
+    std::fs::write(photos.join("empty"), b"").unwrap();
+    std::fs::write(dir.join("note.txt"), b"hello").unwrap();
+    (vec![photos, dir.join("note.txt")], large)
+}
+
+fn pack(paths: &[std::path::PathBuf]) -> Vec<u8> {
+    lbm_agent::peers::clipboard_files::pack_paths(paths)
+}
+
+#[tokio::test]
+async fn files_copied_on_one_machine_are_fetched_into_the_reception_folder_of_the_other() {
+    let (desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, large) = some_files(source.path());
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
+    assert_eq!(offered(&desk.clipboard).await, [ClipFormat::Files]);
+
+    let pasted = desk.clipboard.paste(ClipFormat::Files).await.unwrap();
+    let pasted = lbm_agent::peers::clipboard_files::unpack_paths(&pasted);
+    assert_eq!(pasted.len(), 2);
+    assert!(pasted.iter().all(|p| p.starts_with(desk.reception())));
+    assert_eq!(pasted[0].file_name().unwrap(), "photos");
+    assert_eq!(
+        std::fs::read(pasted[0].join("2026/été.raw")).unwrap(),
+        large
+    );
+    assert_eq!(std::fs::read(pasted[0].join("empty")).unwrap(), b"");
+    assert_eq!(std::fs::read(&pasted[1]).unwrap(), b"hello");
+
+    // A second paste is handed the same files, not fetched again.
+    let again = desk.clipboard.paste(ClipFormat::Files).await.unwrap();
+    assert_eq!(
+        lbm_agent::peers::clipboard_files::unpack_paths(&again),
+        pasted
+    );
+    assert_eq!(std::fs::read_dir(desk.reception()).unwrap().count(), 1);
+}
+
+#[tokio::test]
+async fn files_over_the_bound_are_not_offered_and_the_copier_says_why() {
+    let bounded = ClipboardChange {
+        files_max_bytes: Some(1000),
+        ..both_ways(None)
+    };
+    let (desk, mut tower) = linked_pair(both_ways(None), bounded).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, _) = some_files(source.path());
+    tower.clipboard.copy(vec![
+        (ClipFormat::Text, b"a caption".to_vec()),
+        (ClipFormat::Files, pack(&roots)),
+    ]);
+    // The text still crosses; the files do not.
+    assert_eq!(offered(&desk.clipboard).await, [ClipFormat::Text]);
+    let state = tower.until(|s| s.clipboard.problem.is_some()).await;
+    assert!(state.clipboard.problem.unwrap().contains("bound"));
+}
+
+#[tokio::test]
+async fn an_offer_of_files_that_would_land_outside_the_reception_folder_is_refused() {
+    use lbm_net::wire::{ClipFile, Control, Hello, CLIPBOARD_CAPABILITY};
+    let mut tower = Node::new();
+    let master = Identity::load_or_create(tempfile::tempdir().unwrap().path()).unwrap();
+    pair(tower.dir(), master.fingerprint(), "", Role::Master);
+    let address = tower
+        .set(Some(0), both_ways(None))
+        .await
+        .listen_address
+        .unwrap();
+    let mut hello = Hello::new("test master", "0", Role::Master);
+    hello.capabilities.push(CLIPBOARD_CAPABILITY.to_owned());
+    let link = link::connect(address.as_str(), &master, hello, link::Options::default())
+        .await
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    tower.until(|s| s.clipboard.active).await;
+    link.sender()
+        .control(&Control::ClipboardOffer {
+            serial: 1,
+            formats: vec![ClipFormat::Files],
+            files: vec![ClipFile {
+                path: "../../.bashrc".into(),
+                size: 4,
+                folder: false,
+            }],
+            seen: 0,
+            receiving: false,
+        })
+        .await
+        .unwrap();
+    let state = tower.until(|s| s.clipboard.problem.is_some()).await;
+    assert!(
+        state
+            .clipboard
+            .problem
+            .unwrap()
+            .contains("cannot be pasted"),
+        "refused for its name"
+    );
+    assert_eq!(tower.clipboard.content(), None, "nothing offered here");
+}
+
+#[tokio::test]
+async fn a_fetch_whose_sender_leaves_fails_and_leaves_nothing_behind() {
+    use lbm_net::link::Event as LinkEvent;
+    use lbm_net::wire::{ClipFile, Control, Hello, CLIPBOARD_CAPABILITY};
+    let mut tower = Node::new();
+    let master = Identity::load_or_create(tempfile::tempdir().unwrap().path()).unwrap();
+    pair(tower.dir(), master.fingerprint(), "", Role::Master);
+    let address = tower
+        .set(Some(0), both_ways(None))
+        .await
+        .listen_address
+        .unwrap();
+    let mut hello = Hello::new("test master", "0", Role::Master);
+    hello.capabilities.push(CLIPBOARD_CAPABILITY.to_owned());
+    let mut link = link::connect(address.as_str(), &master, hello, link::Options::default())
+        .await
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    tower.until(|s| s.clipboard.active).await;
+    link.sender()
+        .control(&Control::ClipboardOffer {
+            serial: 1,
+            formats: vec![ClipFormat::Files],
+            files: vec![ClipFile {
+                path: "big.bin".into(),
+                size: 1 << 20,
+                folder: false,
+            }],
+            seen: 0,
+            receiving: false,
+        })
+        .await
+        .unwrap();
+    offered(&tower.clipboard).await;
+    let clipboard = tower.clipboard.clone();
+    let paste = tokio::spawn(async move { clipboard.paste(ClipFormat::Files).await });
+    // The first range is asked for; the master leaves instead of sending it.
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match link.next().await {
+                Some(LinkEvent::Control(Control::ClipboardRequest { item, .. })) => {
+                    assert_eq!(item, Some(0));
+                    return;
+                }
+                Some(_) => {}
+                None => panic!("the link ended"),
+            }
+        }
+    })
+    .await
+    .expect("a request in time");
+    assert!(
+        tower.reception().read_dir().unwrap().count() == 1,
+        "fetching"
+    );
+    drop(link);
+    let error = tokio::time::timeout(PATIENCE, paste)
+        .await
+        .expect("the paste answered")
+        .unwrap()
+        .unwrap_err();
+    assert!(!error.is_empty());
+    tokio::time::timeout(PATIENCE, async {
+        while tower.reception().read_dir().unwrap().count() > 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("what was fetched is removed");
+}
+
 #[tokio::test]
 async fn two_copies_made_at_once_settle_on_one_that_both_sides_can_paste() {
     for _ in 0..5 {
@@ -339,4 +534,60 @@ async fn a_newer_copy_than_the_one_announced_is_never_sent() {
         .replace(vec![(ClipFormat::Text, b"not announced".to_vec())]);
     let error = desk.clipboard.paste(ClipFormat::Text).await.unwrap_err();
     assert!(error.contains("changed since"), "{error}");
+}
+
+#[tokio::test]
+async fn files_whose_copy_was_cleared_while_they_were_listed_are_never_offered() {
+    let (desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, _) = some_files(source.path());
+    // The listing reads the paths first: slow, so that the copy is emptied before it ends.
+    tower.clipboard.slow_reads(Duration::from_millis(200));
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
+    // Emptied once the paths were read, before the listing of the folder ends.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    tower.clipboard.copy(vec![]);
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !matches!(desk.clipboard.content(), Some(Content::Offer { formats, .. }) if formats.contains(&ClipFormat::Files)),
+            "the files of a copy gone are not offered"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_listing_cut_short_by_the_last_machine_leaving_is_not_offered_when_it_comes_back() {
+    let (mut desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, _) = some_files(source.path());
+    tower.clipboard.slow_reads(Duration::from_millis(300));
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    // The only machine the tower shares with goes while the files are being listed: the
+    // tower's clipboard closes.
+    let off = |enabled| PeerRequest::Set {
+        enabled,
+        port: None,
+        name: None,
+        pointer_lock_shortcut: None,
+        clipboard: ClipboardChange::default(),
+    };
+    desk.ask(off(false)).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    // And comes back: what was being listed then is not this machine's copy now.
+    desk.ask(off(true)).await.unwrap();
+    let tm = tower.machine_id.clone();
+    desk.until(|s| linked(s, &tm)).await;
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !matches!(desk.clipboard.content(), Some(Content::Offer { .. })),
+            "nothing is offered from a listing of a clipboard closed since"
+        );
+    }
 }

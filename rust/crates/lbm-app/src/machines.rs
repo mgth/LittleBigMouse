@@ -123,6 +123,11 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             receive: value["Clipboard"]["Receive"].as_bool().unwrap_or(false),
             active: value["Clipboard"]["Active"].as_bool().unwrap_or(false),
             problem: value["Clipboard"]["Problem"].as_str().map(str::to_owned),
+            reception: value["Clipboard"]["Reception"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            fetching: value["Clipboard"]["Fetching"].as_u64(),
         },
         peers,
     };
@@ -722,6 +727,8 @@ mod tests {
                 receive: false,
                 active: true,
                 problem: Some("too large".into()),
+                reception: String::new(),
+                fetching: None,
             }
         );
         machines.heard(&value);

@@ -47,7 +47,8 @@
 //! ```text
 //! -> {"Id": 9, "Method": "SetMultiPc", "Enabled": true, "Port": 24817, "Name": "desk",
 //!     "PointerLockShortcut": "Ctrl+Alt+L",                    // each optional but Enabled
-//!     "ClipboardSend": true, "ClipboardReceive": true, "ClipboardMaxBytes": 67108864}
+//!     "ClipboardSend": true, "ClipboardReceive": true, "ClipboardMaxBytes": 67108864,
+//!     "ClipboardFilesMaxBytes": 4294967296, "ClipboardFolder": "/home/me/Downloads/LBM"}
 //! <- {"Id": 9, "Result": {"Enabled": true, "Port": 24817, "Name": "desk",
 //!                         "PointerLockShortcut": "Ctrl+Alt+L", "PointerLocked": false,
 //!                         "MachineId": "<sha-256 hex>", "ListenAddress": "0.0.0.0:24817",
@@ -321,6 +322,20 @@ pub enum Request {
             skip_serializing_if = "Option::is_none"
         )]
         clipboard_max_bytes: Option<u64>,
+        /// The largest set of files that crosses, either way, in bytes.
+        #[serde(
+            rename = "ClipboardFilesMaxBytes",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        clipboard_files_max_bytes: Option<u64>,
+        /// Where the files of another machine are fetched to; empty for the default.
+        #[serde(
+            rename = "ClipboardFolder",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        clipboard_folder: Option<String>,
     },
     /// Connects to a machine as its master (`host`, `host:port`; the default port
     /// otherwise). Answered once it said who it is: the machine, `Pending` until the

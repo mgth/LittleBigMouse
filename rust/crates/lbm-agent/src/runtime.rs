@@ -823,6 +823,8 @@ impl<W: AgentWorld> Agent<W> {
                 clipboard_send,
                 clipboard_receive,
                 clipboard_max_bytes,
+                clipboard_files_max_bytes,
+                clipboard_folder,
             } => {
                 return self.ask_peers(
                     id,
@@ -836,6 +838,8 @@ impl<W: AgentWorld> Agent<W> {
                             send: clipboard_send,
                             receive: clipboard_receive,
                             max_bytes: clipboard_max_bytes,
+                            files_max_bytes: clipboard_files_max_bytes,
+                            folder: clipboard_folder,
                         },
                     },
                 )

@@ -3,6 +3,7 @@
 //! systems are tested on either.
 
 use std::io::Cursor;
+use std::path::PathBuf;
 
 /// Text as it crosses: lines ended by `\n`, whatever ended them here.
 pub fn text_to_wire(text: &str) -> String {
@@ -98,6 +99,108 @@ pub fn is_png(bytes: &[u8]) -> bool {
     bytes.starts_with(b"\x89PNG\r\n\x1a\n")
 }
 
+/// The local files of a `text/uri-list` (RFC 2483: one URI a line, `#` for a comment):
+/// what is not a `file:` URI of this machine is left out.
+pub fn paths_from_uri_list(list: &[u8]) -> Vec<PathBuf> {
+    String::from_utf8_lossy(list)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| url::Url::parse(line).ok())
+        .filter(|url| url.scheme() == "file")
+        .filter_map(|url| url.to_file_path().ok())
+        .collect()
+}
+
+/// `paths` as a `text/uri-list`, lines ended by `\r\n` as the RFC says.
+pub fn uri_list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .filter_map(|path| url::Url::from_file_path(path).ok())
+        .map(|url| format!("{url}\r\n"))
+        .collect()
+}
+
+/// `paths` as GNOME's file managers copy them (`x-special/gnome-copied-files`).
+pub fn gnome_copied_files(paths: &[PathBuf]) -> String {
+    let uris: Vec<String> = paths
+        .iter()
+        .filter_map(|path| url::Url::from_file_path(path).ok())
+        .map(|url| url.to_string())
+        .collect();
+    format!("copy\n{}", uris.join("\n"))
+}
+
+/// The size of a `DROPFILES` header, which `CF_HDROP` starts with.
+const DROPFILES: usize = 20;
+
+/// The paths of a `CF_HDROP`: a `DROPFILES` header (offset of the list, a point, two
+/// flags, the last saying wide characters), then the paths, each ended by a NUL, the
+/// list by another.
+///
+/// A narrow list is in the system's ANSI code page, which `ansi` decodes (Windows'
+/// `MultiByteToWideChar`); a name it cannot decode makes the whole list unreadable rather
+/// than a path mangled, which could name another file. A wide name is taken exactly.
+pub fn paths_from_dropfiles(
+    bytes: &[u8],
+    ansi: &dyn Fn(&[u8]) -> Option<PathBuf>,
+) -> Result<Vec<PathBuf>, String> {
+    let unreadable = || "the list of files copied cannot be read".to_owned();
+    if bytes.len() < DROPFILES {
+        return Err(unreadable());
+    }
+    let offset = u32::from_le_bytes(bytes[0..4].try_into().expect("4 bytes")) as usize;
+    let wide = u32::from_le_bytes(bytes[16..20].try_into().expect("4 bytes")) != 0;
+    let list = bytes.get(offset..).ok_or_else(unreadable)?;
+    if wide {
+        let units: Vec<u16> = list
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect();
+        units
+            .split(|unit| *unit == 0)
+            .take_while(|name| !name.is_empty())
+            .map(|name| wide_path(name).ok_or_else(unreadable))
+            .collect()
+    } else {
+        list.split(|byte| *byte == 0)
+            .take_while(|name| !name.is_empty())
+            .map(|name| ansi(name).ok_or_else(unreadable))
+            .collect()
+    }
+}
+
+/// A wide path as Windows has it: exactly, unpaired surrogates included.
+#[cfg(windows)]
+fn wide_path(units: &[u16]) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    Some(PathBuf::from(std::ffi::OsString::from_wide(units)))
+}
+
+/// A wide path elsewhere, for tests: what is not UTF-16 is unreadable.
+#[cfg(not(windows))]
+fn wide_path(units: &[u16]) -> Option<PathBuf> {
+    String::from_utf16(units).ok().map(PathBuf::from)
+}
+
+/// `paths` as a `CF_HDROP`, wide characters.
+pub fn dropfiles(paths: &[PathBuf]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(DROPFILES as u32).to_le_bytes());
+    bytes.extend_from_slice(&[0; 12]); // the point, and not in a non-client area
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    for path in paths {
+        for unit in path.to_string_lossy().encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        bytes.extend_from_slice(&[0, 0]);
+    }
+    bytes.extend_from_slice(&[0, 0]);
+    bytes
+}
+
 fn png(picture: &image::DynamicImage) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     picture
@@ -153,6 +256,55 @@ mod tests {
         assert_eq!(read.get_pixel(1, 0).0, [255, 255, 255, 255]);
         assert_eq!(read.get_pixel(0, 1).0, [0, 0, 255, 255]);
         assert_eq!(read.get_pixel(1, 1).0, [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn a_drop_list_reads_back_its_paths() {
+        let paths = vec![
+            PathBuf::from("C:\\Users\\me\\été.txt"),
+            PathBuf::from("D:\\b"),
+        ];
+        let ascii = |name: &[u8]| std::str::from_utf8(name).ok().map(PathBuf::from);
+        assert_eq!(
+            paths_from_dropfiles(&dropfiles(&paths), &ascii).unwrap(),
+            paths
+        );
+        assert!(paths_from_dropfiles(&[1, 2], &ascii).is_err());
+        // A narrow list, as an older application may set it, in the ANSI code page:
+        // here Windows-1252, where `été` is E9 74 E9.
+        let mut narrow = vec![0u8; 20];
+        narrow[0] = 20;
+        narrow.extend_from_slice(b"C:\\\xe9t\xe9\0C:\\b\0\0");
+        let cp1252 = |name: &[u8]| -> Option<PathBuf> {
+            Some(PathBuf::from(
+                name.iter()
+                    .map(|b| if *b == 0xe9 { 'é' } else { char::from(*b) })
+                    .collect::<String>(),
+            ))
+        };
+        assert_eq!(
+            paths_from_dropfiles(&narrow, &cp1252).unwrap(),
+            [PathBuf::from("C:\\été"), PathBuf::from("C:\\b")]
+        );
+        // A name the code page cannot decode makes the list unreadable, not mangled.
+        assert!(paths_from_dropfiles(&narrow, &|_| None).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_uri_list_holds_the_local_files_and_reads_back() {
+        let paths = vec![PathBuf::from("/home/me/été 1.txt"), PathBuf::from("/tmp/b")];
+        let list = uri_list(&paths);
+        assert_eq!(
+            list,
+            "file:///home/me/%C3%A9t%C3%A9%201.txt\r\nfile:///tmp/b\r\n"
+        );
+        assert_eq!(paths_from_uri_list(list.as_bytes()), paths);
+        assert_eq!(
+            paths_from_uri_list(b"# comment\nhttps://example.org/\nfile:///x\n"),
+            [PathBuf::from("/x")]
+        );
+        assert_eq!(gnome_copied_files(&paths[1..]), "copy\nfile:///tmp/b");
     }
 
     #[test]

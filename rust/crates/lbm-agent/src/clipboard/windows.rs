@@ -33,7 +33,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
 };
-use windows::Win32::System::Ole::{CF_DIB, CF_DIBV5, CF_UNICODETEXT};
+use windows::Win32::System::Ole::{CF_DIB, CF_DIBV5, CF_HDROP, CF_UNICODETEXT};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostMessageW,
     PostQuitMessage, RegisterClassExW, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP,
@@ -63,6 +63,7 @@ struct Formats {
     exclude: u32,
     history: u32,
     cloud: u32,
+    drop_effect: u32,
 }
 
 impl Formats {
@@ -76,6 +77,7 @@ impl Formats {
                 )),
                 history: RegisterClipboardFormatW(w!("CanIncludeInClipboardHistory")),
                 cloud: RegisterClipboardFormatW(w!("CanUploadToCloudClipboard")),
+                drop_effect: RegisterClipboardFormatW(w!("Preferred DropEffect")),
             }
         }
     }
@@ -282,6 +284,9 @@ fn changed(window: HWND) {
         {
             shared.push(ClipFormat::Png);
         }
+        if available(u32::from(CF_HDROP.0)) {
+            shared.push(ClipFormat::Files);
+        }
     }
     let _ = events.send(Event::Changed {
         copy,
@@ -365,6 +370,9 @@ fn delayed(format: ClipFormat, formats: Formats) -> Vec<u32> {
         // PNG for the applications that keep transparency; a DIB for every other one,
         // from which Windows makes CF_DIBV5 and CF_BITMAP when asked.
         ClipFormat::Png => vec![formats.png, u32::from(CF_DIB.0)],
+        // Paths of files fetched first, under the reception folder: Explorer copies them
+        // from there.
+        ClipFormat::Files => vec![u32::from(CF_HDROP.0)],
         ClipFormat::Unknown => Vec::new(),
     }
 }
@@ -391,6 +399,13 @@ fn offer(window: HWND, serial: u64, offered: Vec<ClipFormat>) {
         for flag in [formats.history, formats.cloud] {
             if let Some(memory) = global(&0u32.to_le_bytes()) {
                 let _ = SetClipboardData(flag, HANDLE(memory.0));
+            }
+        }
+        if offered.contains(&ClipFormat::Files) {
+            // A copy, never a move: the files fetched stay where they were fetched.
+            const DROPEFFECT_COPY: u32 = 1;
+            if let Some(memory) = global(&DROPEFFECT_COPY.to_le_bytes()) {
+                let _ = SetClipboardData(formats.drop_effect, HANDLE(memory.0));
             }
         }
         let _ = CloseClipboard();
@@ -427,6 +442,8 @@ fn render(windows_format: u32) {
         ClipFormat::Text
     } else if windows_format == formats.png || windows_format == u32::from(CF_DIB.0) {
         ClipFormat::Png
+    } else if windows_format == u32::from(CF_HDROP.0) {
+        ClipFormat::Files
     } else {
         return;
     };
@@ -466,6 +483,9 @@ fn render(windows_format: u32) {
                 return;
             }
         },
+        ClipFormat::Files => {
+            convert::dropfiles(&crate::peers::clipboard_files::unpack_paths(&data))
+        }
         ClipFormat::Unknown => return,
     };
     if let Some(memory) = global(&bytes) {
@@ -531,6 +551,14 @@ fn read(window: HWND, copy: u64, format: ClipFormat, limit: usize) -> Data {
             _ => bytes_of(u32::from(CF_DIB.0), limit.saturating_mul(8))
                 .and_then(|dib| convert::dib_to_png(&dib)),
         },
+        ClipFormat::Files => bytes_of(u32::from(CF_HDROP.0), limit).and_then(|drop| {
+            let paths = convert::paths_from_dropfiles(&drop, &ansi_path)?;
+            if paths.is_empty() {
+                Err("no file was copied".to_owned())
+            } else {
+                Ok(crate::peers::clipboard_files::pack_paths(&paths))
+            }
+        }),
         ClipFormat::Unknown => Err("not a format this reads".into()),
     };
     // SAFETY: opened above.
@@ -562,4 +590,21 @@ fn bytes_of(format: u32, limit: usize) -> Data {
         let _ = GlobalUnlock(memory);
         Ok(bytes)
     }
+}
+
+/// A name in the system's ANSI code page, as an older application puts it in `CF_HDROP`,
+/// or `None` when it is not valid there.
+fn ansi_path(name: &[u8]) -> Option<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::Globalization::{MultiByteToWideChar, CP_ACP, MB_ERR_INVALID_CHARS};
+    // SAFETY: the sizes are those of the slices passed.
+    let needed = unsafe { MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, name, None) };
+    if needed <= 0 {
+        return None;
+    }
+    let mut wide = vec![0u16; needed as usize];
+    // SAFETY: as above.
+    let written =
+        unsafe { MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, name, Some(&mut wide)) };
+    (written == needed).then(|| std::path::PathBuf::from(std::ffi::OsString::from_wide(&wide)))
 }

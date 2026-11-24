@@ -3,6 +3,8 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
+Mis à jour au fil des travaux : voir « Travaux en cours » à la fin.
+
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
 contrat technique (protocole, modèle, règles de sûreté) est dans
@@ -41,8 +43,9 @@ qui va le pointeur quand il y entre.
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
-reste reconnu pendant que le clavier est capturé. La règle n'est pas encore tenue
-partout : le hook de l'esclave qui redémarre seul y échappe (voir « Faiblesses connues »).
+reste reconnu pendant que le clavier est capturé. Le dernier cas connu où elle n'était
+pas tenue, le hook de l'esclave qui redémarre seul, est corrigé par la PR #806 (voir
+« Faiblesses connues »).
 
 ## Ce qui a été essayé pour de bon
 
@@ -74,14 +77,12 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 ## Faiblesses connues
 
-- **Hook de l'esclave redémarré en pleine traversée.** Quand seul le hook de l'esclave
-  perd sa connexion à son agent, le lien réseau avec le maître reste en vie et l'agent
-  de l'esclave n'envoie pas d'`InputReset` (il ne le fait que pour un débordement de
-  file, `peers/actor.rs`). Le maître garde donc son clavier capturé et continue
-  d'envoyer ; le nouveau hook ignore tout jusqu'au prochain `Enter`. La saisie est
-  perdue jusqu'à ce que l'utilisateur revienne et retraverse, ou use du raccourci de
-  secours. À corriger : dire `InputReset` aussi quand la connexion au hook tombe
-  pendant une session.
+- **Hook de l'esclave redémarré en pleine traversée** — *corrigé par la PR #806, pas
+  encore fusionnée.* Quand seul le hook de l'esclave perdait sa connexion à son agent,
+  le lien réseau restait en vie et l'agent de l'esclave n'envoyait pas d'`InputReset` :
+  le maître gardait son clavier capturé jusqu'à la traversée suivante. Avec #806, la
+  fin de la connexion au hook déclenche un `InputReset` unique si une session était en
+  cours. Prouvé par tests, pas provoqué sur les machines.
 - La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
   hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
   mauvais. Le corriger demande un identifiant de layout dans la réponse.
@@ -372,3 +373,18 @@ macOS n'a de sens qu'après.
 7. Plusieurs esclaves.
 8. GNOME, X11, portail `InputCapture`.
 9. macOS esclave, si quelqu'un peut l'essayer.
+
+## Travaux en cours
+
+Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
+les sections ci-dessus en tiennent compte.
+
+| Sujet | Branche / PR | État |
+|---|---|---|
+| `InputReset` quand le hook de l'esclave tombe | PR #806 | Ouverte, en attente de fusion |
+| Corrélation `Load`/`Loaded` par identifiant | `fix/multi-pc-loaded-id-v6` | En cours |
+| Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | `feat/multi-pc-ui-errors-v6` | En cours |
+| Automate de traversée sorti du module evdev | `refactor/multi-pc-crossing-v6` | En cours |
+| Indicateur de machine pilotée, synchronisation des verrous, pointeur verrouillé sur une machine | `feat/multi-pc-small-features-v6` | En cours ; le verrouillage attend l'automate partagé |
+| Règle de pare-feu 24817 dans l'installeur, essai de `StartElevated`, fonds en direct sous Windows | `feat/multi-pc-windows-vm124-v6` | En cours, sur la vm124 |
+| Esclave Linux essayé pour de bon | `test/multi-pc-linux-slave-v6` | En cours ; l'essai attend l'accord du mainteneur |

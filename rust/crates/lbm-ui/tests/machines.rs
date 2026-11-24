@@ -39,6 +39,7 @@ fn laptop(pending: bool) -> Peer {
         pending,
         displays: 2,
         problem: None,
+        driven: false,
     }
 }
 

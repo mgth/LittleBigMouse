@@ -38,6 +38,8 @@ pub struct Peer {
     pub displays: usize,
     /// What went wrong with the link, in words, while it stands.
     pub problem: Option<String>,
+    /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
+    pub driven: bool,
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -119,6 +121,27 @@ fn printed_fingerprint(ui: &mut egui::Ui, whose: &str, machine_id: &str) {
     });
 }
 
+/// Which machine the mouse and keyboard go to, in words: said once a remote is linked,
+/// the only time it can be anything but this machine.
+pub fn input_goes_to(state: &State) -> Option<String> {
+    if !state.enabled {
+        return None;
+    }
+    if let Some(peer) = state.peers.iter().find(|peer| peer.driven) {
+        let name = if peer.name.is_empty() {
+            "an unnamed machine"
+        } else {
+            peer.name.as_str()
+        };
+        return Some(format!("The mouse and keyboard are on {name}"));
+    }
+    state
+        .peers
+        .iter()
+        .any(|peer| peer.role == Role::Remote && peer.connected && !peer.pending)
+        .then(|| "The mouse and keyboard are on this machine".to_owned())
+}
+
 /// The Machines page. `busy` greys the controls while a request is out; `error` is the
 /// last request the agent refused.
 pub fn panel(
@@ -186,6 +209,9 @@ pub fn panel(
             if let Some(why) = &state.error {
                 ui.colored_label(ui.visuals().error_fg_color, why);
             }
+            if let Some(whereabouts) = input_goes_to(state) {
+                ui.label(whereabouts);
+            }
         });
 
         crate::options::group(ui, "Connect to a machine", |ui| {
@@ -250,6 +276,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
             ("Disconnected", crate::theme::MUTED)
         };
         crate::theme::status(ui, status, colour);
+        if peer.driven {
+            crate::theme::status(ui, "Has the mouse and keyboard", crate::theme::ACCENT);
+        }
     });
     let role = match (peer.role, peer.pending) {
         (_, true) => "Waiting for you to accept it",
@@ -378,6 +407,44 @@ pub fn on_another_machine(ui: &mut egui::Ui, machine: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_page_says_where_the_mouse_and_keyboard_are() {
+        let laptop = Peer {
+            machine_id: "aa".into(),
+            name: "laptop".into(),
+            address: String::new(),
+            connected: true,
+            role: Role::Remote,
+            pending: false,
+            displays: 1,
+            driven: false,
+            problem: None,
+        };
+        let mut state = State {
+            enabled: true,
+            peers: vec![laptop.clone()],
+            ..State::default()
+        };
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on this machine")
+        );
+        state.peers[0].driven = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("The mouse and keyboard are on laptop")
+        );
+        // Nothing to say with no remote linked, or with the mode off.
+        state.peers[0] = Peer {
+            connected: false,
+            ..laptop
+        };
+        assert_eq!(input_goes_to(&state), None);
+        state.enabled = false;
+        state.peers.clear();
+        assert_eq!(input_goes_to(&state), None);
+    }
 
     #[test]
     fn a_fingerprint_reads_in_groups_of_four_eight_to_a_line() {

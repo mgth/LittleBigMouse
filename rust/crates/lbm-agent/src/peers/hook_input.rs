@@ -30,6 +30,11 @@
 //! remote that misses the release of Ctrl types every later key with Ctrl held. Where a
 //! queue has no room, the session ends instead, on both sides.
 //!
+//! - **Driving** ([`HookInput::driving`]): on a master, whether the remote the stream
+//!   is relayed to holds the pointer now — an `Enter` relayed and no `Leave` since, nor
+//!   the end of the connection. Read off the batches as they pass ([`crossing`]), for the
+//!   state's indicator of the machine that receives the input.
+//!
 //! The hook serves one client, the newest. A machine that is both a master and a remote
 //! at once shares this one connection between the two; nothing more is attempted for
 //! that case yet.
@@ -39,7 +44,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+use lbm_ipc::input::{crossing, encode, read_batch, write_batch, InputEvent};
 use lbm_net::link::LinkSender;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -128,6 +133,29 @@ pub struct HookInput {
     numbered: Arc<AtomicU64>,
     lost: watch::Sender<u64>,
     target: watch::Sender<Option<LinkSender>>,
+    driving: watch::Receiver<Driving>,
+}
+
+/// The value behind [`HookInput::driving`]: whether the remote is driven, and the number
+/// of the connection that said so — a relay that outlived its connection (aborted, but
+/// running on another thread that very moment) cannot say it any more.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Driving {
+    connection: u64,
+    pub driven: bool,
+}
+
+type DrivingSender = std::sync::Arc<watch::Sender<Driving>>;
+
+/// Says what connection `connection` saw, unless another one came since.
+fn drive(driving: &watch::Sender<Driving>, connection: u64, driven: bool) {
+    driving.send_if_modified(|now| {
+        if now.connection != connection || now.driven == driven {
+            return false;
+        }
+        now.driven = driven;
+        true
+    });
 }
 
 impl HookInput {
@@ -137,13 +165,26 @@ impl HookInput {
         let (messages, inbox) = mpsc::channel(QUEUE);
         let (target, targets) = watch::channel(None);
         let (lost, _) = watch::channel(0);
-        tokio::spawn(run(endpoint, inbox, targets, lost.clone()));
+        let (driving_tx, driving) = watch::channel(Driving::default());
+        tokio::spawn(run(endpoint, inbox, targets, lost.clone(), driving_tx));
         HookInput {
             messages,
             numbered: Arc::default(),
             lost,
             target,
+            driving,
         }
+    }
+
+    /// Whether the remote the stream is relayed to holds the pointer, as last told.
+    pub fn driven(&self) -> bool {
+        self.driving.borrow().driven
+    }
+
+    /// Whether the remote the stream is relayed to is driven now (see the module): told
+    /// when it changes, never asked again and again.
+    pub fn driving(&self) -> watch::Receiver<Driving> {
+        self.driving.clone()
     }
 
     /// A sink for one link: it hears of the connection's losses from now on only.
@@ -192,7 +233,9 @@ async fn run(
     mut inbox: mpsc::Receiver<Message>,
     mut targets: watch::Receiver<Option<LinkSender>>,
     lost: watch::Sender<u64>,
+    driving: watch::Sender<Driving>,
 ) {
+    let driving: DrivingSender = std::sync::Arc::new(driving);
     // Batches up to `number` did not reach the hook, or not for good: the links' tasks
     // are told, and the one whose session they belong to ends it.
     let tell = |number: u64| {
@@ -204,7 +247,7 @@ async fn run(
         |connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>, number: u64| {
             if let Some(open) = connection {
                 let number = number.max(open.written);
-                close(connection, leaving);
+                close(connection, leaving, &driving);
                 tell(number);
             }
         };
@@ -222,6 +265,7 @@ async fn run(
                 endpoint.as_deref(),
                 relay_target(&targets, &leaving),
                 &mut retry_at,
+                &driving,
             )
             .await;
         }
@@ -230,16 +274,16 @@ async fn run(
         tokio::select! {
             message = inbox.recv() => match message {
                 None => {
-                    close(&mut connection, &mut leaving);
+                    close(&mut connection, &mut leaving, &driving);
                     return;
                 }
-                Some(Message::Release) => close(&mut connection, &mut leaving),
+                Some(Message::Release) => close(&mut connection, &mut leaving, &driving),
                 Some(Message::Batch { number, bytes, crosses }) => {
                     // A crossing is worth an attempt at any time: one a second at most.
                     let may_try = crosses || retry_at.is_none_or(|at| Instant::now() >= at);
                     if connection.is_none() && may_try {
                         let target = relay_target(&targets, &leaving);
-                        connection = open(endpoint.as_deref(), target, &mut retry_at).await;
+                        connection = open(endpoint.as_deref(), target, &mut retry_at, &driving).await;
                     }
                     if let Some(open) = &mut connection {
                         let written =
@@ -305,7 +349,19 @@ fn relay_target(
 /// and the link it relayed to is told `Leave`. That send waits for room, so it is
 /// neither lost nor overtaken by a later connection's batches, which wait for it; it
 /// ends at the latest with the link, whose end the remote takes as a `Leave` too.
-fn close(connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>) {
+fn close(
+    connection: &mut Option<Connection>,
+    leaving: &mut Option<JoinHandle<()>>,
+    driving: &watch::Sender<Driving>,
+) {
+    // The relay that would have seen a `Leave` is gone with the connection, and
+    // whatever it still says is about no connection any more.
+    if connection.is_some() {
+        driving.send_if_modified(|now| {
+            now.connection += 1;
+            std::mem::replace(&mut now.driven, false)
+        });
+    }
     let Some(link) = connection.take().and_then(|c| c.relaying_to.clone()) else {
         return;
     };
@@ -323,6 +379,7 @@ async fn open(
     endpoint: Option<&str>,
     target: Option<LinkSender>,
     retry_at: &mut Option<Instant>,
+    driving: &DrivingSender,
 ) -> Option<Connection> {
     let endpoint = endpoint?;
     match tokio::time::timeout(CONNECT_TIMEOUT, connect(endpoint)).await {
@@ -330,7 +387,19 @@ async fn open(
             *retry_at = None;
             let (reader, writer) = tokio::io::split(stream);
             let (lost, lost_rx) = oneshot::channel();
-            let reading = tokio::spawn(relay(reader, target.clone(), lost));
+            // A number of its own, told nobody: it has not driven anything yet.
+            let mut number = 0;
+            driving.send_if_modified(|now| {
+                now.connection += 1;
+                number = now.connection;
+                false
+            });
+            let reading = tokio::spawn(relay(
+                reader,
+                target.clone(),
+                lost,
+                (driving.clone(), number),
+            ));
             Some(Connection {
                 writer: Box::new(writer),
                 reading,
@@ -354,14 +423,19 @@ async fn relay(
     mut reader: impl AsyncRead + Unpin,
     target: Option<LinkSender>,
     lost: oneshot::Sender<()>,
+    (driving, connection): (DrivingSender, u64),
 ) {
     while let Ok(batch) = read_batch(&mut reader).await {
         if let Some(link) = &target {
             if link.try_input(&batch).is_err() {
                 break;
             }
+            if let Some(entered) = crossing(&batch) {
+                drive(&driving, connection, entered);
+            }
         }
     }
+    drive(&driving, connection, false);
     let _ = lost.send(());
 }
 

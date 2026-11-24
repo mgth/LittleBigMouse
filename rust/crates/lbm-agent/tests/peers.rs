@@ -1380,6 +1380,68 @@ async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from
 
 #[cfg(unix)]
 #[tokio::test]
+async fn the_state_says_which_machine_has_the_mouse_and_keyboard() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let on = desk.turn_on(0, "desk").await;
+    assert_eq!(on.driven, None, "the pointer starts here");
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+    let laptop_id = laptop.fingerprint().to_owned();
+
+    // Motion alone is not a crossing; the Enter is.
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Motion { x: 11, y: 10 },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, crossing);
+    desk.until(|s| s.driven.as_deref() == Some(laptop_id.as_str()))
+        .await;
+
+    // Home again by the stream's own Leave.
+    write_batch(&mut hook, &encode(&[InputEvent::Leave]))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    desk.until(|s| s.driven.is_none()).await;
+
+    // Over there again, then the hook goes: its end brings the pointer home too.
+    write_batch(&mut hook, &encode(&[InputEvent::Enter { x: 5, y: 5 }]))
+        .await
+        .unwrap();
+    assert_eq!(
+        next_input(&mut laptop_link).await,
+        [InputEvent::Enter { x: 5, y: 5 }]
+    );
+    desk.until(|s| s.driven.is_some()).await;
+    drop(hook);
+    desk.until(|s| s.driven.is_none()).await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_it_alone_gets_the_input(
 ) {
     use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};

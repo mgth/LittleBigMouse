@@ -183,6 +183,12 @@ pub struct PeersState {
     /// then says nothing about this one. Not in the API.
     #[serde(skip)]
     pub selection: u64,
+    /// The machine id of the remote that receives the input now — the pointer crossed
+    /// to it and has not come back — or `None` when this machine does. Changes as the
+    /// pointer crosses, by the stream's own `Enter` and `Leave`. Absent from the state
+    /// of an older agent, which means "this machine".
+    #[serde(default)]
+    pub driven: Option<String>,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -642,6 +648,7 @@ impl Service {
             error: self.failure.clone(),
             selected_remote: None,
             selection: 0,
+            driven: None,
             peers: PeerStore::load(&self.directory)
                 .peers()
                 .iter()
@@ -713,6 +720,7 @@ mod tests {
             error: None,
             selected_remote: Some(selected.to_owned()),
             selection: 1,
+            driven: None,
             peers,
         }
     }

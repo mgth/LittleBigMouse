@@ -373,6 +373,11 @@ pub struct Snapshot {
     /// a window opened later must still see it. Additive; absent when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub input_switch_failures: Vec<crate::input_switch::Failure>,
+    /// The other machine that receives the mouse and the keyboard now, by the name it
+    /// goes by here (multi-PC mode, this machine its master); `None` when this machine
+    /// does. Follows the pointer across the border. Additive.
+    #[serde(default)]
+    pub driven_machine: Option<String>,
 }
 
 /// An answer to request `id`.

@@ -174,6 +174,33 @@ pub fn decode(mut batch: &[u8]) -> io::Result<Vec<InputEvent>> {
     Ok(events)
 }
 
+/// Whether a batch starts or ends a crossing, read without decoding it: `Some(true)`
+/// when its last `Enter` or `Leave` is an `Enter`, `Some(false)` when it is a `Leave`,
+/// `None` when it holds neither — or is not a batch at all, which says nothing either.
+/// What a master's agent, which relays batches unread, learns of which machine the
+/// stream drives; a walk over the tags, allocating nothing.
+pub fn crossing(batch: &[u8]) -> Option<bool> {
+    let mut seen = None;
+    let mut rest = batch;
+    while let Some((&tag, tail)) = rest.split_first() {
+        let length = match tag {
+            ENTER => {
+                seen = Some(true);
+                8
+            }
+            LEAVE => {
+                seen = Some(false);
+                0
+            }
+            MOTION | WHEEL => 8,
+            BUTTON | KEY => 3,
+            _ => return None,
+        };
+        rest = tail.get(length..)?;
+    }
+    seen
+}
+
 /// Reads one batch's bytes, still encoded: an agent relays them as they are.
 pub async fn read_batch<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Vec<u8>> {
     let length = reader.read_u32_le().await? as usize;
@@ -238,6 +265,22 @@ mod tests {
         assert!(decode(&batch[..batch.len() - 2]).is_err());
         assert!(decode(&[0]).is_err());
         assert!(decode(&[200, 1, 2]).is_err());
+    }
+
+    #[test]
+    fn a_crossing_is_read_without_decoding() {
+        assert_eq!(crossing(&encode(&EVERY)), Some(false), "the last one wins");
+        assert_eq!(crossing(&encode(&EVERY[..5])), Some(true));
+        assert_eq!(crossing(&encode(&EVERY[1..5])), None);
+        assert_eq!(crossing(&[]), None);
+        // An Enter whose coordinates are the tag of a Leave is still an Enter.
+        let enter = encode(&[InputEvent::Enter { x: 2, y: 2 }]);
+        assert_eq!(crossing(&enter), Some(true));
+        // Not a batch: nothing is said, not even the Enter before the damage.
+        let mut damaged = enter.clone();
+        damaged.push(200);
+        assert_eq!(crossing(&damaged), None);
+        assert_eq!(crossing(&enter[..5]), None);
     }
 
     #[tokio::test]

@@ -43,6 +43,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
     let selected = object
         .get("SelectedRemote")
         .map(|selected| selected.as_str().unwrap_or_default());
+    // The remote the pointer is on; an agent older than the indicator says nothing.
+    let driven = value["Driven"].as_str();
     for entry in value["Peers"].as_array().into_iter().flatten() {
         let machine_id = text(entry, "MachineId");
         if machine_id.is_empty() {
@@ -70,6 +72,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
                 displays: displays.clone(),
             });
         }
+        let driven = driven == Some(machine_id.as_str()) && !pending;
         peers.push(Peer {
             machine_id,
             name: text(entry, "Name"),
@@ -77,6 +80,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             connected,
             role,
             pending,
+            driven,
             displays: displays.len(),
             problem: link_problem(&entry["Problem"]),
         });
@@ -564,6 +568,27 @@ mod tests {
         let mut none = state(peers);
         none["SelectedRemote"] = Value::Null;
         assert!(read(&none).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn the_driven_remote_is_marked_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut driven = state(
+            json!([{"MachineId": "0a", "Name": "laptop", "Connected": true,
+            "Role": "Remote", "State": "Paired", "Displays": [display("eDP-1")]}]),
+        );
+        assert!(machines.heard(&driven));
+        assert!(
+            !read(&driven).unwrap().0.peers[0].driven,
+            "an older agent says nothing"
+        );
+        driven["Driven"] = json!("0a");
+        assert!(read(&driven).unwrap().0.peers[0].driven);
+        assert!(
+            !machines.heard(&driven),
+            "crossing is no reason to rebuild the map"
+        );
     }
 
     #[test]

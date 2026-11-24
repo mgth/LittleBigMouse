@@ -153,6 +153,9 @@ pub struct Agent<W> {
     /// Whether a master is linked: only then are the panels this machine alone has
     /// read, to tell it what selects this machine on them.
     has_master: bool,
+    /// The name of the remote that receives the input now (`PeersState::driven`), for
+    /// the state; `None` when this machine does.
+    driven_machine: Option<String>,
     /// The selected remote of the last `Peers` state, with that state's number for the
     /// choice (`PeersState::selection`); `None` before any. The zones this agent hands
     /// the hook never lead to another remote ([`Agent::zones_fit`]).
@@ -213,6 +216,7 @@ impl<W: AgentWorld> Agent<W> {
             read_failures: Default::default(),
             input_failures: Default::default(),
             has_master: false,
+            driven_machine: None,
             selection_seen: None,
             hook_zones: crate::hook_zones::HookZones::new(),
             told_hook_ready: None,
@@ -302,6 +306,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.world.rescue_shortcut().as_deref(),
             ),
             input_switch_failures: self.input_failures.current(),
+            driven_machine: self.driven_machine.clone(),
         }
     }
 
@@ -1083,6 +1088,17 @@ impl<W: AgentWorld> Agent<W> {
             });
         let master_linked = has_master && !self.has_master;
         self.has_master = has_master;
+        self.driven_machine = state
+            .driven
+            .as_ref()
+            .filter(|_| state.enabled)
+            .map(|driven| {
+                state
+                    .peers
+                    .iter()
+                    .find(|p| &p.peer.machine_id == driven)
+                    .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
+            });
         self.selection_seen = Some((
             state.selection,
             state.selected_remote.clone().filter(|_| state.enabled),

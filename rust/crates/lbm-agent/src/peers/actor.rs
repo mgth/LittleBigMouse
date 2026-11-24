@@ -276,6 +276,8 @@ pub(super) async fn run(
     }
     let _ = started.send(());
     actor.call_remotes_back();
+    // The pointer going to the remote and coming back: only the state changes.
+    let mut driving = actor.hook.driving();
 
     loop {
         actor.publish();
@@ -306,6 +308,7 @@ pub(super) async fn run(
                 None => listener = None,
             },
             Some(internal) = internal_rx.recv() => actor.internal(internal),
+            Ok(()) = driving.changed() => {}
         }
     }
 }
@@ -386,6 +389,11 @@ impl Actor {
                 .as_ref()
                 .map(|(machine_id, _)| machine_id.clone()),
             selection: self.selection,
+            driven: self
+                .relaying
+                .as_ref()
+                .filter(|_| self.hook.driven())
+                .map(|(machine_id, _)| machine_id.clone()),
             peers,
         }
     }

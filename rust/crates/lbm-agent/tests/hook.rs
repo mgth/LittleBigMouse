@@ -65,6 +65,7 @@ async fn the_client_subscribes_then_follows_the_hook() {
         Command::Load {
             zones: ZONES.into(),
             desktop: None,
+            id: None,
         },
         Command::Run,
     ]));
@@ -80,7 +81,8 @@ async fn the_client_subscribes_then_follows_the_hook() {
             Command::Listen,
             Command::Load {
                 zones: ZONES.into(),
-                desktop: None
+                desktop: None,
+                id: None
             },
             Command::Run
         ]
@@ -285,6 +287,7 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
         Command::Load {
             zones: ZONES.into(),
             desktop: None,
+            id: None,
         },
         Command::Run,
     ]));
@@ -328,6 +331,7 @@ async fn the_zone_counts_are_the_documents_own_two_numbers() {
     hook.send(protocol::frame(&[Command::Load {
         zones: CLONES.into(),
         desktop: None,
+        id: Some(9),
     }]));
 
     assert_eq!(
@@ -335,7 +339,9 @@ async fn the_zone_counts_are_the_documents_own_two_numbers() {
         Event::Loaded {
             zones: 2,
             main: 1,
-            virtual_layout: false
+            virtual_layout: false,
+            // The answer names its Load, as the daemon's does.
+            id: Some(9),
         }
     );
 }
@@ -359,6 +365,7 @@ async fn a_load_that_cannot_be_read_is_refused_and_lets_go_anyway() {
         Command::Load {
             zones: ZONES.into(),
             desktop: None,
+            id: None,
         },
         Command::Run,
     ]));
@@ -369,9 +376,10 @@ async fn a_load_that_cannot_be_read_is_refused_and_lets_go_anyway() {
     hook.send(protocol::frame(&[Command::Load {
         zones: "<ZonesLayout><MainZones>".into(),
         desktop: None,
+        id: None,
     }]));
 
-    assert_eq!(event(&mut signals).await, Event::LoadFailed);
+    assert_eq!(event(&mut signals).await, Event::LoadFailed { id: None });
     assert_eq!(event(&mut signals).await, Event::Stopped);
     assert!(!fake.hooked(), "a refused Load must not leave it hooked");
 }

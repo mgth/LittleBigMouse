@@ -71,6 +71,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             Command::Load {
                 zones: xml,
                 desktop,
+                id,
             } => {
                 // Before the layout: a Load that fails to parse still describes the
                 // machine correctly, and the absolute device is rebuilt from this
@@ -81,16 +82,18 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                 }
                 // Report the outcome to every listening client: a Load-without-Run
                 // (virtual-layout inspection) has no later Running event to prove
-                // the zones were accepted.
+                // the zones were accepted. Either answer names the Load it answers,
+                // so the agent cannot take it for another one.
                 match load_layout(shared, &xml, rehooks) {
                     Some(info) => {
                         server.broadcast(&Event::Loaded {
                             zones: info.zones,
                             main: info.main,
                             virtual_layout: info.virtual_layout,
+                            id,
                         });
                     }
-                    None => server.broadcast(&Event::LoadFailed),
+                    None => server.broadcast(&Event::LoadFailed { id }),
                 }
             }
             // Always reconciles, even when the text is unchanged: the answer is what
@@ -451,6 +454,7 @@ mod tests {
         let load = Command::Load {
             zones: ZONES_XML.to_owned(),
             desktop: None,
+            id: None,
         };
         assert!(frame_rehooks(&protocol::parse(&protocol::frame(&[
             load.clone(),

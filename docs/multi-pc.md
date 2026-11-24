@@ -224,11 +224,13 @@ On a remote (`lbm-hook/src/remote`):
   the hook ends at once, and a new one is made only once the agent's loop says the hook's
   zones are fit for that very choice: every zone the hook holds, and every one sent to it
   and not yet answered, leads to no machine but that remote. What the hook holds is known
-  from its answers in order — each `Load` the agent sends is answered by `Loaded` or
-  `LoadFailed` — and from its greeting: none, or the fingerprint of the zones the agent
-  would send now. Anything else (a layout from a previous life of the agent, a `Load`
-  another client sent, no hook) is unknown and fit for nothing until the agent's own
-  `Load` is confirmed. The agent never sends zones leading to another machine than the
+  from its answers — each `Load` the agent sends carries an `Id`, and the `Loaded` or
+  `LoadFailed` that answers it names it again, so an answer is never taken for another
+  `Load`'s, not even across a reconnection (a hook that predates the `Id` names none, and
+  its answers are taken in order) — and from its greeting: none, or the fingerprint of
+  the zones the agent would send now. Anything else (a layout from a previous life of the
+  agent, a `Load` another client sent or one the agent counted lost with its connection,
+  no hook) is unknown and fit for nothing until the agent's own `Load` is confirmed. The agent never sends zones leading to another machine than the
   selected remote: a `Load` of the layout built for the previous choice, before the
   debounced rebuild for the new one, is dropped, and the rebuild sends the right one.
 - **The end of a hop, on the master**: one connection to the hook's input endpoint

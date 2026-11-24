@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 
 use lbm_ipc::shortcut::{Shortcut, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN};
 
+use super::Press;
+
 /// How long the rescue combination must stay down, as on Windows: long enough not to
 /// fire on a fumble, short enough to feel like a rescue. The same hold through the
 /// desktop's portal and in the grabbed stream: one rescue, wherever the pointer is.
@@ -47,15 +49,15 @@ impl HeldSet {
         held
     }
 
-    /// Follows one `EV_KEY` event: 1 presses, 0 releases, 2 (autorepeat) changes
+    /// Follows one key event: a press holds, a release lets go, autorepeat changes
     /// nothing.
-    pub(crate) fn track(&mut self, code: u16, value: i32) {
-        match value {
-            0 => {
+    pub(crate) fn track(&mut self, code: u16, press: Press) {
+        match press {
+            Press::Up => {
                 self.remove(code);
             }
-            1 => self.insert(code),
-            _ => {}
+            Press::Down => self.insert(code),
+            Press::Repeat => {}
         }
     }
 
@@ -127,16 +129,16 @@ impl RescueKeys {
     }
 
     /// Reads one key event of the grabbed stream.
-    pub(crate) fn filter(&mut self, code: u16, value: i32, now: Instant) -> Verdict {
+    pub(crate) fn filter(&mut self, code: u16, press: Press, now: Instant) -> Verdict {
         if is_modifier(code) {
-            self.modifiers.track(code, value);
+            self.modifiers.track(code, press);
         }
         let Some((modifiers, key)) = self.wanted else {
             return Verdict::Pass;
         };
         if self.since.is_some() {
             // Autorepeat, of the key or of a modifier: still the same hold.
-            if value == 2 {
+            if press == Press::Repeat {
                 return Verdict::Hold;
             }
             // Let go early, a modifier let go, or another key pressed: the user was
@@ -145,7 +147,7 @@ impl RescueKeys {
             self.since = None;
             return Verdict::Release(key);
         }
-        if code == key && value == 1 && self.held_modifiers() == modifiers {
+        if code == key && press == Press::Down && self.held_modifiers() == modifiers {
             self.since = Some(now);
             return Verdict::Hold;
         }
@@ -266,11 +268,11 @@ mod tests {
     #[test]
     fn a_held_set_tracks_presses_and_releases_and_ignores_autorepeat() {
         let mut held = HeldSet::default();
-        held.track(0x110, 1);
-        held.track(KEY_A, 1);
-        held.track(KEY_A, 2);
+        held.track(0x110, Press::Down);
+        held.track(KEY_A, Press::Down);
+        held.track(KEY_A, Press::Repeat);
         assert!(held.contains(0x110) && held.contains(KEY_A));
-        held.track(KEY_A, 0);
+        held.track(KEY_A, Press::Up);
         assert!(!held.contains(KEY_A));
         assert!(held.remove(0x110));
         assert!(held.is_empty());
@@ -294,7 +296,7 @@ mod tests {
 
     fn press_modifiers(keys: &mut RescueKeys, now: Instant) {
         for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
-            assert_eq!(keys.filter(code, 1, now), Verdict::Pass);
+            assert_eq!(keys.filter(code, Press::Down, now), Verdict::Pass);
         }
     }
 
@@ -303,8 +305,11 @@ mod tests {
         let mut keys = rescue();
         let start = Instant::now();
         press_modifiers(&mut keys, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Hold);
-        assert_eq!(keys.filter(KEY_M, 2, start + HOLD / 2), Verdict::Hold);
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Hold);
+        assert_eq!(
+            keys.filter(KEY_M, Press::Repeat, start + HOLD / 2),
+            Verdict::Hold
+        );
         assert!(!keys.due(start + HOLD / 2));
         assert!(keys.due(start + HOLD));
         assert!(!keys.due(start + HOLD * 2), "fires once");
@@ -315,8 +320,11 @@ mod tests {
         let mut keys = rescue();
         let start = Instant::now();
         press_modifiers(&mut keys, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Hold);
-        assert_eq!(keys.filter(KEY_M, 0, start), Verdict::Release(KEY_M));
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Hold);
+        assert_eq!(
+            keys.filter(KEY_M, Press::Up, start),
+            Verdict::Release(KEY_M)
+        );
         assert!(!keys.due(start + HOLD));
     }
 
@@ -325,29 +333,32 @@ mod tests {
         let start = Instant::now();
         let mut keys = rescue();
         press_modifiers(&mut keys, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Hold);
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Hold);
         assert_eq!(
-            keys.filter(KEY_LEFTSHIFT, 0, start),
+            keys.filter(KEY_LEFTSHIFT, Press::Up, start),
             Verdict::Release(KEY_M)
         );
         assert!(!keys.due(start + HOLD));
 
         let mut keys = rescue();
         press_modifiers(&mut keys, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Hold);
-        assert_eq!(keys.filter(KEY_A, 1, start), Verdict::Release(KEY_M));
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Hold);
+        assert_eq!(
+            keys.filter(KEY_A, Press::Down, start),
+            Verdict::Release(KEY_M)
+        );
     }
 
     #[test]
     fn the_final_key_with_other_modifiers_is_only_typing() {
         let start = Instant::now();
         let mut keys = rescue();
-        keys.filter(KEY_LEFTCTRL, 1, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Pass);
+        keys.filter(KEY_LEFTCTRL, Press::Down, start);
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Pass);
 
         let mut keys = rescue();
         press_modifiers(&mut keys, start);
-        keys.filter(KEY_LEFTMETA, 1, start);
-        assert_eq!(keys.filter(KEY_M, 1, start), Verdict::Pass);
+        keys.filter(KEY_LEFTMETA, Press::Down, start);
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Pass);
     }
 }

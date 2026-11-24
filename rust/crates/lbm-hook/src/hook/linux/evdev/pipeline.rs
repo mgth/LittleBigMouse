@@ -116,6 +116,7 @@ use super::frame::PumpBuffers;
 use super::probe::{extents, try_device_bounds};
 use super::{BTN_MOUSE_RANGE, BTN_RANGE, BTN_TRIGGER_HAPPY_RANGE};
 use crate::hook::crossing::keys::{HeldSet, RescueKeys, Verdict};
+use crate::hook::crossing::Press;
 
 /// Everything a cycle writes to: this machine's two virtual devices, the input stream,
 /// and the keyboards' exclusivity. The router's implementation owns the devices; the
@@ -570,7 +571,7 @@ impl Pipeline {
             // Wheels are counted above; scancodes describe this machine's keyboard.
             EventType::RELATIVE | EventType::MISC => false,
             EventType::KEY if BTN_MOUSE_RANGE.contains(&ev.code()) => {
-                !route_button(wire, remote_held, ev.code(), ev.value())
+                !route_button(wire, remote_held, ev.code(), Press::from_ev_key(ev.value()))
             }
             // Tablet tools and joystick buttons mean nothing over there.
             EventType::KEY
@@ -579,7 +580,14 @@ impl Pipeline {
             {
                 true
             }
-            EventType::KEY => !route_key(wire, remote_held, rescue, ev.code(), ev.value(), now),
+            EventType::KEY => !route_key(
+                wire,
+                remote_held,
+                rescue,
+                ev.code(),
+                Press::from_ev_key(ev.value()),
+                now,
+            ),
             _ => true,
         });
         if (horizontal, vertical) != (0, 0) {
@@ -602,7 +610,7 @@ impl Pipeline {
                 &mut self.remote_held,
                 &mut self.rescue,
                 code,
-                value,
+                Press::from_ev_key(value),
                 now,
             );
         }
@@ -735,9 +743,9 @@ fn locate(
 }
 
 /// A mouse button while the pointer is away: `true` when it went into the batch.
-fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, value: i32) -> bool {
-    match value {
-        1 => {
+fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, press: Press) -> bool {
+    match press {
+        Press::Down => {
             held.insert(code);
             wire.push(Wire::Button {
                 code,
@@ -746,16 +754,16 @@ fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, value: i32)
             true
         }
         // Released where it was pressed.
-        0 if held.remove(code) => {
+        Press::Up if held.remove(code) => {
             wire.push(Wire::Button {
                 code,
                 pressed: false,
             });
             true
         }
-        0 => false,
+        Press::Up => false,
         // A repeat goes where its press went; a button's means nothing anywhere.
-        _ => held.contains(code),
+        Press::Repeat => held.contains(code),
     }
 }
 
@@ -766,10 +774,10 @@ fn route_key(
     held: &mut HeldSet,
     rescue: &mut RescueKeys,
     code: u16,
-    value: i32,
+    press: Press,
     now: Instant,
 ) -> bool {
-    match rescue.filter(code, value, now) {
+    match rescue.filter(code, press, now) {
         Verdict::Hold => return true,
         Verdict::Release(kept) => {
             held.insert(kept);
@@ -780,8 +788,8 @@ fn route_key(
         }
         Verdict::Pass => {}
     }
-    match value {
-        1 => {
+    match press {
+        Press::Down => {
             held.insert(code);
             wire.push(Wire::Key {
                 code,
@@ -789,23 +797,23 @@ fn route_key(
             });
             true
         }
-        0 if held.remove(code) => {
+        Press::Up if held.remove(code) => {
             wire.push(Wire::Key {
                 code,
                 pressed: false,
             });
             true
         }
-        0 => false,
+        Press::Up => false,
         // Autorepeat: the remote repeats an injected key only when told to.
-        _ if held.contains(code) => {
+        Press::Repeat if held.contains(code) => {
             wire.push(Wire::Key {
                 code,
                 pressed: true,
             });
             true
         }
-        _ => false,
+        Press::Repeat => false,
     }
 }
 

@@ -457,6 +457,7 @@ pub(super) fn spawn_scanner() -> (mpsc::Receiver<ScanResult>, Arc<AtomicBool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hook::crossing::Press;
 
     /// A removed node reports its error forever. Missing one of these flags turns
     /// the pump into a busy loop (`poll` returns instantly, every cycle).
@@ -518,7 +519,7 @@ mod tests {
         assert!(!k.grabbed());
         assert_eq!(k.dev.grabs, 0);
 
-        k.held.track(KEY_LEFTCTRL, 0);
+        k.held.track(KEY_LEFTCTRL, Press::Up);
         k.grab_if_idle();
         assert!(k.grabbed());
         k.grab_if_idle();

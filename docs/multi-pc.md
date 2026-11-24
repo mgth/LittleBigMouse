@@ -62,6 +62,10 @@ screen), Windows as master, the portal and X11 backends as master.
     while the link lives on (its hook could not keep up); the master brings its pointer
     home (see "The end of a hop"). Added after protocol 1 without a new version, an older
     master ignores it as an unknown type
+  - `InputSwitched { Display, Value, Error? }` — remote → master: how the `SelectInput`
+    for that display and value went, `Error` saying why it failed (see "Input
+    switching"). Added after protocol 1 without a new version, an older master ignores
+    it as an unknown type and an older remote sends none
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -249,7 +253,12 @@ On a remote (`lbm-hook/src/remote`):
   - `Peers` → `{ Enabled, Port, Name, MachineId (this machine's fingerprint, null before
     the first use), ListenAddress, Error, SelectedRemote (the machine id of the selected
     remote, null when none), Peers: [{ MachineId, Name, Address, Connected, Displays,
-    WallpaperRevision, Role, State: "Paired" | "Pending" }] }`;
+    WallpaperRevision, Role, State: "Paired" | "Pending", Problem? }] }`. `Problem`
+    `{ Kind, Detail }` says why the last attempt to link with that machine failed or why
+    its last link ended badly, until a link with it is up again: `Kind` is `Network`,
+    `Refused` (the reason it gave), `NotConfirmed` (nobody confirmed the pairing there in
+    time), `UnknownFingerprint` (another machine answers at its address; `Detail` is its
+    fingerprint), `Incompatible` or `Lost`; absent for a link ended on purpose;
   - `PeerWallpapers { MachineId }` (capability `PeerWallpapers`) → `{ MachineId,
     Revision, Wallpapers: [{ Display, Image | Color }] }`, see "Wallpapers";
   - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
@@ -422,15 +431,20 @@ What lot 8 does (`lbm-agent/src/input_switch.rs`, `vcp.rs`):
   | none (no local source, VCP control off), does not answer, or the write fails | the remote, asked with `SelectInput`: the machine the panel showed, else the one chosen, else any other with a source on it |
   | as above, and no remote linked for that panel | nobody: logged; a choice of a source not attached is given up for the rule's |
 
-  The remote does the same read-then-write on its side; it does not answer, and the
-  master learns the result from the display events that follow.
+  The remote does the same read-then-write on its side and answers `InputSwitched`;
+  what it shows next comes with the display events that follow.
 - **No fight with the attachment rule**: a write is only ever caused by `SetActiveSource`,
   never by a display event. A source chosen while not attached is kept as the choice
   across the rebuilds the switch sets off (the panel detaching here before the other
   machine reports it), until it is attached — then the rule keeps it — or the user
   chooses again, or nobody could switch.
-- **The frontend** is not told of a failed switch, beyond the panel not changing: there
-  is no channel for such a note yet; the agent's log says why.
+- **The frontend** is told of a failed switch by the agent's state:
+  `InputSwitchFailures: [{ Monitor, Source, Value, Error, Remote?, RemoteError? }]` —
+  why this machine could not (DDC/CI's words), and, when a remote was asked, which one
+  and why it could not either. In the state rather than an event because the switch is
+  carried out after `SetActiveSource` is answered; a panel's entry goes when it is
+  switched or leaves the layout. The window shows it on the panel's badge and under its
+  switch. A remote that sends no `InputSwitched` (an older one) leaves nothing to show.
 
 ## Lots
 

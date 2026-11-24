@@ -367,6 +367,12 @@ pub struct Snapshot {
     /// because the hook says it once, often before any window is open. Additive.
     #[serde(default)]
     pub shortcut_unavailable: Option<String>,
+    /// The panels whose last input switch failed (multi-PC, VCP 0x60), and why: until
+    /// the panel is switched or leaves the layout. In the state rather than an event
+    /// because the switch is carried out after `SetActiveSource` has been answered, and
+    /// a window opened later must still see it. Additive; absent when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_switch_failures: Vec<crate::input_switch::Failure>,
 }
 
 /// An answer to request `id`.

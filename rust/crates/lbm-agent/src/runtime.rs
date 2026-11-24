@@ -63,6 +63,13 @@ enum VcpEvent {
         switch: Box<InputSwitch>,
         outcome: Outcome,
     },
+    /// A switch this machine's master `from` asked for, and whether it wrote.
+    Selected {
+        from: String,
+        display: String,
+        value: u16,
+        result: Result<bool, String>,
+    },
 }
 
 /// The agent: the reconciler, the world it acts on, the hook it drives.
@@ -132,6 +139,8 @@ pub struct Agent<W> {
     /// Why a monitor's input could not be read, as last said: said again only when it
     /// changes, not at every display event.
     read_failures: std::collections::HashMap<String, String>,
+    /// The input switches that failed, for the frontends (`InputSwitchFailures`).
+    input_failures: input_switch::Failures,
     /// Whether a master is linked: only then are the panels this machine alone has
     /// read, to tell it what selects this machine on them.
     has_master: bool,
@@ -195,6 +204,7 @@ impl<W: AgentWorld> Agent<W> {
             vcp_events_rx: Some(vcp_events_rx),
             readings: Default::default(),
             read_failures: Default::default(),
+            input_failures: Default::default(),
             has_master: false,
             selection_seen: None,
             hook_holds: None,
@@ -285,6 +295,9 @@ impl<W: AgentWorld> Agent<W> {
                 self.shortcut_unavailable.as_deref(),
                 self.world.rescue_shortcut().as_deref(),
             ),
+            input_switch_failures: self
+                .input_failures
+                .current(|monitor| self.world.has_monitor(monitor)),
         }
     }
 
@@ -892,6 +905,7 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     fn input_switched(&mut self, switch: InputSwitch, outcome: Outcome) {
+        self.input_failures.switched(&switch, &outcome);
         let (monitor, value) = (&switch.monitor, switch.value);
         match outcome {
             Outcome::AlreadyShown => {
@@ -908,7 +922,7 @@ impl<W: AgentWorld> Agent<W> {
                     .as_mut()
                     .is_some_and(|p| p.select_input(&ask.machine_id, &ask.display, value));
                 if !sent {
-                    self.switch_given_up(&switch, "the multi-PC mode is off");
+                    self.switch_given_up(&switch, &format!("{why}; the multi-PC mode is off"));
                 }
             }
             Outcome::Failed(why) => self.switch_given_up(&switch, &why),
@@ -922,6 +936,12 @@ impl<W: AgentWorld> Agent<W> {
             "[lbm-agent] {} could not be switched to input {:#04x}: {why}",
             switch.monitor, switch.value
         );
+        self.input_failures.failed(switch, why);
+        self.abandon(switch);
+    }
+
+    /// A choice that only the switch could have made good is given up.
+    fn abandon(&mut self, switch: &InputSwitch) {
         if self.world.switch_failed(&switch.monitor, &switch.source) {
             self.reload_changed_zones();
         }
@@ -933,24 +953,89 @@ impl<W: AgentWorld> Agent<W> {
             Ok(target) => target,
             Err(error) => {
                 eprintln!("[lbm-agent] {from} asked to switch {display}: {error}");
+                self.tell_master_switched(&from, &display, value, Some(error));
                 return;
             }
         };
-        let (ddc, bus) = (self.ddc.clone(), self.vcp.clone());
+        let (ddc, bus, events) = (self.ddc.clone(), self.vcp.clone(), self.vcp_events.clone());
         tokio::spawn(async move {
             let mut service = bus.lock_owned().await;
             let result = input_switch::switch_locally(&*ddc, target, value).await;
             if let Some(service) = service.as_mut() {
                 service.forget();
             }
-            match result {
-                Ok(true) => eprintln!("[lbm-agent] {display} switched to input {value:#04x}"),
-                Ok(false) => eprintln!("[lbm-agent] {display} already shows input {value:#04x}"),
-                Err(error) => eprintln!(
-                    "[lbm-agent] {display} could not be switched to input {value:#04x}: {error}"
-                ),
-            }
+            let _ = events.send(VcpEvent::Selected {
+                from,
+                display,
+                value,
+                result,
+            });
         });
+    }
+
+    /// How a switch this machine's master asked for went: said, and told to the master,
+    /// whose user is the one waiting on it.
+    fn selected(
+        &mut self,
+        from: String,
+        display: String,
+        value: u16,
+        result: Result<bool, String>,
+    ) {
+        let error = match result {
+            Ok(true) => {
+                eprintln!("[lbm-agent] {display} switched to input {value:#04x}");
+                None
+            }
+            Ok(false) => {
+                eprintln!("[lbm-agent] {display} already shows input {value:#04x}");
+                None
+            }
+            Err(error) => {
+                eprintln!(
+                    "[lbm-agent] {display} could not be switched to input {value:#04x}: {error}"
+                );
+                Some(error)
+            }
+        };
+        self.tell_master_switched(&from, &display, value, error);
+    }
+
+    fn tell_master_switched(
+        &mut self,
+        from: &str,
+        display: &str,
+        value: u16,
+        error: Option<String>,
+    ) {
+        if let Some(peers) = &mut self.peers {
+            peers.input_switched(from, display, value, error);
+        }
+    }
+
+    /// What a remote of this machine answered about a switch this machine asked of it.
+    fn remote_switched(
+        &mut self,
+        from: String,
+        display: String,
+        value: u16,
+        error: Option<String>,
+    ) {
+        let failed = error.clone();
+        match self.input_failures.answered(&from, &display, value, error) {
+            Some(switch) => {
+                eprintln!(
+                    "[lbm-agent] {} could not be switched to input {value:#04x}: {from} could not either: {}",
+                    switch.monitor,
+                    failed.unwrap_or_default()
+                );
+                self.abandon(&switch);
+            }
+            None if failed.is_none() => {
+                eprintln!("[lbm-agent] {from} switched {display} to input {value:#04x}")
+            }
+            None => {}
+        }
     }
 
     /// What the multi-PC manager reports changed: a machine paired, linked, left, or —
@@ -1379,6 +1464,9 @@ impl<W: AgentWorld> Agent<W> {
                         Some(Notice::SelectInput { from, display, value }) => {
                             self.select_input(from, display, value)
                         }
+                        Some(Notice::InputSwitched { from, display, value, error }) => {
+                            self.remote_switched(from, display, value, error)
+                        }
                         None => peer_notices = None,
                     }
                     continue;
@@ -1395,6 +1483,9 @@ impl<W: AgentWorld> Agent<W> {
                         }
                         Some(VcpEvent::Switched { switch, outcome }) => {
                             self.input_switched(*switch, outcome)
+                        }
+                        Some(VcpEvent::Selected { from, display, value, result }) => {
+                            self.selected(from, display, value, result)
                         }
                         None => vcp_events = None,
                     }

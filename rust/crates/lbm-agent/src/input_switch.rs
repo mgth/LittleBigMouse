@@ -20,8 +20,11 @@
 //! known value switches nothing: with a hardware KVM on a single input, choosing a
 //! machine changes only where the pointer goes.
 
+use std::collections::{BTreeMap, HashMap};
+
 use lbm_layout::model::Layout;
 use lbm_layout::remote::remote_source_id;
+use serde::{Deserialize, Serialize};
 
 use crate::peers::RemoteScreens;
 use crate::vcp::{self, Ddc, Target};
@@ -269,6 +272,122 @@ pub async fn execute(ddc: &dyn Ddc, switch: &InputSwitch) -> Outcome {
     match &switch.remote {
         Some(ask) => Outcome::Ask(ask.clone(), why),
         None => Outcome::Failed(why),
+    }
+}
+
+/// A switch that failed, as the frontends are told (`InputSwitchFailures` in the state):
+/// which panel, which machine it was to show, and why nobody could switch it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Failure {
+    /// The layout's monitor id.
+    pub monitor: String,
+    /// The source the user chose.
+    pub source: String,
+    /// The VCP 0x60 value that was to be written.
+    pub value: u16,
+    /// Why this machine could not: what DDC/CI said, or why it has no DDC/CI link to
+    /// the panel.
+    pub error: String,
+    /// The machine asked to switch it in this one's stead, when one was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    /// Why that machine could not either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_error: Option<String>,
+}
+
+/// The switches that failed, one per panel, until the panel is switched or leaves the
+/// layout; and those asked of a remote, until it answers.
+#[derive(Debug, Default)]
+pub struct Failures {
+    failed: BTreeMap<String, Failure>,
+    /// By the machine asked and its id of the panel: the switch, and why this machine
+    /// could not make it.
+    asked: HashMap<(String, String), (InputSwitch, String)>,
+}
+
+impl Failures {
+    /// How a switch went on this machine's side. A switch asked of a remote is settled
+    /// by its answer ([`Failures::answered`]); until then, what was said of the panel
+    /// stays.
+    pub fn switched(&mut self, switch: &InputSwitch, outcome: &Outcome) {
+        match outcome {
+            Outcome::AlreadyShown | Outcome::Written => {
+                self.failed.remove(&switch.monitor);
+                self.asked
+                    .retain(|_, (asked, _)| asked.monitor != switch.monitor);
+            }
+            Outcome::Ask(ask, why) => {
+                self.asked.insert(
+                    (ask.machine_id.clone(), ask.display.clone()),
+                    (switch.clone(), why.clone()),
+                );
+            }
+            Outcome::Failed(why) => self.failed(switch, why),
+        }
+    }
+
+    /// Nobody could switch the panel, for `why`.
+    pub fn failed(&mut self, switch: &InputSwitch, why: &str) {
+        self.failed.insert(
+            switch.monitor.clone(),
+            Failure {
+                monitor: switch.monitor.clone(),
+                source: switch.source.clone(),
+                value: switch.value,
+                error: why.to_owned(),
+                remote: None,
+                remote_error: None,
+            },
+        );
+    }
+
+    /// What the remote `from` answered about switching its `display` to `value`:
+    /// `error` is why it could not. The switch it answered for, when it failed — `None`
+    /// when it worked, or when nothing was asked of it (an answer to an older request
+    /// is not news about the latest).
+    pub fn answered(
+        &mut self,
+        from: &str,
+        display: &str,
+        value: u16,
+        error: Option<String>,
+    ) -> Option<InputSwitch> {
+        let key = (from.to_owned(), display.to_owned());
+        if self
+            .asked
+            .get(&key)
+            .is_none_or(|(switch, _)| switch.value != value)
+        {
+            return None;
+        }
+        let (switch, why) = self.asked.remove(&key).expect("checked above");
+        let Some(remote_error) = error else {
+            self.failed.remove(&switch.monitor);
+            return None;
+        };
+        self.failed.insert(
+            switch.monitor.clone(),
+            Failure {
+                monitor: switch.monitor.clone(),
+                source: switch.source.clone(),
+                value: switch.value,
+                error: why,
+                remote: Some(from.to_owned()),
+                remote_error: Some(remote_error),
+            },
+        );
+        Some(switch)
+    }
+
+    /// The failures of the panels `exists` still knows, by monitor id.
+    pub fn current(&self, exists: impl Fn(&str) -> bool) -> Vec<Failure> {
+        self.failed
+            .values()
+            .filter(|failure| exists(&failure.monitor))
+            .cloned()
+            .collect()
     }
 }
 
@@ -529,5 +648,144 @@ mod tests {
         );
         let merged = without_inputs(&d.remotes);
         assert_eq!(merged[0].displays[0].input_source, None);
+    }
+
+    fn switch_of(monitor: &str, value: u16) -> InputSwitch {
+        InputSwitch {
+            monitor: monitor.into(),
+            source: format!("{LAPTOP}/HDMI-1"),
+            value,
+            local: Ok(dp1()),
+            remote: Some(RemoteAsk {
+                machine_id: LAPTOP.into(),
+                display: "HDMI-1".into(),
+            }),
+        }
+    }
+
+    fn ask() -> RemoteAsk {
+        RemoteAsk {
+            machine_id: LAPTOP.into(),
+            display: "HDMI-1".into(),
+        }
+    }
+
+    #[test]
+    fn a_failed_switch_is_kept_until_the_panel_is_switched() {
+        let mut failures = Failures::default();
+        let switch = switch_of("DEL4065_ABC123", HDMI);
+        failures.switched(
+            &switch,
+            &Outcome::Failed("DDC/CI: no answer (code -3)".into()),
+        );
+        let shown = failures.current(|_| true);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].monitor, "DEL4065_ABC123");
+        assert_eq!(shown[0].value, HDMI);
+        assert_eq!(shown[0].error, "DDC/CI: no answer (code -3)");
+        assert_eq!(shown[0].remote, None);
+        // Another panel failing is said beside it, not instead.
+        failures.failed(&switch_of("SAM0F00_XYZ", DP), "no DDC/CI link");
+        assert_eq!(failures.current(|_| true).len(), 2);
+
+        // The panel switched at the next try: what was said of it goes.
+        failures.switched(&switch, &Outcome::Written);
+        let shown = failures.current(|_| true);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].monitor, "SAM0F00_XYZ");
+        failures.switched(&switch_of("SAM0F00_XYZ", DP), &Outcome::AlreadyShown);
+        assert!(failures.current(|_| true).is_empty());
+    }
+
+    #[test]
+    fn a_panel_that_left_the_layout_has_no_failure_to_show() {
+        let mut failures = Failures::default();
+        failures.failed(&switch_of("DEL4065_ABC123", HDMI), "no answer");
+        assert!(failures.current(|m| m != "DEL4065_ABC123").is_empty());
+        // Back in the layout and still not switched: still said.
+        assert_eq!(failures.current(|_| true).len(), 1);
+    }
+
+    #[test]
+    fn a_switch_asked_of_a_remote_fails_or_clears_on_its_answer() {
+        let mut failures = Failures::default();
+        let switch = switch_of("DEL4065_ABC123", HDMI);
+        failures.switched(&switch, &Outcome::Ask(ask(), "no answer on DP-1".into()));
+        assert!(failures.current(|_| true).is_empty(), "nothing failed yet");
+
+        // The remote could not either: both reasons are said, and the switch is given
+        // back for the caller to give up.
+        let given_up =
+            failures.answered(LAPTOP, "HDMI-1", HDMI, Some("ddcutil: code -3021".into()));
+        assert_eq!(given_up.as_ref(), Some(&switch));
+        let shown = failures.current(|_| true);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].error, "no answer on DP-1");
+        assert_eq!(shown[0].remote.as_deref(), Some(LAPTOP));
+        assert_eq!(
+            shown[0].remote_error.as_deref(),
+            Some("ddcutil: code -3021")
+        );
+        // The same answer twice is not news.
+        assert_eq!(
+            failures.answered(LAPTOP, "HDMI-1", HDMI, Some("again".into())),
+            None
+        );
+
+        // Asked again, and this time the remote did it: the failure goes.
+        failures.switched(&switch, &Outcome::Ask(ask(), "no answer on DP-1".into()));
+        assert_eq!(failures.answered(LAPTOP, "HDMI-1", HDMI, None), None);
+        assert!(failures.current(|_| true).is_empty());
+    }
+
+    #[test]
+    fn an_answer_about_another_value_or_display_is_ignored() {
+        let mut failures = Failures::default();
+        failures.switched(
+            &switch_of("DEL4065_ABC123", HDMI),
+            &Outcome::Ask(ask(), "why".into()),
+        );
+        assert_eq!(
+            failures.answered(LAPTOP, "HDMI-1", DP, Some("old".into())),
+            None
+        );
+        assert_eq!(
+            failures.answered(LAPTOP, "DP-2", HDMI, Some("other".into())),
+            None
+        );
+        assert_eq!(
+            failures.answered("someone", "HDMI-1", HDMI, Some("x".into())),
+            None
+        );
+        assert!(failures.current(|_| true).is_empty());
+        // The real answer still lands.
+        assert!(failures
+            .answered(LAPTOP, "HDMI-1", HDMI, Some("no".into()))
+            .is_some());
+    }
+
+    #[test]
+    fn a_failure_reads_as_the_api_documents_it() {
+        let mut failures = Failures::default();
+        failures.switched(
+            &switch_of("DEL4065_ABC123", HDMI),
+            &Outcome::Ask(ask(), "here".into()),
+        );
+        failures.answered(LAPTOP, "HDMI-1", HDMI, Some("there".into()));
+        let json = serde_json::to_value(failures.current(|_| true)).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([{
+                "Monitor": "DEL4065_ABC123",
+                "Source": format!("{LAPTOP}/HDMI-1"),
+                "Value": HDMI,
+                "Error": "here",
+                "Remote": LAPTOP,
+                "RemoteError": "there",
+            }])
+        );
+        failures.failed(&switch_of("DEL4065_ABC123", HDMI), "here");
+        let json = serde_json::to_value(failures.current(|_| true)).unwrap();
+        assert!(json[0].get("Remote").is_none(), "{json}");
     }
 }

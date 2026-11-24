@@ -76,6 +76,84 @@ pub struct PeerEntry {
     /// The role that machine plays on the link with this one.
     pub role: Role,
     pub state: PeerState,
+    /// Why the last attempt to link with it failed, or why its last link ended badly;
+    /// absent once a link with it is up again, and for a link ended on purpose.
+    /// Additive: absent from an older agent's state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<LinkProblem>,
+}
+
+/// What went wrong between this machine and another, for the user to read: the kind,
+/// for the frontend to put in its own words, and what the network or the other machine
+/// said, verbatim.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LinkProblem {
+    pub kind: ProblemKind,
+    #[serde(default)]
+    pub detail: String,
+}
+
+/// The kinds of [`LinkProblem`]. A frontend that meets a kind it does not know shows the
+/// detail alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProblemKind {
+    /// It could not be reached, or the connection broke: an address, a firewall, a
+    /// machine asleep or off. The detail is the system's error.
+    Network,
+    /// It refused this machine; the detail is the reason it gave (the user refused the
+    /// pairing, or it no longer trusts this machine).
+    Refused,
+    /// The pairing was not confirmed on the other machine in time: nobody accepted it
+    /// there, or it let the connection go.
+    NotConfirmed,
+    /// Another machine answers at its address: its fingerprint is not the one paired.
+    /// The detail is the fingerprint that answered.
+    UnknownFingerprint,
+    /// It speaks another version of the protocol, or something this one cannot read.
+    Incompatible,
+    /// The link was up and the other machine stopped answering.
+    Lost,
+}
+
+impl LinkProblem {
+    pub fn new(kind: ProblemKind, detail: impl Into<String>) -> LinkProblem {
+        LinkProblem {
+            kind,
+            detail: detail.into(),
+        }
+    }
+
+    /// Why a connection or a handshake failed. `pairing`: while waiting for the other
+    /// machine to say `Paired`, where a connection let go of means nobody confirmed.
+    pub fn of_link_error(error: &link::LinkError, pairing: bool) -> LinkProblem {
+        use link::LinkError;
+        match error {
+            LinkError::Refused(reason) => LinkProblem::new(ProblemKind::Refused, reason.clone()),
+            LinkError::Timeout("pairing") => {
+                LinkProblem::new(ProblemKind::NotConfirmed, error.to_string())
+            }
+            LinkError::Closed(reason) if pairing => {
+                LinkProblem::new(ProblemKind::NotConfirmed, reason.clone())
+            }
+            LinkError::Protocol(what) => LinkProblem::new(ProblemKind::Incompatible, what.clone()),
+            LinkError::Io(_) | LinkError::Timeout(_) | LinkError::Closed(_) => {
+                LinkProblem::new(ProblemKind::Network, error.to_string())
+            }
+        }
+    }
+
+    /// Why a live link ended, when it is a problem: a `Bye` or a close on this side is
+    /// a link ended on purpose.
+    pub fn of_close(reason: &link::CloseReason) -> Option<LinkProblem> {
+        use link::CloseReason;
+        match reason {
+            CloseReason::Refused(why) => Some(LinkProblem::new(ProblemKind::Refused, why.clone())),
+            CloseReason::Lost => Some(LinkProblem::new(ProblemKind::Lost, "it stopped answering")),
+            CloseReason::Failed(why) => Some(LinkProblem::new(ProblemKind::Network, why.clone())),
+            CloseReason::Bye(_) | CloseReason::Local(_) => None,
+        }
+    }
 }
 
 /// The answer to `Peers`, and the body of the `Peers` event.
@@ -166,6 +244,14 @@ pub enum Notice {
         from: String,
         display: String,
         value: u16,
+    },
+    /// A remote of this machine says how the `SelectInput` this machine sent it went
+    /// (`Control::InputSwitched`): `error` is why it could not, `None` when it did.
+    InputSwitched {
+        from: String,
+        display: String,
+        value: u16,
+        error: Option<String>,
     },
 }
 
@@ -305,9 +391,10 @@ impl Service {
     }
 
     /// Asks the remote `machine_id` to switch its monitor `display` to the input `value`
-    /// (`SelectInput`), when it is linked as a remote of this machine. Sent and
-    /// forgotten: the remote does not answer it, and what it shows next is the display
-    /// change that follows. Whether it could be handed to the manager.
+    /// (`SelectInput`), when it is linked as a remote of this machine. The remote says
+    /// how it went with `InputSwitched` ([`Notice::InputSwitched`]); an older one says
+    /// nothing, and what it shows next is the display change that follows. Whether it
+    /// could be handed to the manager.
     pub fn select_input(&mut self, machine_id: &str, display: &str, value: u16) -> bool {
         let Some(running) = &self.running else {
             return false;
@@ -318,6 +405,30 @@ impl Service {
                 machine_id: machine_id.to_owned(),
                 display: display.to_owned(),
                 value,
+            })
+            .is_ok()
+    }
+
+    /// Tells this machine's master `machine_id` how its `SelectInput` for `display` and
+    /// `value` went (`Control::InputSwitched`): `error` is why it failed. Whether it
+    /// could be handed to the manager.
+    pub fn input_switched(
+        &mut self,
+        machine_id: &str,
+        display: &str,
+        value: u16,
+        error: Option<String>,
+    ) -> bool {
+        let Some(running) = &self.running else {
+            return false;
+        };
+        running
+            .commands
+            .send(Command::InputSwitched {
+                machine_id: machine_id.to_owned(),
+                display: display.to_owned(),
+                value,
+                error,
             })
             .is_ok()
     }
@@ -532,6 +643,7 @@ impl Service {
                     },
                     role: paired.role,
                     state: PeerState::Paired,
+                    problem: None,
                 })
                 .collect(),
         }
@@ -574,6 +686,7 @@ mod tests {
             },
             role,
             state,
+            problem: None,
         }
     }
 
@@ -627,5 +740,83 @@ mod tests {
         none.selected_remote = None;
         assert!(none.remote_screens().is_empty());
         assert!(state(false, "d", peers).remote_screens().is_empty());
+    }
+
+    #[test]
+    fn a_link_error_is_told_by_what_the_user_can_do_about_it() {
+        use link::{CloseReason, LinkError};
+        let kind = |error: LinkError, pairing| LinkProblem::of_link_error(&error, pairing).kind;
+        let refused =
+            LinkProblem::of_link_error(&LinkError::Refused("the user refused".into()), true);
+        assert_eq!(
+            refused,
+            LinkProblem::new(ProblemKind::Refused, "the user refused")
+        );
+        assert_eq!(
+            kind(LinkError::Timeout("pairing"), true),
+            ProblemKind::NotConfirmed
+        );
+        assert_eq!(
+            kind(LinkError::Closed("connection closed".into()), true),
+            ProblemKind::NotConfirmed
+        );
+        assert_eq!(
+            kind(LinkError::Closed("connection closed".into()), false),
+            ProblemKind::Network
+        );
+        assert_eq!(
+            kind(LinkError::Timeout("the handshake"), false),
+            ProblemKind::Network
+        );
+        let refused_tcp = std::io::Error::from(std::io::ErrorKind::ConnectionRefused);
+        assert_eq!(
+            kind(LinkError::Io(refused_tcp), false),
+            ProblemKind::Network
+        );
+        assert_eq!(
+            kind(LinkError::Protocol("protocol 2".into()), false),
+            ProblemKind::Incompatible
+        );
+
+        assert_eq!(
+            LinkProblem::of_close(&CloseReason::Lost).map(|p| p.kind),
+            Some(ProblemKind::Lost)
+        );
+        assert_eq!(
+            LinkProblem::of_close(&CloseReason::Refused("forgotten".into())),
+            Some(LinkProblem::new(ProblemKind::Refused, "forgotten"))
+        );
+        assert_eq!(
+            LinkProblem::of_close(&CloseReason::Failed("reset".into())).map(|p| p.kind),
+            Some(ProblemKind::Network)
+        );
+        // Ended on purpose: nothing to say.
+        assert_eq!(
+            LinkProblem::of_close(&CloseReason::Bye("quit".into())),
+            None
+        );
+        assert_eq!(
+            LinkProblem::of_close(&CloseReason::Local("off".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn a_problem_is_absent_from_the_state_unless_there_is_one() {
+        let mut entry = entry("d", Role::Remote, PeerState::Paired, false);
+        let json = serde_json::to_value(&entry).unwrap();
+        assert!(json.get("Problem").is_none(), "{json}");
+        entry.problem = Some(LinkProblem::new(ProblemKind::UnknownFingerprint, "ab12"));
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(
+            json["Problem"],
+            serde_json::json!({"Kind": "UnknownFingerprint", "Detail": "ab12"})
+        );
+        // An older agent's entry reads.
+        json.as_object().unwrap();
+        let mut older = json.clone();
+        older.as_object_mut().unwrap().remove("Problem");
+        let read: PeerEntry = serde_json::from_value(older).unwrap();
+        assert_eq!(read.problem, None);
     }
 }

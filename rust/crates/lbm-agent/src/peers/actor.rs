@@ -20,7 +20,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use super::hook_input::{HookInput, Sink};
-use super::{Notice, PeerEntry, PeerState, PeersState};
+use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
 
 /// The first wait before calling a remote back, doubled at every failure up to
 /// [`REDIAL_MAX`].
@@ -72,6 +72,13 @@ pub(super) enum Command {
         machine_id: String,
         display: String,
         value: u16,
+    },
+    /// `InputSwitched` to this machine's master `machine_id`.
+    InputSwitched {
+        machine_id: String,
+        display: String,
+        value: u16,
+        error: Option<String>,
     },
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
@@ -157,6 +164,9 @@ struct Actor {
     dialing: HashSet<String>,
     redial_scheduled: HashSet<String>,
     backoff: HashMap<String, Duration>,
+    /// Why the last attempt to link with a paired machine failed, or its last link ended
+    /// badly, by machine id: shown in the state until a link with it is up again.
+    problems: HashMap<String, LinkProblem>,
     /// This machine's screens, and how many times they changed.
     displays: Vec<PeerDisplay>,
     revision: u64,
@@ -234,6 +244,7 @@ pub(super) async fn run(
         dialing: HashSet::new(),
         redial_scheduled: HashSet::new(),
         backoff: HashMap::new(),
+        problems: HashMap::new(),
         // A list handed over at start is this machine's screens already: revision 1, so
         // the first change after it is told apart.
         revision: u64::from(!start.displays.is_empty()),
@@ -334,6 +345,7 @@ impl Actor {
                     },
                     role: paired.role,
                     state: PeerState::Paired,
+                    problem: self.problems.get(&paired.machine_id).cloned(),
                 }
             })
             .collect();
@@ -356,6 +368,7 @@ impl Actor {
                 },
                 role: info.hello.role,
                 state: PeerState::Pending,
+                problem: None,
             }
         }));
         PeersState {
@@ -413,6 +426,12 @@ impl Actor {
                 display,
                 value,
             } => self.select_input(&machine_id, display, value),
+            Command::InputSwitched {
+                machine_id,
+                display,
+                value,
+                error,
+            } => self.input_switched(&machine_id, display, value, error),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -511,6 +530,7 @@ impl Actor {
                 }
                 answer(reply, Err(format!("cannot connect to {address}: {error}")));
                 if let Some(machine_id) = expected {
+                    self.problem(&machine_id, LinkProblem::of_link_error(&error, false));
                     self.schedule_redial(&machine_id);
                 }
                 return;
@@ -525,6 +545,10 @@ impl Actor {
                     "[lbm-agent] multi-PC: {address} is no longer {machine_id} but {fingerprint}"
                 );
                 tokio::spawn(pending.refuse("not the machine paired at this address"));
+                self.problem(
+                    &machine_id,
+                    LinkProblem::new(ProblemKind::UnknownFingerprint, fingerprint),
+                );
                 self.schedule_redial(&machine_id);
                 return;
             }
@@ -565,6 +589,7 @@ impl Actor {
             } else {
                 PeerState::Pending
             },
+            problem: None,
         }
     }
 
@@ -683,6 +708,7 @@ impl Actor {
             Ok(link) => link,
             Err(error) => {
                 eprintln!("[lbm-agent] multi-PC: no link with {machine_id}: {error}");
+                self.problem(&machine_id, LinkProblem::of_link_error(&error, true));
                 self.schedule_redial(&machine_id);
                 return;
             }
@@ -694,6 +720,7 @@ impl Actor {
             return;
         }
         self.backoff.remove(&machine_id);
+        self.problems.remove(&machine_id);
         let (info, sender, events) = link.into_parts();
         self.next_id += 1;
         let id = self.next_id;
@@ -867,6 +894,19 @@ impl Actor {
                     value,
                 });
             }
+            // How a switch this machine asked of its remote went.
+            Control::InputSwitched {
+                display,
+                value,
+                error,
+            } if live.info.hello.role == Role::Remote => {
+                let _ = self.notices.send(Notice::InputSwitched {
+                    from: machine_id.to_owned(),
+                    display,
+                    value,
+                    error,
+                });
+            }
             Control::SelectInput { display, .. } => {
                 eprintln!(
                     "[lbm-agent] multi-PC: {} is not this machine's master: its input switch on {display} is ignored",
@@ -886,6 +926,9 @@ impl Actor {
             "[lbm-agent] multi-PC: the link with {} ended: {reason:?}",
             live.info.hello.name
         );
+        if let Some(problem) = LinkProblem::of_close(&reason) {
+            self.problem(machine_id, problem);
+        }
         self.select();
         self.schedule_redial(machine_id);
     }
@@ -966,6 +1009,7 @@ impl Actor {
             .map_err(|error| format!("cannot forget {machine_id}: {error}"))?;
         let waiting = self.pending.remove(machine_id).is_some();
         self.backoff.remove(machine_id);
+        self.problems.remove(machine_id);
         if let Some(live) = self.links.remove(machine_id) {
             tokio::spawn(async move { live.sender.close("forgotten").await });
             self.select();
@@ -995,6 +1039,41 @@ impl Actor {
         tokio::spawn(async move {
             let _ = sender.control(&message).await;
         });
+    }
+
+    /// Tells this machine's master `machine_id` how its `SelectInput` went, if it is
+    /// still linked as this machine's master.
+    fn input_switched(
+        &mut self,
+        machine_id: &str,
+        display: String,
+        value: u16,
+        error: Option<String>,
+    ) {
+        let Some(live) = self
+            .links
+            .get(machine_id)
+            .filter(|live| live.info.hello.role == Role::Master)
+        else {
+            return;
+        };
+        let sender = live.sender.clone();
+        let message = Control::InputSwitched {
+            display,
+            value,
+            error,
+        };
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+    }
+
+    /// Records why linking with a paired machine went wrong, for the state to show. A
+    /// machine this one does not keep has no row to show it on.
+    fn problem(&mut self, machine_id: &str, problem: LinkProblem) {
+        if self.store.get(machine_id).is_some() {
+            self.problems.insert(machine_id.to_owned(), problem);
+        }
     }
 
     /// This machine's screens changed: every master this machine is the remote of is

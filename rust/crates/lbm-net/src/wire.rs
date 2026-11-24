@@ -115,6 +115,17 @@ pub enum Control {
     /// master brings its pointer home and starts afresh. Added after protocol 1 without
     /// a new version: an older master sees an unknown type.
     InputReset,
+    /// Remote → master: how the `SelectInput` for `display` and `value` went on the
+    /// remote: `error` says why it could not, absent when the monitor shows that input
+    /// now. What lets the master's user see a switch that failed on the other machine.
+    /// Added after protocol 1 without a new version: an older master sees an unknown
+    /// type, and an older remote sends none.
+    InputSwitched {
+        display: String,
+        value: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     Ping,
     Pong,
     /// The sender is closing the link on purpose.
@@ -246,6 +257,16 @@ mod tests {
                 value: 0x0f,
             },
             Control::InputReset,
+            Control::InputSwitched {
+                display: "DP-1".into(),
+                value: 0x0f,
+                error: None,
+            },
+            Control::InputSwitched {
+                display: "DP-1".into(),
+                value: 0x0f,
+                error: Some("DDC/CI write failed".into()),
+            },
             Control::Ping,
             Control::Pong,
             Control::Bye {
@@ -304,6 +325,30 @@ mod tests {
         assert_eq!(
             std::str::from_utf8(&reset[5..]).unwrap(),
             r#"{"Type":"InputReset"}"#
+        );
+    }
+
+    #[test]
+    fn an_input_switch_says_why_only_when_it_failed() {
+        let done = encode_control(&Control::InputSwitched {
+            display: "DP-1".into(),
+            value: 17,
+            error: None,
+        })
+        .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&done[5..]).unwrap(),
+            r#"{"Type":"InputSwitched","Display":"DP-1","Value":17}"#
+        );
+        let failed = encode_control(&Control::InputSwitched {
+            display: "DP-1".into(),
+            value: 17,
+            error: Some("no answer".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&failed[5..]).unwrap(),
+            r#"{"Type":"InputSwitched","Display":"DP-1","Value":17,"Error":"no answer"}"#
         );
     }
 

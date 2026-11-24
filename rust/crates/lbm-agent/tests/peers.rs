@@ -5,7 +5,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use lbm_agent::peers::{
-    Answer, Notice, PeerRequest, PeerState, PeersState, Service, Settings, Setup,
+    Answer, LinkProblem, Notice, PeerRequest, PeerState, PeersState, ProblemKind, Service,
+    Settings, Setup,
 };
 use lbm_ipc::peer::PeerDisplay;
 use lbm_net::identity::Identity;
@@ -648,6 +649,262 @@ async fn only_this_machines_master_may_switch_its_monitors() {
         }
     );
     drop(link);
+}
+
+#[tokio::test]
+async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
+    // The tower is the remote: what its agent says of a switch reaches its master.
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let mut tower = Node::new(tower_dir.path(), None);
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    tower.until(|s| linked(s, master.fingerprint())).await;
+    assert!(tower.service.input_switched(
+        master.fingerprint(),
+        "DP-1",
+        0x11,
+        Some("DDC/CI write failed".into())
+    ));
+    loop {
+        match next_control(&mut link).await {
+            Control::InputSwitched {
+                display,
+                value,
+                error,
+            } => {
+                assert_eq!((display.as_str(), value), ("DP-1", 0x11));
+                assert_eq!(error.as_deref(), Some("DDC/CI write failed"));
+                break;
+            }
+            // The screens it sends at link-up.
+            Control::Displays { .. } | Control::Wallpapers { .. } => {}
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    // The desk is the master: its remote's answer reaches the desk's agent.
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    laptop_link
+        .sender()
+        .control(&Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: 0x0f,
+            error: None,
+        })
+        .await
+        .unwrap();
+    let heard = tokio::time::timeout(PATIENCE, async {
+        loop {
+            if let Notice::InputSwitched {
+                from,
+                display,
+                value,
+                error,
+            } = desk.notices.recv().await.expect("notices")
+            {
+                return (from, display, value, error);
+            }
+        }
+    })
+    .await
+    .expect("the answer, in time");
+    assert_eq!(
+        heard,
+        (
+            laptop.fingerprint().to_owned(),
+            "HDMI-1".to_owned(),
+            0x0f,
+            None
+        )
+    );
+    drop(link);
+}
+
+//==================//
+// Link problems    //
+//==================//
+
+fn problem(state: &PeersState, machine_id: &str) -> Option<LinkProblem> {
+    peer(state, machine_id).and_then(|p| p.problem.clone())
+}
+
+/// A remote that is paired with the desk refuses it, then trusts it again: the refusal
+/// and its reason are in the desk's state until the link is up.
+#[tokio::test]
+async fn a_remote_that_refuses_the_link_is_said_until_it_links() {
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let first = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap();
+    tokio::spawn(first.refuse("this machine no longer trusts the desk"));
+    let state = desk
+        .until(|s| problem(s, laptop.fingerprint()).is_some())
+        .await;
+    assert_eq!(
+        problem(&state, laptop.fingerprint()),
+        Some(LinkProblem::new(
+            ProblemKind::Refused,
+            "this machine no longer trusts the desk"
+        ))
+    );
+    assert!(!linked(&state, laptop.fingerprint()));
+
+    // The desk calls back; this time the laptop trusts it.
+    let _link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls again")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    let state = desk.until(|s| linked(s, laptop.fingerprint())).await;
+    assert_eq!(problem(&state, laptop.fingerprint()), None);
+}
+
+/// A paired remote nobody answers for: a network problem, gone once it answers.
+#[tokio::test]
+async fn a_remote_out_of_reach_is_said_until_it_answers() {
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let port = free_port();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &format!("127.0.0.1:{port}"),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let state = desk
+        .until(|s| problem(s, laptop.fingerprint()).is_some())
+        .await;
+    let said = problem(&state, laptop.fingerprint()).unwrap();
+    assert_eq!(said.kind, ProblemKind::Network);
+    assert!(!said.detail.is_empty());
+
+    // The laptop comes up on that port: the desk's next call links, and the problem
+    // goes.
+    let mut listener = link::listen(
+        ("127.0.0.1", port),
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let _link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls again")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    let state = desk.until(|s| linked(s, laptop.fingerprint())).await;
+    assert_eq!(problem(&state, laptop.fingerprint()), None);
+
+    // Forgotten, it is said nothing of, whatever happens to the link.
+    desk.ask(PeerRequest::Forget(laptop.fingerprint().to_owned()))
+        .await
+        .unwrap();
+    let state = desk
+        .until(|s| peer(s, laptop.fingerprint()).is_none())
+        .await;
+    assert!(state.peers.iter().all(|p| p.problem.is_none()));
+}
+
+/// Another machine answers at a paired remote's address: its fingerprint is said.
+#[tokio::test]
+async fn another_machine_at_a_paired_address_is_said_with_its_fingerprint() {
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let stranger_dir = tempfile::tempdir().unwrap();
+    let stranger = Identity::load_or_create(stranger_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &stranger,
+        Hello::new("stranger", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    // Held, so that the desk's refusal is what ends it.
+    let _held = tokio::time::timeout(PATIENCE, listener.next()).await;
+    let state = desk
+        .until(|s| problem(s, laptop.fingerprint()).is_some())
+        .await;
+    assert_eq!(
+        problem(&state, laptop.fingerprint()),
+        Some(LinkProblem::new(
+            ProblemKind::UnknownFingerprint,
+            stranger.fingerprint()
+        ))
+    );
 }
 
 //==================//

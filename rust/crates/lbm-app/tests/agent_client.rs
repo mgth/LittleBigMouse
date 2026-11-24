@@ -730,6 +730,7 @@ fn a_pending_machine_is_accepted_by_its_fingerprint_and_its_screens_reach_the_ma
             machine: "laptop".into(),
             remote: true,
             shared: false,
+            problem: None,
         })
     );
 }

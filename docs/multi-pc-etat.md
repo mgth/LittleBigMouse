@@ -40,6 +40,7 @@ qui va le pointeur quand il y entre.
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
+| Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running » |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -107,6 +108,18 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   dont le moteur local est arrêté n'injectait pas le pointeur (il ne connaissait son
   bureau que par un `Load`), et KWin 6 jette ce qu'un périphérique uinput émet dans ses
   ~300 premières millisecondes, d'où un premier `Enter` sans effet.
+
+- Autres outils de partage : regardés, jamais surveillés. Un Deskflow lancé ou arrêté
+  après le dernier de ces moments (mode activé, lien établi, Start, fenêtre ouverte)
+  n'apparaît ou ne disparaît qu'au moment suivant ; c'est la règle « événements
+  seulement ». Sous Linux, les sockets d'un processus d'un autre utilisateur sont
+  illisibles : seule une connexion établie sur le port 24800 par défaut dit alors
+  « connecté », sans pouvoir l'attribuer, et un tel processus réglé sur un autre port
+  reste « connexion inconnue ». Sous Windows, la ligne de commande d'un autre processus
+  n'est pas lue : `deskflow-core.exe` n'est dit serveur ou client que par une connexion
+  sur le port 24800. Rien de tout cela n'a tourné sur Windows ; sous Linux, seule une
+  fenêtre `deskflow` seule a été vue sur une vraie machine (lecture de `/proc`), jamais un
+  `deskflow-core` relié à un client.
 
 ## Matrice de support
 
@@ -410,7 +423,8 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-Aucun : toutes les PR de la série (#806 à #811, #813) sont fusionnées dans `v6`.
+- Autres outils de partage (branche `feat/concurrent-input-sharing-v6`) : la ligne
+  « Autres outils de partage » ci-dessus et sa faiblesse.
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

@@ -59,8 +59,9 @@ screen), Windows as master, the portal and X11 backends as master.
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
   - `InputReset` — remote → master: the remote ended the session of the input stream
-    while the link lives on (its hook could not keep up); the master brings its pointer
-    home (see "The end of a hop"). Added after protocol 1 without a new version, an older
+    while the link lives on (its hook could not keep up, or its connection to the hook
+    ended: the hook restarted, crashed, or failed to read in time); the master brings its
+    pointer home (see "The end of a hop"). Added after protocol 1 without a new version, an older
     master ignores it as an unknown type
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
@@ -208,6 +209,13 @@ On a remote (`lbm-hook/src/remote`):
   batch that finds the agent's queue to the hook full: it may have been a release, so
   the connection is closed after what is queued, and the hook ignores what follows
   until the master's next `Enter` — which is why the master is then told `InputReset`.
+  The same holds when the connection ends by no doing of the link — the hook went, or a
+  write to it failed or took longer than a second: every link's task hears of it, and
+  the one whose master was **in a session** (a batch delivered since that master's last
+  `Leave` and since the last `InputReset`) says `InputReset`, once. Nothing is said out
+  of a session, at the end of the link, or while the hook stays away. The agent
+  connects to the hook again at the first batch after a second; a crossing made sooner
+  finds no connection and is dropped.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the selected remote with `try_input`.
   **One remote at a time**: batches carry no destination, so exactly one linked remote

@@ -8,6 +8,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use lbm_ipc::input::InputEvent;
 use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
@@ -1113,31 +1114,51 @@ async fn forward(
     mut events: mpsc::Receiver<Event>,
     link: LinkSender,
     internal: mpsc::UnboundedSender<Internal>,
-    hook: Sink,
+    mut hook: Sink,
 ) {
     // Only a master's batches are injected: a remote has no business driving this
     // machine's pointer.
     let injecting = their_role == Role::Master;
+    // A session of this master's is under way in the hook: a batch was delivered since
+    // the master's last `Leave` and since the last end of the session here.
     let mut injected = false;
     let reason = loop {
-        match events.recv().await {
+        let event = tokio::select! {
+            // A loss is heard before the next batch: one that came before a crossing
+            // ended no session of that crossing's.
+            biased;
+            () = hook.lost() => {
+                // The hook's connection ended by no doing of this link's (the hook went,
+                // or a write to it failed or took too long): the session is over there,
+                // and the next connection's batches are ignored until an `Enter`. The
+                // master is told, as after a full queue below.
+                if injected {
+                    injected = false;
+                    eprintln!(
+                        "[lbm-agent] multi-PC: the hook's connection ended in a session: \
+                         the master is told"
+                    );
+                    reset(&link);
+                }
+                continue;
+            }
+            event = events.recv() => event,
+        };
+        match event {
             Some(Event::Input(batch)) if injecting => {
+                let leaves = ends_with_leave(&batch);
                 if hook.try_batch(batch) {
-                    injected = true;
+                    injected = !leaves;
                 } else if injected {
                     // The hook is not keeping up and this batch is lost: it may have been
                     // a release. The stream ends here instead, so the hook releases what
                     // it holds; what follows reaches it as a new stream, ignored until
                     // the master's next `Enter`. The master is told, or it would go on
                     // sending into that void, its pointer and keyboards held here, until
-                    // the user crossed home and back. Sent from a task of its own: the
-                    // send may wait for room, and this loop must go on reading the link.
+                    // the user crossed home and back.
                     hook.release().await;
                     injected = false;
-                    let link = link.clone();
-                    tokio::spawn(async move {
-                        let _ = link.control(&Control::InputReset).await;
-                    });
+                    reset(&link);
                 }
             }
             Some(Event::Input(_)) => {}
@@ -1161,6 +1182,28 @@ async fn forward(
         machine_id,
         reason,
     });
+}
+
+/// Tells the master the session of its stream ended here: what it goes on sending is
+/// ignored until its next `Enter`. Sent from a task of its own: the send may wait for
+/// room, and the link's loop must go on reading.
+fn reset(link: &LinkSender) {
+    let link = link.clone();
+    tokio::spawn(async move {
+        let _ = link.control(&Control::InputReset).await;
+    });
+}
+
+/// Whether `batch` ends the master's session: the pointer went home with it, and the
+/// hook let go of everything (its last `Enter` or `Leave` is a `Leave`).
+fn ends_with_leave(batch: &[u8]) -> bool {
+    lbm_ipc::input::decode(batch).is_ok_and(|events| {
+        events
+            .iter()
+            .rev()
+            .find(|event| matches!(event, InputEvent::Enter { .. } | InputEvent::Leave))
+            == Some(&InputEvent::Leave)
+    })
 }
 
 /// `host`, `host:port`, `[v6]` or `[v6]:port`, with the protocol's port when none is

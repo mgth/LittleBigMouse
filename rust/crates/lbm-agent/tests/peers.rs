@@ -1214,3 +1214,245 @@ async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_i
         .unwrap();
     assert_eq!(next_input(&mut beta_link).await, entering);
 }
+
+//========================//
+// The remote's hook goes  //
+//========================//
+
+/// Whether an `InputReset` comes on `link` `within` this long; input and other control
+/// messages are let go.
+#[cfg(unix)]
+async fn reset_within(link: &mut Link, within: Duration) -> bool {
+    tokio::time::timeout(within, async {
+        loop {
+            match link.next().await {
+                Some(Event::Control(Control::InputReset)) => return,
+                Some(_) => {}
+                None => std::future::pending().await,
+            }
+        }
+    })
+    .await
+    .is_ok()
+}
+
+/// The next connection the agent makes to the hook listening at `listener`.
+#[cfg(unix)]
+async fn hook_client(listener: &tokio::net::UnixListener) -> tokio::net::UnixStream {
+    tokio::time::timeout(PATIENCE, listener.accept())
+        .await
+        .expect("the agent connects to the hook")
+        .unwrap()
+        .0
+}
+
+/// How long the agent leaves a hook it lost alone before connecting again
+/// (`hook_input::RETRY_AFTER`), with a margin.
+#[cfg(unix)]
+const AFTER_THE_RETRY_DELAY: Duration = Duration::from_millis(1300);
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_hook_that_goes_in_a_session_makes_the_remote_say_input_reset_once() {
+    use lbm_ipc::input::{encode, read_batch, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let hook_path = tower_dir.path().join("input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+    let sender = link.sender();
+
+    // The pointer crosses and Ctrl goes down on the tower.
+    let crossing = encode(&[
+        InputEvent::Enter { x: 0, y: 0 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ]);
+    sender.input(&crossing).await.unwrap();
+    let mut hook = hook_client(&hook_listener).await;
+    assert_eq!(read_batch(&mut hook).await.unwrap(), crossing);
+
+    // The tower's hook goes (restarted, crashed) while the link lives on: its successor
+    // would ignore everything until an `Enter`, so the master is told.
+    drop(hook);
+    assert!(
+        reset_within(&mut link, PATIENCE).await,
+        "the master is told the session ended"
+    );
+
+    // Once for that session: what the master sends before it hears of it, and the hook
+    // being away meanwhile, say nothing more.
+    sender
+        .input(&encode(&[InputEvent::Key {
+            code: KEY_A,
+            pressed: true,
+        }]))
+        .await
+        .unwrap();
+    assert!(
+        !reset_within(&mut link, Duration::from_millis(700)).await,
+        "a second InputReset for the same session"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_hook_that_goes_out_of_a_session_makes_no_input_reset() {
+    use lbm_ipc::input::{encode, read_batch, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let hook_path = tower_dir.path().join("input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+    let sender = link.sender();
+
+    // A crossing, and the pointer back home: the session is over.
+    let crossing = encode(&[InputEvent::Enter { x: 0, y: 0 }]);
+    let home = encode(&[InputEvent::Leave]);
+    sender.input(&crossing).await.unwrap();
+    sender.input(&home).await.unwrap();
+    let mut hook = hook_client(&hook_listener).await;
+    assert_eq!(read_batch(&mut hook).await.unwrap(), crossing);
+    assert_eq!(read_batch(&mut hook).await.unwrap(), home);
+
+    // The hook goes now: nothing was under way, nothing is said.
+    drop(hook);
+    assert!(
+        !reset_within(&mut link, Duration::from_millis(700)).await,
+        "an InputReset out of a session"
+    );
+
+    // The next crossing reaches the hook's successor.
+    tokio::time::sleep(AFTER_THE_RETRY_DELAY).await;
+    let again = encode(&[InputEvent::Enter { x: 5, y: 5 }]);
+    sender.input(&again).await.unwrap();
+    let mut successor = hook_client(&hook_listener).await;
+    assert_eq!(read_batch(&mut successor).await.unwrap(), again);
+    assert!(
+        !reset_within(&mut link, Duration::from_millis(300)).await,
+        "an InputReset out of a session"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn when_the_remotes_hook_goes_in_a_session_the_masters_pointer_comes_home_for_a_fresh_crossing(
+) {
+    use lbm_ipc::input::{decode, encode, read_batch, write_batch, InputEvent};
+    let (desk_dir, tower_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let desk_id = Identity::load_or_create(desk_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let tower_id = Identity::load_or_create(tower_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let tower_port = free_port();
+    pair(tower_dir.path(), &desk_id, "", Role::Master);
+    pair(
+        desk_dir.path(),
+        &tower_id,
+        &format!("127.0.0.1:{tower_port}"),
+        Role::Remote,
+    );
+    let desk_path = desk_dir.path().join("desk-input.sock");
+    let desk_listener = tokio::net::UnixListener::bind(&desk_path).unwrap();
+    let tower_path = tower_dir.path().join("tower-input.sock");
+    let tower_listener = tokio::net::UnixListener::bind(&tower_path).unwrap();
+
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Some(tower_path.to_string_lossy().into_owned()),
+    );
+    tower.turn_on(tower_port, "tower").await;
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(desk_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    desk.until(|s| linked(s, &tower_id)).await;
+    tower.until(|s| linked(s, &desk_id)).await;
+    desk.hook_ready_for(&tower_id).await;
+
+    // The desk's pointer crosses to the tower and Ctrl goes down there.
+    let mut desk_hook = hook_client(&desk_listener).await;
+    let crossing = encode(&[
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ]);
+    write_batch(&mut desk_hook, &crossing).await.unwrap();
+    let mut tower_hook = hook_client(&tower_listener).await;
+    assert_eq!(read_batch(&mut tower_hook).await.unwrap(), crossing);
+
+    // The tower's hook goes, alone: the link lives on. The desk hears `InputReset` and
+    // ends the hop: its hook loses its client (the pointer comes home, the keyboards are
+    // let go), and a new connection is made for the next crossing.
+    drop(tower_hook);
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut desk_hook))
+            .await
+            .expect("the desk's hook loses its client")
+            .is_err(),
+        "the desk's hook connection is closed"
+    );
+    let mut desk_successor = hook_client(&desk_listener).await;
+
+    // The next crossing, once the tower's agent connects to a hook again, reaches the
+    // tower's new hook: an `Enter` it takes, then a key. The desk's `Leave` that ended
+    // the hop may come first, or have been dropped while no hook was connected.
+    tokio::time::sleep(AFTER_THE_RETRY_DELAY).await;
+    let again = encode(&[
+        InputEvent::Enter { x: 20, y: 20 },
+        InputEvent::Key {
+            code: KEY_A,
+            pressed: true,
+        },
+    ]);
+    write_batch(&mut desk_successor, &again).await.unwrap();
+    let mut tower_successor = hook_client(&tower_listener).await;
+    let mut held = Held::default();
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            let batch = read_batch(&mut tower_successor).await.unwrap();
+            if batch == again {
+                held.apply(&batch);
+                return;
+            }
+            assert_eq!(decode(&batch).unwrap(), [InputEvent::Leave]);
+        }
+    })
+    .await
+    .expect("the next crossing reaches the tower's new hook");
+    assert!(held.driven && held.keys.contains(&KEY_A));
+    tower.until(|s| linked(s, &desk_id)).await;
+}

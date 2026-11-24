@@ -8,7 +8,10 @@
 //!   ends, or a batch finds the queue full, the connection is closed ([`Sink::release`]):
 //!   that is how the hook learns to release whatever the stream left pressed. The hook
 //!   ignores a new connection's batches until an `Enter`; after a full queue the master
-//!   is told so (`InputReset`, sent by the link's task).
+//!   is told so (`InputReset`, sent by the link's task). A connection that ends for
+//!   any other cause — the hook gone, a write that failed or took too long — ends the
+//!   session the same way: every link's task hears of it ([`Sink::lost`]), and the one
+//!   whose master was in a session says `InputReset`.
 //! - **Master**: while a remote is linked ([`HookInput::set_target`]), the connection is
 //!   kept, and every batch the hook writes to it is relayed to that remote's link with
 //!   `try_input`, never a wait. A connection relays to one link for its whole life.
@@ -59,28 +62,44 @@ enum Message {
 }
 
 /// Where the network side hands batches to the hook, and the end of a stream.
-#[derive(Clone)]
-pub struct Sink(mpsc::Sender<Message>);
+pub struct Sink {
+    messages: mpsc::Sender<Message>,
+    /// Marked changed every time the connection ends by no doing of the network side
+    /// (not a [`Sink::release`]): whatever session the hook had is over.
+    lost: watch::Receiver<()>,
+}
 
 impl Sink {
     /// Queues a batch for the hook if there is room. When there is none the batch is
     /// lost, and the caller must end the stream ([`Sink::release`]): what follows it
     /// cannot be injected as if it had not been.
     pub fn try_batch(&self, batch: Vec<u8>) -> bool {
-        self.0.try_send(Message::Batch(batch)).is_ok()
+        self.messages.try_send(Message::Batch(batch)).is_ok()
     }
 
     /// The stream ended: closes the connection after the batches already queued, so
     /// the hook releases what they left pressed. Waits for room in the queue, so that
     /// it can neither be lost nor overtake those batches.
     pub async fn release(&self) {
-        let _ = self.0.send(Message::Release).await;
+        let _ = self.messages.send(Message::Release).await;
+    }
+
+    /// Resolves when the connection to the hook has ended by no doing of this side
+    /// since the last time it did (or since this sink was made): the hook went, or a
+    /// write to it failed or took too long. The batches delivered before are the hook's
+    /// no more: a new connection's are ignored until an `Enter`. Never resolves once
+    /// the connection's task is gone.
+    pub async fn lost(&mut self) {
+        if self.lost.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
     }
 }
 
 /// The connection's task, and its two inputs.
 pub struct HookInput {
-    sink: Sink,
+    messages: mpsc::Sender<Message>,
+    lost: watch::Sender<()>,
     target: watch::Sender<Option<LinkSender>>,
 }
 
@@ -90,15 +109,21 @@ impl HookInput {
     pub fn spawn(endpoint: Option<String>) -> HookInput {
         let (messages, inbox) = mpsc::channel(QUEUE);
         let (target, targets) = watch::channel(None);
-        tokio::spawn(run(endpoint, inbox, targets));
+        let (lost, _) = watch::channel(());
+        tokio::spawn(run(endpoint, inbox, targets, lost.clone()));
         HookInput {
-            sink: Sink(messages),
+            messages,
+            lost,
             target,
         }
     }
 
+    /// A sink for one link: it hears of the connection's losses from now on only.
     pub fn sink(&self) -> Sink {
-        self.sink.clone()
+        Sink {
+            messages: self.messages.clone(),
+            lost: self.lost.subscribe(),
+        }
     }
 
     /// The link the hook's own batches go to (this machine is its master), or none.
@@ -135,7 +160,16 @@ async fn run(
     endpoint: Option<String>,
     mut inbox: mpsc::Receiver<Message>,
     mut targets: watch::Receiver<Option<LinkSender>>,
+    lost: watch::Sender<()>,
 ) {
+    // The connection ended by no doing of the network side: the session the hook had,
+    // if any, is over, and the links' tasks are told so.
+    let lose = |connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>| {
+        if connection.is_some() {
+            close(connection, leaving);
+            lost.send_replace(());
+        }
+    };
     let mut connection: Option<Connection> = None;
     let mut retry_at: Option<Instant> = None;
     // The `Leave` of the last hop being queued on its link; no new connection relays
@@ -172,7 +206,7 @@ async fn run(
                         let written =
                             tokio::time::timeout(WRITE_TIMEOUT, write_batch(&mut open.writer, &batch)).await;
                         if !matches!(written, Ok(Ok(()))) {
-                            close(&mut connection, &mut leaving);
+                            lose(&mut connection, &mut leaving);
                             retry_at = Some(Instant::now() + RETRY_AFTER);
                         }
                     }
@@ -184,7 +218,7 @@ async fn run(
                     None => std::future::pending().await,
                 }
             } => {
-                close(&mut connection, &mut leaving);
+                lose(&mut connection, &mut leaving);
                 retry_at = Some(Instant::now() + RETRY_AFTER);
             }
             _ = async {
@@ -199,7 +233,8 @@ async fn run(
                 } else {
                     // Another remote, or none: this hop of the stream is over, and the
                     // next connection, if any, relays to the new one from its start.
-                    close(&mut connection, &mut leaving);
+                    // A machine that is also a remote loses its own session with it.
+                    lose(&mut connection, &mut leaving);
                     retry_at = None;
                 }
             }

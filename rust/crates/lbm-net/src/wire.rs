@@ -5,6 +5,13 @@
 //! message, one JSON object; kind 1 is one batch of `lbm_ipc::input` events, which the
 //! agents relay without reading. Both kinds share one connection so that a click and
 //! the `Leave` that follows it cannot overtake each other.
+//!
+//! Kind 2 is a piece of a bulk transfer ([`Bulk`]): what a control message is too large
+//! to carry, the content of a clipboard. It is cut small and always leaves after
+//! whatever control or input is waiting (`link`), so a large transfer never holds a
+//! click up by more than one piece. Only a peer that announced
+//! [`CLIPBOARD_CAPABILITY`] is sent one: an older peer reads an unknown kind as a
+//! broken link.
 
 use std::io;
 
@@ -20,12 +27,26 @@ pub const PROTOCOL: u32 = 1;
 pub const CONTROL: u8 = 0;
 /// The kind byte of an input frame.
 pub const INPUT: u8 = 1;
+/// The kind byte of a piece of a bulk transfer.
+pub const BULK: u8 = 2;
 
 /// A control message is a few screens' worth of JSON at most: the bound of the local
 /// IPC frames serves here too.
 pub const MAX_CONTROL_SIZE: usize = lbm_ipc::framing::MAX_FRAME_SIZE;
 /// An input frame carries exactly what the hook's input endpoint does.
 pub const MAX_INPUT_SIZE: usize = lbm_ipc::input::MAX_BATCH_SIZE;
+/// The data of one piece of a bulk transfer. Small on purpose: an input frame queued
+/// behind a piece waits for it to be written, and 16 KiB is a fraction of a millisecond
+/// on a wired network.
+pub const BULK_PIECE: usize = 16 * 1024;
+/// A bulk frame: the transfer's number, a flags byte, then the data.
+const BULK_HEADER: usize = 9;
+const MAX_BULK_SIZE: usize = BULK_HEADER + BULK_PIECE;
+
+/// The capability of a node that shares its clipboard (docs/multi-pc-etat.md,
+/// "Presse-papiers partagé"): it understands the `Clipboard*` messages and bulk frames.
+/// Neither is ever sent to a peer that did not announce it.
+pub const CLIPBOARD_CAPABILITY: &str = "Clipboard";
 
 /// Which end of the input stream a node is on this link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -143,6 +164,31 @@ pub enum Control {
         #[serde(default)]
         block: Option<lbm_ipc::peer::InjectionBlock>,
     },
+    /// Either way, between nodes that both announced [`CLIPBOARD_CAPABILITY`]: the
+    /// sender's clipboard now holds something new, available in `formats`, numbered
+    /// `serial` on the sender. Nothing of the content: it crosses only when an
+    /// application on the other side reads it (`ClipboardRequest`). Empty `formats` says
+    /// the sender holds nothing it shares any more.
+    ClipboardOffer {
+        serial: u64,
+        #[serde(default)]
+        formats: Vec<ClipFormat>,
+    },
+    /// The answer to a `ClipboardOffer`: `format` of what was offered under `serial`,
+    /// please, as the bulk transfer numbered `transfer` (numbered by the asker). Answered
+    /// by bulk frames of that transfer, the last one marked, or by `ClipboardAbort`.
+    ClipboardRequest {
+        serial: u64,
+        format: ClipFormat,
+        transfer: u64,
+    },
+    /// Either way: the transfer numbered `transfer` ends without its data — the sender
+    /// cannot give it (`reason` says why), or the asker no longer wants it.
+    ClipboardAbort {
+        transfer: u64,
+        #[serde(default)]
+        reason: String,
+    },
     Ping,
     Pong,
     /// The sender is closing the link on purpose.
@@ -156,12 +202,37 @@ pub enum Control {
     Unknown,
 }
 
+/// What a clipboard holds, as it crosses: one representation per kind of content,
+/// whatever each system calls it (docs/multi-pc-etat.md, "Formats, par palier").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ClipFormat {
+    /// UTF-8 text, lines ended by `\n`.
+    Text,
+    /// A PNG picture.
+    Png,
+    /// A format this build does not know: a newer peer offers more, and what this one
+    /// knows of the offer is still worth taking.
+    #[serde(other)]
+    Unknown,
+}
+
+/// One piece of a bulk transfer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bulk {
+    /// The transfer it belongs to, as its `ClipboardRequest` numbered it.
+    pub transfer: u64,
+    /// The transfer's last piece: what came before it is the whole of the data.
+    pub last: bool,
+    pub data: Vec<u8>,
+}
+
 /// One frame, decoded as far as this side reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
     Control(Control),
     /// An input batch, still encoded.
     Input(Vec<u8>),
+    Bulk(Bulk),
 }
 
 /// A control message as the bytes of a whole frame, ready to write.
@@ -173,6 +244,16 @@ pub fn encode_control(message: &Control) -> io::Result<Vec<u8>> {
 /// An input batch as the bytes of a whole frame, ready to write.
 pub fn encode_input(batch: &[u8]) -> io::Result<Vec<u8>> {
     encode(INPUT, batch)
+}
+
+/// A piece of a bulk transfer as the bytes of a whole frame, ready to write. `data` is
+/// at most [`BULK_PIECE`] bytes.
+pub fn encode_bulk(piece: &Bulk) -> io::Result<Vec<u8>> {
+    let mut body = Vec::with_capacity(BULK_HEADER + piece.data.len());
+    body.extend_from_slice(&piece.transfer.to_le_bytes());
+    body.push(u8::from(piece.last));
+    body.extend_from_slice(&piece.data);
+    encode(BULK, &body)
 }
 
 fn encode(kind: u8, body: &[u8]) -> io::Result<Vec<u8>> {
@@ -193,6 +274,7 @@ fn limit(kind: u8) -> io::Result<usize> {
     match kind {
         CONTROL => Ok(MAX_CONTROL_SIZE),
         INPUT => Ok(MAX_INPUT_SIZE),
+        BULK => Ok(MAX_BULK_SIZE),
         other => Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("unknown frame kind {other}"),
@@ -226,6 +308,22 @@ pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Fram
     reader.read_exact(&mut body).await?;
     if kind == INPUT {
         return Ok(Frame::Input(body));
+    }
+    if kind == BULK {
+        if body.len() < BULK_HEADER {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "bulk frame shorter than its header",
+            ));
+        }
+        let transfer = u64::from_le_bytes(body[..8].try_into().expect("eight bytes"));
+        let last = body[8] & 1 != 0;
+        body.drain(..BULK_HEADER);
+        return Ok(Frame::Bulk(Bulk {
+            transfer,
+            last,
+            data: body,
+        }));
     }
     serde_json::from_slice(&body)
         .map(Frame::Control)
@@ -434,6 +532,74 @@ mod tests {
             round_trip(&frame).await.unwrap(),
             Frame::Control(Control::Unknown)
         );
+    }
+
+    #[tokio::test]
+    async fn the_clipboard_messages_cross_and_an_unknown_format_is_kept_as_such() {
+        for message in [
+            Control::ClipboardOffer {
+                serial: 4,
+                formats: vec![ClipFormat::Text, ClipFormat::Png],
+            },
+            Control::ClipboardOffer {
+                serial: 5,
+                formats: vec![],
+            },
+            Control::ClipboardRequest {
+                serial: 4,
+                format: ClipFormat::Png,
+                transfer: 9,
+            },
+            Control::ClipboardAbort {
+                transfer: 9,
+                reason: "too large".into(),
+            },
+        ] {
+            let frame = encode_control(&message).unwrap();
+            assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(message));
+        }
+        let newer: Control = serde_json::from_str(
+            r#"{"Type":"ClipboardOffer","Serial":1,"Formats":["Text","Rtf"]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            newer,
+            Control::ClipboardOffer {
+                serial: 1,
+                formats: vec![ClipFormat::Text, ClipFormat::Unknown]
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_bulk_piece_crosses_with_its_transfer_and_its_end() {
+        for piece in [
+            Bulk {
+                transfer: u64::MAX - 1,
+                last: false,
+                data: vec![7; BULK_PIECE],
+            },
+            Bulk {
+                transfer: 3,
+                last: true,
+                data: vec![],
+            },
+        ] {
+            let frame = encode_bulk(&piece).unwrap();
+            assert_eq!(frame[4], BULK);
+            assert_eq!(round_trip(&frame).await.unwrap(), Frame::Bulk(piece));
+        }
+        let too_large = Bulk {
+            transfer: 1,
+            last: true,
+            data: vec![0; BULK_PIECE + 1],
+        };
+        assert!(encode_bulk(&too_large).is_err());
+        // A body too short for its header is not a frame of ours.
+        let mut short = 3u32.to_le_bytes().to_vec();
+        short.push(BULK);
+        short.extend_from_slice(&[1, 2, 3]);
+        assert!(round_trip(&short).await.is_err());
     }
 
     #[tokio::test]

@@ -28,6 +28,7 @@
 pub mod admin_only;
 pub mod api;
 pub mod autostart;
+pub mod clipboard;
 pub mod desktop;
 pub mod discovery;
 pub mod displays;

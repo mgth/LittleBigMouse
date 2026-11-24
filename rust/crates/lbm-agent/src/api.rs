@@ -46,7 +46,8 @@
 //!
 //! ```text
 //! -> {"Id": 9, "Method": "SetMultiPc", "Enabled": true, "Port": 24817, "Name": "desk",
-//!     "PointerLockShortcut": "Ctrl+Alt+L"}                    // each optional but Enabled
+//!     "PointerLockShortcut": "Ctrl+Alt+L",                    // each optional but Enabled
+//!     "ClipboardSend": true, "ClipboardReceive": true, "ClipboardMaxBytes": 67108864}
 //! <- {"Id": 9, "Result": {"Enabled": true, "Port": 24817, "Name": "desk",
 //!                         "PointerLockShortcut": "Ctrl+Alt+L", "PointerLocked": false,
 //!                         "MachineId": "<sha-256 hex>", "ListenAddress": "0.0.0.0:24817",
@@ -290,6 +291,28 @@ pub enum Request {
             skip_serializing_if = "Option::is_none"
         )]
         pointer_lock_shortcut: Option<String>,
+        /// What is copied here is offered to the other machines. Changing it alone
+        /// leaves the links up, as do the two below.
+        #[serde(
+            rename = "ClipboardSend",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        clipboard_send: Option<bool>,
+        /// What is copied on the other machines can be pasted here.
+        #[serde(
+            rename = "ClipboardReceive",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        clipboard_receive: Option<bool>,
+        /// The largest clipboard that crosses, either way, in bytes.
+        #[serde(
+            rename = "ClipboardMaxBytes",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        clipboard_max_bytes: Option<u64>,
     },
     /// Connects to a machine as its master (`host`, `host:port`; the default port
     /// otherwise). Answered once it said who it is: the machine, `Pending` until the

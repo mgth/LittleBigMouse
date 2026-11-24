@@ -34,7 +34,12 @@ fn run() -> i32 {
                 return 2;
             };
             match remote::windows::open_service_pipe(name, pid) {
-                Ok(pipe) => Box::new(pipe),
+                Ok(pipe) => {
+                    if let Err(error) = remote::windows::send_diagnostics_to_service(name, pid) {
+                        eprintln!("[lbm-inject] {error}");
+                    }
+                    Box::new(pipe)
+                }
                 Err(error) => {
                     eprintln!("[lbm-inject] {error}");
                     return 1;

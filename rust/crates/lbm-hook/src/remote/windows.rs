@@ -342,15 +342,43 @@ pub fn is_service_pipe_name(name: &str) -> bool {
 /// serving it is `server`, the one that launched this one: a pipe of the same name made
 /// by anyone else would feed this process's SYSTEM rights.
 pub fn open_service_pipe(name: &str, server: u32) -> Result<std::fs::File, String> {
-    use std::os::windows::io::AsRawHandle;
+    if !is_service_pipe_name(name) {
+        return Err(format!("{name:?} is not a pipe of the service"));
+    }
+    open_served_by(name, server, std::fs::OpenOptions::new().read(true))
+}
+
+/// Sends this process's diagnostics (its standard error) to `<name>-log`, the pipe the
+/// service reads them from. Without it they go nowhere, which is no reason to stop.
+pub fn send_diagnostics_to_service(name: &str, server: u32) -> Result<(), String> {
+    use std::os::windows::io::IntoRawHandle;
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::Pipes::GetNamedPipeServerProcessId;
+    use windows::Win32::System::Console::{SetStdHandle, STD_ERROR_HANDLE};
 
     if !is_service_pipe_name(name) {
         return Err(format!("{name:?} is not a pipe of the service"));
     }
-    let pipe = std::fs::OpenOptions::new()
-        .read(true)
+    let log = open_served_by(
+        &format!("{name}-log"),
+        server,
+        std::fs::OpenOptions::new().write(true),
+    )?;
+    // The handle stays open for the life of the process: it is its standard error.
+    let handle = HANDLE(log.into_raw_handle());
+    // SAFETY: a handle this process owns and never closes.
+    unsafe { SetStdHandle(STD_ERROR_HANDLE, handle) }.map_err(|e| format!("standard error: {e}"))
+}
+
+fn open_served_by(
+    name: &str,
+    server: u32,
+    options: &std::fs::OpenOptions,
+) -> Result<std::fs::File, String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Pipes::GetNamedPipeServerProcessId;
+
+    let pipe = options
         .open(format!(r"\\.\pipe\{name}"))
         .map_err(|e| format!("pipe {name}: {e}"))?;
     let mut serving = 0u32;

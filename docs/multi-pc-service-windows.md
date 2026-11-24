@@ -277,7 +277,7 @@ Liste de contrôle pour la relecture de chaque PR :
 ## 5. Étapes de code (PR vers `v6`, jamais empilées)
 
 1. **Cette conception.**
-2. Le binaire `lbm-inject` (lots sur l'entrée standard, rattachement au bureau d'entrée),
+2. Le binaire `lbm-inject` (lots sur le tube nommé du service, relâchements refusés gardés, rattachement au bureau d'entrée),
    avec ses tests purs (boucle de lecture et relâchements, renvoi unique d'un lot) ;
    `lbm_ipc::input::read_batch_blocking`.
 3. `lbm-service` : SCM, suivi des sessions (automate pur et testé : quelle session, quand

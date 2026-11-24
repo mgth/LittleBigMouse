@@ -10,9 +10,15 @@
 //! - when this machine's own evdev backend is routing, it owns the cursor position
 //!   (`EvdevCursor`): a local mouse moved after the remote pointer resumes from where
 //!   the backend last put the cursor, not from where the master left it;
-//! - a freshly created device is not seen by the compositor at once, so the very
-//!   first events after it is built can be lost. The devices are therefore built at
-//!   the first injection and then kept for the life of the hook.
+//!
+//! A freshly created device is not seen by the compositor at once: what it emits in
+//! the first few hundred milliseconds is lost (measured under KWin 6: everything up to
+//! 300 ms after the creation, nothing from 450 ms on). Both devices are therefore
+//! built when a driven session starts ([`Injector::begin`]), together, and kept for
+//! the life of the hook; and what arrives for a device that young is held back until
+//! it is [`SETTLE`] old — once, at the start of the first session — and then put in
+//! ([`Injector::catch_up`]). Held back, not waited for: the endpoint keeps reading,
+//! and a master moving at 1 kHz must not see its stream back up.
 
 use std::sync::TryLockError;
 use std::time::{Duration, Instant};
@@ -31,6 +37,10 @@ use super::{Injection, Injector};
 /// left alone before trying again: not at every report.
 const RETRY: Duration = Duration::from_secs(5);
 
+/// How old a device must be before what it emits reaches the compositor's clients;
+/// see the module's note.
+const SETTLE: Duration = Duration::from_millis(700);
+
 /// Product ids beside the evdev backend's 0x4d55 (pointer) and 0x4d56 (keyboard).
 const POINTER_PRODUCT: u16 = 0x4d57;
 const KEYBOARD_PRODUCT: u16 = 0x4d58;
@@ -48,6 +58,8 @@ pub struct UinputInjector {
     pointer_failed: Option<Instant>,
     keyboard_failed: Option<Instant>,
     no_desktop_said: bool,
+    /// What may be written now, what waits for a young device, and what was pressed.
+    gate: Gate,
     /// Buttons this injector pressed and has not released: the pointer device is not
     /// rebuilt for a new desktop while one is held, which would drop it mid-drag.
     buttons_held: usize,
@@ -67,6 +79,7 @@ impl UinputInjector {
             pointer_failed: None,
             keyboard_failed: None,
             no_desktop_said: false,
+            gate: Gate::default(),
             buttons_held: 0,
             wheel_rest: (0, 0),
             pointer_frame: Vec::with_capacity(16),
@@ -131,6 +144,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.pointer = Some(Pointer { device, desktop });
                 self.pointer_failed = None;
+                self.gate.young_until(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual pointer: {error}");
@@ -147,6 +161,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.keyboard = Some(device);
                 self.keyboard_failed = None;
+                self.gate.young_until(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual keyboard: {error}");
@@ -202,6 +217,151 @@ impl UinputInjector {
     }
 }
 
+/// What a session sent while its devices were too young to be written to, in order.
+/// Motion and wheel are folded into the one before when it is of the same kind, so a
+/// fast mouse adds nothing: what grows it is presses, releases and the motion between
+/// them, a few hundred milliseconds' worth.
+#[derive(Debug, Default)]
+struct Backlog(Vec<Injection>);
+
+impl Backlog {
+    fn push(&mut self, injection: Injection) {
+        match (self.0.last_mut(), injection) {
+            (Some(Injection::MoveTo { x, y }), Injection::MoveTo { x: nx, y: ny }) => {
+                (*x, *y) = (nx, ny);
+            }
+            (
+                Some(Injection::Wheel {
+                    horizontal,
+                    vertical,
+                }),
+                Injection::Wheel {
+                    horizontal: more_h,
+                    vertical: more_v,
+                },
+            ) => {
+                *horizontal = horizontal.saturating_add(more_h);
+                *vertical = vertical.saturating_add(more_v);
+            }
+            _ => self.0.push(injection),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn take(&mut self) -> Vec<Injection> {
+        std::mem::take(&mut self.0)
+    }
+}
+
+/// The rules between the stream and the devices, kept apart from the devices so they
+/// are tested without one: input is held back while a device is too young (see the
+/// module's note), in order, and every press handed out to be written is remembered
+/// until its release is — what the system holds pressed because of this injector.
+#[derive(Debug, Default)]
+struct Gate {
+    /// Until when the youngest device cannot be written to usefully.
+    settled_at: Option<Instant>,
+    backlog: Backlog,
+    /// Presses handed out and not released since, in pressing order.
+    down: Vec<Injection>,
+}
+
+impl Gate {
+    /// A device was just built: what arrives before `at` is held back.
+    fn young_until(&mut self, at: Instant) {
+        self.settled_at = Some(at);
+    }
+
+    /// What of `batch` is to be written now: nothing while a device is young, else
+    /// whatever was held back first, then the batch.
+    fn pass(&mut self, batch: &[Injection], now: Instant) -> Vec<Injection> {
+        if self.settled_at.is_some_and(|at| now < at) {
+            for injection in batch {
+                self.backlog.push(*injection);
+            }
+            return Vec::new();
+        }
+        let mut out = self.catch_up();
+        out.extend_from_slice(batch);
+        self.handed_out(&out);
+        out
+    }
+
+    /// When what was held back is to be written, with or without more input.
+    fn due(&self) -> Option<Instant> {
+        if self.backlog.is_empty() {
+            return None;
+        }
+        Some(self.settled_at.unwrap_or_else(Instant::now))
+    }
+
+    /// What was held back, to be written now.
+    fn catch_up(&mut self) -> Vec<Injection> {
+        self.settled_at = None;
+        let held = self.backlog.take();
+        self.handed_out(&held);
+        held
+    }
+
+    /// Injection stops: what was held back is dropped — a press there never reached
+    /// the system — and the releases of every press that did are returned, to be
+    /// written now: buttons first, then keys in the reverse of their pressing order, as
+    /// a session's end does it.
+    fn discard(&mut self) -> Vec<Injection> {
+        self.backlog.take();
+        let down = std::mem::take(&mut self.down);
+        let buttons = down.iter().filter_map(|i| match *i {
+            Injection::Button { code, .. } => Some(Injection::Button {
+                code,
+                pressed: false,
+            }),
+            _ => None,
+        });
+        let keys = down.iter().filter_map(|i| match *i {
+            Injection::Key { code, .. } => Some(Injection::Key {
+                code,
+                pressed: false,
+            }),
+            _ => None,
+        });
+        buttons.rev().chain(keys.rev()).collect()
+    }
+
+    fn handed_out(&mut self, out: &[Injection]) {
+        for injection in out {
+            match *injection {
+                Injection::Button { pressed: true, .. } | Injection::Key { pressed: true, .. } => {
+                    if !self.down.contains(injection) {
+                        self.down.push(*injection);
+                    }
+                }
+                Injection::Button {
+                    code,
+                    pressed: false,
+                } => self.down.retain(|d| {
+                    *d != Injection::Button {
+                        code,
+                        pressed: true,
+                    }
+                }),
+                Injection::Key {
+                    code,
+                    pressed: false,
+                } => self.down.retain(|d| {
+                    *d != Injection::Key {
+                        code,
+                        pressed: true,
+                    }
+                }),
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Two values for one code cannot share a frame — the second would overwrite the
 /// first — so a press and release of the same key, or two positions, are split.
 fn conflicts(frame: &[InputEvent], event: &InputEvent) -> bool {
@@ -232,6 +392,52 @@ impl Injector for UinputInjector {
         }
         if batch.iter().any(|i| matches!(i, Injection::Key { .. })) {
             self.ensure_keyboard();
+        }
+        let now = self.gate.pass(batch, Instant::now());
+        self.write(&now);
+    }
+
+    fn due(&self) -> Option<Instant> {
+        self.gate.due()
+    }
+
+    /// What was held back is dropped, and what reached the system is let go of at
+    /// once: a key pressed on a settled keyboard may have its release held back behind
+    /// a pointer rebuilt for a new desktop.
+    fn discard(&mut self) {
+        let releases = self.gate.discard();
+        self.write(&releases);
+    }
+
+    fn catch_up(&mut self) {
+        let held = self.gate.catch_up();
+        self.write(&held);
+    }
+
+    /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
+    /// it, and there is no portable way to: a Wayland client chooses the cursor only
+    /// over its own surfaces, and the Windows trick of a one-pixel window under the
+    /// pointer would need a topmost, input-taking surface no portable protocol offers.
+    /// Moving it away instead — a corner, an edge — is what sets off hot corners and
+    /// edge actions. The pointer stays where the master left it.
+    fn park(&mut self) {}
+
+    fn unpark(&mut self) {}
+
+    /// Builds both devices ahead of the session's first motion, so that they settle
+    /// together and a first key is not held back on its own. Never on the hook's way
+    /// out: that is `unpark` alone.
+    fn begin(&mut self) {
+        self.ensure_pointer();
+        self.ensure_keyboard();
+    }
+}
+
+/// The stream's injections into the devices, as they come.
+impl UinputInjector {
+    fn write(&mut self, batch: &[Injection]) {
+        if batch.is_empty() {
+            return;
         }
         for injection in batch {
             match *injection {
@@ -279,7 +485,7 @@ impl Injector for UinputInjector {
                 Injection::Key { code, pressed } => {
                     self.queue_keyboard(InputEvent::new(EventType::KEY.0, code, pressed as i32));
                 }
-                // Delivered through park/unpark (super::deliver), never in a batch.
+                // Delivered through park/begin (super::deliver), never in a batch.
                 Injection::Park | Injection::Unpark => {}
             }
         }
@@ -289,14 +495,185 @@ impl Injector for UinputInjector {
         );
         flush(&mut self.keyboard_frame, self.keyboard.as_mut());
     }
+}
 
-    /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
-    /// it, and there is no portable way to: a Wayland client chooses the cursor only
-    /// over its own surfaces, and the Windows trick of a one-pixel window under the
-    /// pointer would need a topmost, input-taking surface no portable protocol offers.
-    /// Moving it away instead — a corner, an edge — is what sets off hot corners and
-    /// edge actions. The pointer stays where the master left it.
-    fn park(&mut self) {}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    fn unpark(&mut self) {}
+    const BTN_LEFT: u16 = 0x110;
+    const LEFT_CTRL: u16 = 29;
+
+    fn held(injections: &[Injection]) -> Vec<Injection> {
+        let mut backlog = Backlog::default();
+        for injection in injections {
+            backlog.push(*injection);
+        }
+        backlog.take()
+    }
+
+    fn key(code: u16, pressed: bool) -> Injection {
+        Injection::Key { code, pressed }
+    }
+
+    fn button(code: u16, pressed: bool) -> Injection {
+        Injection::Button { code, pressed }
+    }
+
+    #[test]
+    fn a_young_device_holds_input_back_until_it_is_due() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        assert_eq!(gate.pass(&[key(LEFT_CTRL, true)], t0), []);
+        assert_eq!(gate.due(), Some(t0 + SETTLE));
+        assert_eq!(gate.catch_up(), [key(LEFT_CTRL, true)]);
+        assert_eq!(gate.due(), None);
+        assert_eq!(
+            gate.pass(&[key(LEFT_CTRL, false)], t0 + SETTLE),
+            [key(LEFT_CTRL, false)]
+        );
+    }
+
+    /// Ctrl went down on a settled keyboard; the pointer is then rebuilt for a new
+    /// desktop and the release of Ctrl is held back behind it. Stopping there must not
+    /// drop that release with the rest.
+    #[test]
+    fn a_stop_releases_a_key_pressed_before_a_pointer_rebuild() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        assert_eq!(
+            gate.pass(&[key(LEFT_CTRL, true)], t0 + SETTLE),
+            [key(LEFT_CTRL, true)]
+        );
+        let rebuilt = t0 + 2 * SETTLE;
+        gate.young_until(rebuilt + SETTLE);
+        assert_eq!(gate.pass(&[key(LEFT_CTRL, false)], rebuilt), []);
+        assert_eq!(gate.discard(), [key(LEFT_CTRL, false)]);
+        assert_eq!(gate.due(), None, "nothing left to put in later");
+        assert_eq!(gate.discard(), [], "released once");
+    }
+
+    #[test]
+    fn a_stop_drops_presses_that_never_reached_the_system_with_their_releases() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        gate.pass(&[button(BTN_LEFT, true), key(LEFT_CTRL, true)], t0);
+        assert_eq!(gate.discard(), []);
+        assert_eq!(gate.due(), None);
+    }
+
+    #[test]
+    fn a_stop_lets_go_of_buttons_first_then_keys_in_reverse() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        const C: u16 = 46;
+        gate.pass(
+            &[
+                key(LEFT_CTRL, true),
+                key(C, true),
+                key(C, true),
+                button(BTN_LEFT, true),
+            ],
+            t0,
+        );
+        assert_eq!(
+            gate.discard(),
+            [
+                button(BTN_LEFT, false),
+                key(C, false),
+                key(LEFT_CTRL, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_fast_mouse_held_back_is_one_position_the_last() {
+        let motion: Vec<_> = (0..1000)
+            .map(|i| Injection::MoveTo { x: i, y: 2 * i })
+            .collect();
+        assert_eq!(held(&motion), [Injection::MoveTo { x: 999, y: 1998 }]);
+    }
+
+    #[test]
+    fn presses_and_releases_keep_their_place_between_the_positions() {
+        assert_eq!(
+            held(&[
+                Injection::MoveTo { x: 1, y: 1 },
+                Injection::MoveTo { x: 2, y: 2 },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::MoveTo { x: 3, y: 3 },
+                Injection::MoveTo { x: 4, y: 4 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: false
+                },
+            ]),
+            [
+                Injection::MoveTo { x: 2, y: 2 },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::MoveTo { x: 4, y: 4 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: false
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn wheel_travel_held_back_is_summed_not_lost() {
+        assert_eq!(
+            held(&[
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: 30
+                },
+                Injection::Wheel {
+                    horizontal: 15,
+                    vertical: 60
+                },
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: -120
+                },
+            ]),
+            [
+                Injection::Wheel {
+                    horizontal: 15,
+                    vertical: 90
+                },
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: -120
+                },
+            ]
+        );
+    }
 }

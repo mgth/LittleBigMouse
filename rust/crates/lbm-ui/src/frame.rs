@@ -175,16 +175,22 @@ pub struct Host<'a> {
     pub remote: bool,
     /// The panel is known on more than one machine, and could show another.
     pub shared: bool,
+    /// Why the last switch of the panel's input failed, while it stands: the badge
+    /// turns to the error colour and says so, and this is its tooltip.
+    pub problem: Option<&'a str>,
 }
 
 impl Host<'_> {
     /// What the badge says, and what it is called in the accessibility tree.
     pub fn badge(&self) -> String {
+        let mut text = self.machine.to_owned();
         if self.shared {
-            format!("{} \u{b7} shared", self.machine)
-        } else {
-            self.machine.to_owned()
+            text.push_str(" \u{b7} shared");
         }
+        if self.problem.is_some() {
+            text.push_str(" \u{b7} switch failed");
+        }
+        text
     }
 }
 
@@ -200,7 +206,9 @@ fn badge(ui: &mut egui::Ui, content: egui::Rect, host: &Host) {
     if inside.width() < 16.0 || inside.height() < 10.0 {
         return;
     }
-    let colour = if host.remote {
+    let colour = if host.problem.is_some() {
+        ui.visuals().error_fg_color
+    } else if host.remote {
         REMOTE_HUE
     } else {
         crate::theme::MUTED
@@ -223,6 +231,9 @@ fn badge(ui: &mut egui::Ui, content: egui::Rect, host: &Host) {
     painter.galley(pill.min + padding, galley, ui.visuals().text_color());
     let response = ui.allocate_rect(pill, egui::Sense::hover());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
+    if let Some(problem) = host.problem {
+        response.on_hover_text(problem);
+    }
 }
 
 /// What is written on a frame, as opposed to where the frame is.

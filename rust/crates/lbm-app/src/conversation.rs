@@ -65,6 +65,9 @@ pub struct Conversation {
     /// armed is exactly the case a user would otherwise discover at the moment they need
     /// the rescue.
     pub shortcut_unavailable: Option<String>,
+    /// The panels whose last input switch failed, as the agent keeps them: in its state,
+    /// since the switch is carried out after the request was answered.
+    pub switch_failures: Vec<crate::machines::SwitchFailure>,
     /// Whether anything has been heard from the agent yet.
     pub heard: bool,
     /// What an `ApplyTopology` reported: the command lines, and whether they were only
@@ -221,6 +224,7 @@ impl Conversation {
         self.suspended = snapshot["Suspended"].as_bool().unwrap_or(false);
         // The agent keeps it: the hook may have said it before this window existed.
         self.shortcut_unavailable = snapshot["ShortcutUnavailable"].as_str().map(str::to_owned);
+        self.switch_failures = crate::machines::switch_failures(snapshot);
         // Through `update`, not written straight onto the state: the rule that ends a
         // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {
@@ -401,6 +405,32 @@ mod tests {
 
         agent.shortcut_changed();
         assert_eq!(agent.shortcut_unavailable, None);
+    }
+
+    #[test]
+    fn a_failed_input_switch_is_shown_while_the_state_says_it() {
+        let mut agent = Conversation::after([]);
+        let mut state = lbm_ui::State::default();
+        let mut failed = snapshot("Running", true);
+        failed["InputSwitchFailures"] = json!([{
+            "Monitor": "DEL4065_ABC123", "Source": "laptop/HDMI-1", "Value": 17,
+            "Error": "no answer on DP-1", "Remote": "a1b2", "RemoteError": "code -3021"
+        }]);
+        agent.said(Message::State(failed), &mut state);
+        assert_eq!(
+            agent.switch_failures,
+            vec![crate::machines::SwitchFailure {
+                monitor: "DEL4065_ABC123".into(),
+                source: "laptop/HDMI-1".into(),
+                value: 17,
+                error: "no answer on DP-1".into(),
+                remote: Some("a1b2".into()),
+                remote_error: Some("code -3021".into()),
+            }]
+        );
+        // The agent no longer says it (switched since, or an older agent): gone.
+        agent.said(Message::State(snapshot("Running", true)), &mut state);
+        assert!(agent.switch_failures.is_empty());
     }
 
     #[test]

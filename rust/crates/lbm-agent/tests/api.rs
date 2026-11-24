@@ -2946,18 +2946,158 @@ async fn choosing_the_machine_a_shared_panel_shows_switches_its_input_and_nothin
         matches!(c, lbm_net::wire::Control::SelectInput { .. })
     })
     .await;
-    assert_eq!(
-        asked,
-        lbm_net::wire::Control::SelectInput {
-            display: "HDMI-1".into(),
-            value: ON_HDMI,
-        }
-    );
+    let lbm_net::wire::Control::SelectInput {
+        display,
+        value,
+        request,
+    } = asked
+    else {
+        unreachable!()
+    };
+    assert_eq!((display.as_str(), value), ("HDMI-1", ON_HDMI));
+    assert!(request.is_some(), "numbered, for the answer to name it");
     assert_eq!(
         master.ddc.writes(),
         [input_write(ON_DP)],
         "one write, the one chosen"
     );
+
+    // The laptop could not either: the window is told which panel, and why on both
+    // machines. An answer to another request first, which is no news.
+    let answer = |request, error: Option<&str>| lbm_net::wire::Control::InputSwitched {
+        display: "HDMI-1".into(),
+        value: ON_HDMI,
+        request,
+        error: error.map(str::to_owned),
+    };
+    let stale = request.map(|r| r + 100);
+    link.sender()
+        .control(&answer(stale, Some("not this one")))
+        .await
+        .unwrap();
+    link.sender()
+        .control(&answer(request, Some("ddcutil: code -3021")))
+        .await
+        .unwrap();
+    let state = master
+        .frontend
+        .state(|s| s["InputSwitchFailures"].is_array())
+        .await;
+    let failures = state["InputSwitchFailures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1, "{state}");
+    assert_eq!(failures[0]["Monitor"], SHARED_DELL);
+    assert_eq!(failures[0]["Source"], dell_there.as_str());
+    assert_eq!(failures[0]["Value"], ON_HDMI);
+    assert_eq!(failures[0]["Remote"], laptop_id.as_str());
+    assert_eq!(failures[0]["RemoteError"], "ddcutil: code -3021");
+    assert!(
+        !failures[0]["Error"].as_str().unwrap().is_empty(),
+        "why this machine could not: {state}"
+    );
+
+    // Back to this machine, the Dell still silent here: the laptop is asked, does it,
+    // and the failure goes.
+    let back = master
+        .frontend
+        .ask(json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": SHARED_DELL,
+        }))
+        .await;
+    assert_eq!(back["Result"], Value::Null, "{back}");
+    let lbm_net::wire::Control::SelectInput {
+        value,
+        request: again,
+        ..
+    } = next_control_where(&mut link, |c| {
+        matches!(c, lbm_net::wire::Control::SelectInput { .. })
+    })
+    .await
+    else {
+        unreachable!()
+    };
+    assert_eq!(value, ON_DP);
+    assert_ne!(again, request, "a new number for a new request");
+    link.sender()
+        .control(&lbm_net::wire::Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: ON_DP,
+            request: again,
+            error: None,
+        })
+        .await
+        .unwrap();
+    master
+        .frontend
+        .state(|s| s.get("InputSwitchFailures").is_none())
+        .await;
+
+    // The laptop again, and while that is asked of the laptop the user changes their
+    // mind: the retry is accepted, and this machine's own go at it is held. The laptop's
+    // failure for the earlier choice, arriving meanwhile, is not the retry's.
+    let choose = |source: String| {
+        json!({
+            "Method": "SetActiveSource",
+            "LayoutId": layout_id,
+            "Monitor": SHARED_DELL,
+            "Source": source,
+        })
+    };
+    let selected =
+        |c: &lbm_net::wire::Control| matches!(c, lbm_net::wire::Control::SelectInput { .. });
+    let there = master.frontend.ask(choose(dell_there.clone())).await;
+    assert_eq!(there["Result"], Value::Null, "{there}");
+    let lbm_net::wire::Control::SelectInput {
+        request: earlier, ..
+    } = next_control_where(&mut link, selected).await
+    else {
+        unreachable!()
+    };
+    let gate = master.ddc.hold("DP-1");
+    let back = master.frontend.ask(choose(SHARED_DELL.to_owned())).await;
+    assert_eq!(back["Result"], Value::Null, "{back}");
+    link.sender()
+        .control(&lbm_net::wire::Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: ON_HDMI,
+            request: earlier,
+            error: Some("busy".into()),
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let now = master.frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(
+        now["Result"].get("InputSwitchFailures").is_none(),
+        "an earlier choice's failure shown for the retry: {now}"
+    );
+    // Let go, the retry is asked of the laptop under its own number, and settled by
+    // its own answer.
+    gate.add_permits(16);
+    let lbm_net::wire::Control::SelectInput {
+        request: retry,
+        value,
+        ..
+    } = next_control_where(&mut link, selected).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(value, ON_DP);
+    assert_ne!(retry, earlier);
+    link.sender()
+        .control(&lbm_net::wire::Control::InputSwitched {
+            display: "HDMI-1".into(),
+            value: ON_DP,
+            request: retry,
+            error: None,
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let now = master.frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(now["Result"].get("InputSwitchFailures").is_none(), "{now}");
 }
 
 #[tokio::test]
@@ -3048,6 +3188,7 @@ async fn a_remote_tells_its_master_what_selects_it_and_switches_when_its_master_
             .control(&Control::SelectInput {
                 display: display.into(),
                 value,
+                request: None,
             })
             .await
             .unwrap();

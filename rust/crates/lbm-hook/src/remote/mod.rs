@@ -44,7 +44,7 @@ pub enum Injection {
     /// pointer is on. Delivered through [`Injector::park`], never [`Injector::inject`].
     Park,
     /// Not input: a driven session starts, ahead of its first motion. Delivered
-    /// through [`Injector::unpark`], never [`Injector::inject`].
+    /// through [`Injector::begin`], never [`Injector::inject`].
     Unpark,
 }
 
@@ -65,9 +65,27 @@ pub trait Injector: Send + 'static {
     fn inject(&mut self, batch: &[Injection]);
     /// The driven session ended — once per session, after its releases.
     fn park(&mut self);
-    /// A driven session starts, before its first motion; also when the hook leaves,
-    /// so that nothing it did outlives it. Must be harmless when nothing is parked.
+    /// Undoes the parking: when a driven session starts ([`Injector::begin`]), and
+    /// when the hook leaves, so that nothing it did outlives it. Must be harmless when
+    /// nothing is parked, and must not prepare anything for a session.
     fn unpark(&mut self);
+    /// A driven session starts, before its first motion: what the system needs ready
+    /// for it is made here, then the parking is undone.
+    fn begin(&mut self) {
+        self.unpark();
+    }
+    /// When [`Injector::catch_up`] is to be called even if no input arrives: the
+    /// injector holds input back (devices too young to be written to). `None` when it
+    /// holds nothing. The caller keeps reading the stream meanwhile — an injector never
+    /// makes it wait.
+    fn due(&self) -> Option<std::time::Instant> {
+        None
+    }
+    /// Puts into the system what was held back, once [`Injector::due`] has passed.
+    fn catch_up(&mut self) {}
+    /// Drops what was held back, unwritten: injection is stopping. Whatever was held
+    /// back never reached the system, so nothing there is left pressed by it.
+    fn discard(&mut self) {}
 }
 
 /// Hands a session's output to `injector`: each run of input in one [`Injector::inject`]
@@ -86,7 +104,7 @@ pub fn deliver(injector: &mut dyn Injector, batch: &[Injection]) {
         }
         match rest.get(run) {
             Some(Injection::Park) => injector.park(),
-            Some(Injection::Unpark) => injector.unpark(),
+            Some(Injection::Unpark) => injector.begin(),
             _ => {}
         }
         rest = &rest[(run + 1).min(rest.len())..];

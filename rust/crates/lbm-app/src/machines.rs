@@ -78,6 +78,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             role,
             pending,
             displays: displays.len(),
+            problem: link_problem(&entry["Problem"]),
         });
     }
     // Byte order of the fingerprints, as `Layout::hosts` sorts them: the order the agent
@@ -101,6 +102,95 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         peers,
     };
     Some((state, remotes))
+}
+
+/// What went wrong with a machine's link (`Problem` in its entry), in words: what the
+/// kind means for the user, then what the network or the other machine said. A kind this
+/// window does not know shows the detail alone.
+pub fn link_problem(problem: &Value) -> Option<String> {
+    let kind = problem.get("Kind")?.as_str().unwrap_or_default();
+    let detail = problem["Detail"].as_str().unwrap_or_default().trim();
+    let with = |said: &str| {
+        if detail.is_empty() {
+            said.to_owned()
+        } else {
+            format!("{said}: {detail}")
+        }
+    };
+    Some(match kind {
+        "Network" => with("Cannot reach it"),
+        "Refused" => with("It refused this machine"),
+        "NotConfirmed" => with("The pairing was not confirmed on the other machine"),
+        "UnknownFingerprint" => format!(
+            "Another machine answers at its address, with the fingerprint {}",
+            lbm_ui::machines::fingerprint(detail).replace('\n', " ")
+        ),
+        "Incompatible" => with("It runs a version this one cannot talk to"),
+        "Lost" => "The link was lost: it stopped answering".to_owned(),
+        _ if detail.is_empty() => return None,
+        _ => detail.to_owned(),
+    })
+}
+
+/// A panel whose last input switch failed (`InputSwitchFailures` in the agent's state).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwitchFailure {
+    pub monitor: String,
+    pub source: String,
+    pub value: u16,
+    /// Why the agent's machine could not: DDC/CI's own words.
+    pub error: String,
+    /// The machine asked in its stead, and why it could not either.
+    pub remote: Option<String>,
+    pub remote_error: Option<String>,
+}
+
+/// The failed switches in an agent's state; none from an agent that says nothing of them.
+pub fn switch_failures(snapshot: &Value) -> Vec<SwitchFailure> {
+    let text = |v: &Value, key: &str| v[key].as_str().map(str::to_owned);
+    snapshot["InputSwitchFailures"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| {
+            Some(SwitchFailure {
+                monitor: text(f, "Monitor").filter(|m| !m.is_empty())?,
+                source: text(f, "Source").unwrap_or_default(),
+                value: f["Value"].as_u64().and_then(|v| u16::try_from(v).ok())?,
+                error: text(f, "Error").unwrap_or_default(),
+                remote: text(f, "Remote"),
+                remote_error: text(f, "RemoteError"),
+            })
+        })
+        .collect()
+}
+
+/// A failed switch in words: which machine the panel was to show, on which input, and
+/// why neither machine could switch it. `here` is this machine's name, `peers` what the
+/// agent said of the others, for the name of the one asked.
+pub fn switch_failure_text(
+    layout: &Layout,
+    failure: &SwitchFailure,
+    here: &str,
+    peers: Option<&State>,
+) -> String {
+    let machine = machine_of(layout, &failure.source).unwrap_or_else(|| this_machine(here));
+    let mut text = format!(
+        "Could not switch this screen to {machine} (input {:#04x}): {}",
+        failure.value, failure.error
+    );
+    if let Some(remote) = &failure.remote {
+        let name = peers
+            .and_then(|state| state.peers.iter().find(|p| &p.machine_id == remote))
+            .map(|p| p.name.clone())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "the other machine".to_owned());
+        text.push_str(&format!(
+            ". Asked to, {name} could not either: {}",
+            failure.remote_error.as_deref().unwrap_or("no reason given")
+        ));
+    }
+    text
 }
 
 /// Merges `remotes` into a layout that holds this machine's monitors and nothing else
@@ -177,6 +267,8 @@ pub struct Tag {
     pub machine: String,
     pub remote: bool,
     pub shared: bool,
+    /// Why the last switch of the panel failed, in words, while it stands.
+    pub problem: Option<String>,
 }
 
 impl Tag {
@@ -185,6 +277,7 @@ impl Tag {
             machine: &self.machine,
             remote: self.remote,
             shared: self.shared,
+            problem: self.problem.as_deref(),
         }
     }
 }
@@ -201,6 +294,7 @@ pub fn tag(layout: &Layout, monitor: &str, here: &str) -> Option<Tag> {
         remote: remote.is_some(),
         machine: remote.unwrap_or_else(|| this_machine(here)),
         shared,
+        problem: None,
     })
 }
 
@@ -658,5 +752,70 @@ mod tests {
         }
         // The layout itself is left alone: the remote screen is still on the map.
         assert!(layout.sources().all(|s| s.source.attached_to_desktop));
+    }
+}
+
+#[cfg(test)]
+mod problem_tests {
+    use super::*;
+
+    #[test]
+    fn a_link_problem_says_what_it_means_then_what_was_said() {
+        let said = |kind: &str, detail: &str| {
+            link_problem(&json!({"Kind": kind, "Detail": detail})).unwrap()
+        };
+        assert_eq!(
+            said("Refused", "the user refused the pairing"),
+            "It refused this machine: the user refused the pairing"
+        );
+        assert_eq!(
+            said("Network", "Connection refused (os error 111)"),
+            "Cannot reach it: Connection refused (os error 111)"
+        );
+        assert_eq!(
+            said("NotConfirmed", ""),
+            "The pairing was not confirmed on the other machine"
+        );
+        assert_eq!(
+            said("UnknownFingerprint", "ab12cd34ef56"),
+            "Another machine answers at its address, with the fingerprint AB12 CD34 EF56"
+        );
+        assert_eq!(
+            said("Lost", "it stopped answering"),
+            "The link was lost: it stopped answering"
+        );
+        // A kind from a newer agent: its detail alone, or nothing without one.
+        assert_eq!(said("Haunted", "boo"), "boo");
+        assert_eq!(link_problem(&json!({"Kind": "Haunted"})), None);
+        assert_eq!(link_problem(&Value::Null), None);
+    }
+
+    #[test]
+    fn a_peer_entry_carries_its_problem_to_the_page() {
+        let state = json!({"Enabled": true, "Port": 24817, "Name": "desk", "Peers": [
+            {"MachineId": "a1", "Name": "laptop", "Role": "Remote", "State": "Paired",
+             "Connected": false, "Problem": {"Kind": "Lost", "Detail": ""}},
+            {"MachineId": "b2", "Name": "tower", "Role": "Master", "State": "Paired",
+             "Connected": true}
+        ]});
+        let (state, _) = read(&state).unwrap();
+        assert_eq!(
+            state.peers[0].problem.as_deref(),
+            Some("The link was lost: it stopped answering")
+        );
+        assert_eq!(state.peers[1].problem, None);
+    }
+
+    #[test]
+    fn switch_failures_read_and_skip_what_does_not() {
+        let failures = switch_failures(&json!({"InputSwitchFailures": [
+            {"Monitor": "DEL", "Source": "s", "Value": 17, "Error": "e"},
+            {"Monitor": "", "Value": 17},
+            {"Monitor": "SAM", "Value": "x"}
+        ]}));
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].monitor, "DEL");
+        assert_eq!(failures[0].remote, None);
+        assert!(switch_failures(&json!({})).is_empty());
     }
 }

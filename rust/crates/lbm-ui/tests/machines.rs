@@ -38,6 +38,7 @@ fn laptop(pending: bool) -> Peer {
         role: Role::Remote,
         pending,
         displays: 2,
+        problem: None,
     }
 }
 
@@ -188,6 +189,22 @@ fn a_paired_machine_says_what_it_is_and_can_be_forgotten() {
 }
 
 #[test]
+fn a_machine_whose_link_failed_says_why() {
+    let mut refused = laptop(false);
+    refused.connected = false;
+    refused.problem = Some("It refused this machine: the user refused the pairing".into());
+    let mut h = page(Some(state(vec![refused])));
+    h.run();
+    assert!(h
+        .query_by_label("It refused this machine: the user refused the pairing")
+        .is_some());
+    // Without a problem, nothing of the kind is said.
+    let mut h = page(Some(state(vec![laptop(false)])));
+    h.run();
+    assert!(h.query_by_label_contains("refused").is_none());
+}
+
+#[test]
 fn connecting_waits_for_the_mode_and_an_address() {
     let mut off = state(Vec::new());
     off.enabled = false;
@@ -267,6 +284,7 @@ fn a_remote_monitor_on_the_map_carries_its_machine_name() {
                     machine: "laptop",
                     remote: true,
                     shared: false,
+                    problem: None,
                 }),
             ];
             map::draw_hosted(ui, &monitors, &hosts, &fit, None, true);
@@ -317,8 +335,14 @@ fn a_shared_panel_badge_says_it_is_shared() {
         machine: "desk",
         remote: false,
         shared: true,
+        problem: None,
     };
     assert_eq!(host.badge(), "desk \u{b7} shared");
+    let failed = Host {
+        problem: Some("DDC/CI: no answer"),
+        ..host
+    };
+    assert_eq!(failed.badge(), "desk \u{b7} shared \u{b7} switch failed");
 }
 
 /// The tint is told apart from the local bezel, and from the selection, on the app's

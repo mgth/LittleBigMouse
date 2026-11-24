@@ -24,7 +24,7 @@ use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use lbm_ipc::input::{decode, read_batch, write_batch, InputEvent};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -37,6 +37,9 @@ use crate::remote::{deliver, Injector, Session};
 /// dozen milliseconds of a fast mouse — enough to ride out a slow system call, short
 /// enough that a stalled injector pushes back on the agent instead of piling up.
 const QUEUE: usize = 64;
+
+/// How often an injector holding input back is looked at while nothing arrives.
+const CATCH_UP_POLL: Duration = Duration::from_millis(5);
 
 /// Batches waiting to be written to the agent, on a master. The same reasoning as
 /// [`QUEUE`], from the other side: a quarter of a second of a 1 kHz mouse is more than
@@ -356,12 +359,39 @@ fn inject(mut inbox: mpsc::Receiver<Message>, mut injector: Box<dyn Injector>) {
     let mut session = Session::default();
     let mut current = None;
     let mut stopped = false;
-    while let Some(message) = inbox.blocking_recv() {
+    loop {
+        // Input held back by the injector is put in when it is due, whether or not
+        // more arrives; until then the stream is still read, never left to back up.
+        // Once stopped, nothing held back is ever put in: it was discarded.
+        let due = if stopped { None } else { injector.due() };
+        let message = match due {
+            None => match inbox.blocking_recv() {
+                Some(message) => message,
+                None => return,
+            },
+            Some(due) => match inbox.try_recv() {
+                Ok(message) => message,
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    let now = Instant::now();
+                    if now >= due {
+                        injector.catch_up();
+                    } else {
+                        std::thread::sleep((due - now).min(CATCH_UP_POLL));
+                    }
+                    continue;
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => return,
+            },
+        };
         let injections = match message {
             Message::Stop(done) => {
                 stopped = true;
                 current = None;
                 deliver(injector.as_mut(), session.release_all());
+                // What was held back never reached the system — releases included,
+                // when the presses are held back with them — and must not reach it
+                // after the caller is told injection stopped.
+                injector.discard();
                 // The hook is leaving: whatever the session's end parked must not stay
                 // hidden after it.
                 injector.unpark();
@@ -921,5 +951,261 @@ mod tests {
             .expect("stops");
         // Only the unpark of the hook's way out, harmless with nothing parked.
         assert_eq!(recording.settled(1).await, [Injection::Unpark]);
+    }
+
+    /// An injector whose devices are too young: it holds everything back until a
+    /// deadline set at its first batch, and counts the batches it was handed.
+    #[derive(Clone)]
+    struct Holding {
+        hold: Duration,
+        state: Arc<Mutex<HoldingState>>,
+    }
+
+    #[derive(Default)]
+    struct HoldingState {
+        until: Option<Instant>,
+        held: Vec<Injection>,
+        handed: usize,
+        written: Vec<Injection>,
+        written_at: Option<Instant>,
+    }
+
+    impl Injector for Holding {
+        fn inject(&mut self, batch: &[Injection]) {
+            let mut state = self.state.lock().unwrap();
+            state.handed += 1;
+            let until = *state.until.get_or_insert(Instant::now() + self.hold);
+            if Instant::now() < until {
+                state.held.extend_from_slice(batch);
+            } else {
+                let held = std::mem::take(&mut state.held);
+                state.written.extend(held);
+                state.written.extend_from_slice(batch);
+            }
+        }
+        fn park(&mut self) {}
+        fn unpark(&mut self) {}
+        fn due(&self) -> Option<Instant> {
+            let state = self.state.lock().unwrap();
+            (!state.held.is_empty()).then(|| state.until.unwrap())
+        }
+        fn catch_up(&mut self) {
+            let mut state = self.state.lock().unwrap();
+            let held = std::mem::take(&mut state.held);
+            state.written.extend(held);
+            state.written_at.get_or_insert_with(Instant::now);
+        }
+        fn discard(&mut self) {
+            self.state.lock().unwrap().held.clear();
+        }
+    }
+
+    impl Holding {
+        fn new(hold: Duration) -> Self {
+            Self {
+                hold,
+                state: Arc::default(),
+            }
+        }
+
+        async fn until_handed(&self, count: usize) {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while self.state.lock().unwrap().handed < count {
+                assert!(tokio::time::Instant::now() < deadline, "not handed {count}");
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    }
+
+    fn press_left() -> InputEvent {
+        InputEvent::Button {
+            code: BTN_LEFT,
+            pressed: true,
+        }
+    }
+
+    fn serve_holding(hold: Duration) -> (InputServer, String, Holding) {
+        let holding = Holding::new(hold);
+        let endpoint = endpoint();
+        let server = start(
+            endpoint.clone(),
+            Box::new(holding.clone()),
+            Arc::new(Outlet::default()),
+        )
+        .expect("binds");
+        (server, endpoint, holding)
+    }
+
+    /// Stopped while the devices settle: what was held back is dropped before the
+    /// caller hears injection stopped, and nothing is put in at the deadline either —
+    /// the press never reached the system, so neither may its release.
+    #[tokio::test]
+    async fn stopping_while_input_is_held_back_drops_it_for_good() {
+        let hold = Duration::from_millis(400);
+        let (server, endpoint, holding) = serve_holding(hold);
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, press_left()],
+        )
+        .await;
+        holding.until_handed(1).await;
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        assert!(holding.state.lock().unwrap().written.is_empty());
+        tokio::time::sleep(hold + Duration::from_millis(200)).await;
+        let state = holding.state.lock().unwrap();
+        assert!(
+            state.written.is_empty(),
+            "put in after the stop: {:?}",
+            state.written
+        );
+        assert!(state.held.is_empty());
+    }
+
+    /// Stopped with settled devices: the press reached the system, so its release does,
+    /// before the caller hears injection stopped.
+    #[tokio::test]
+    async fn stopping_with_settled_devices_releases_before_it_returns() {
+        let (server, endpoint, holding) = serve_holding(Duration::ZERO);
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, press_left()],
+        )
+        .await;
+        holding.until_handed(1).await;
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        assert_eq!(
+            holding.state.lock().unwrap().written,
+            [
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+            ]
+        );
+    }
+
+    /// A master's first crossing at 1 kHz while the receiving devices settle: every
+    /// batch is read as it comes — far past the endpoint's queue — and what was held
+    /// back is put in when due, with nothing more arriving to prompt it.
+    #[tokio::test]
+    async fn input_held_back_by_the_injector_neither_backs_the_stream_up_nor_waits_for_more() {
+        const MOTIONS: i32 = 4 * QUEUE as i32;
+        let holding = Holding::new(Duration::from_millis(1500));
+        let endpoint = endpoint();
+        let _server = start(
+            endpoint.clone(),
+            Box::new(holding.clone()),
+            Arc::new(Outlet::default()),
+        )
+        .expect("binds");
+        let mut agent = client(&endpoint).await;
+        send(&mut agent, &[InputEvent::Enter { x: 0, y: 0 }]).await;
+        for i in 1..=MOTIONS {
+            send(&mut agent, &[InputEvent::Motion { x: i, y: i }]).await;
+            if i % 16 == 0 {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        }
+        send(
+            &mut agent,
+            &[
+                InputEvent::Key {
+                    code: C,
+                    pressed: true,
+                },
+                InputEvent::Key {
+                    code: C,
+                    pressed: false,
+                },
+            ],
+        )
+        .await;
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while holding.state.lock().unwrap().handed < MOTIONS as usize + 2 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the stream backed up"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        {
+            let state = holding.state.lock().unwrap();
+            assert!(
+                Instant::now() < state.until.unwrap(),
+                "every batch was read while the injector held them back"
+            );
+            assert!(state.written.is_empty(), "nothing put in early");
+        }
+
+        while holding.state.lock().unwrap().written_at.is_none() {
+            assert!(tokio::time::Instant::now() < deadline, "never caught up");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let state = holding.state.lock().unwrap();
+        assert!(state.written_at.unwrap() >= state.until.unwrap());
+        assert_eq!(state.written.len(), MOTIONS as usize + 3);
+        assert_eq!(state.written[0], Injection::MoveTo { x: 0, y: 0 });
+        assert_eq!(
+            state.written[state.written.len() - 2..],
+            [key(C, true), key(C, false)]
+        );
+    }
+
+    /// Which of the session calls an injector was asked for, in order.
+    #[derive(Clone, Default)]
+    struct SessionCalls(Arc<Mutex<Vec<&'static str>>>);
+
+    impl Injector for SessionCalls {
+        fn inject(&mut self, _batch: &[Injection]) {}
+        fn park(&mut self) {
+            self.0.lock().unwrap().push("park");
+        }
+        fn unpark(&mut self) {
+            self.0.lock().unwrap().push("unpark");
+        }
+        fn begin(&mut self) {
+            self.0.lock().unwrap().push("begin");
+        }
+    }
+
+    /// Preparing a session (on Linux, building virtual devices) is for a session that
+    /// starts, never for the hook's way out, which only gives back what was hidden.
+    #[tokio::test]
+    async fn a_session_is_prepared_when_it_starts_and_never_on_the_way_out() {
+        let calls = SessionCalls::default();
+        let endpoint = endpoint();
+        let server = start(
+            endpoint.clone(),
+            Box::new(calls.clone()),
+            Arc::new(Outlet::default()),
+        )
+        .expect("binds");
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, InputEvent::Leave],
+        )
+        .await;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while calls.0.lock().unwrap().len() < 2 {
+            assert!(tokio::time::Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        assert_eq!(*calls.0.lock().unwrap(), ["begin", "park", "unpark"]);
     }
 }

@@ -36,6 +36,8 @@ pub struct Peer {
     pub pending: bool,
     /// How many screens it reported.
     pub displays: usize,
+    /// What went wrong with the link, in words, while it stands.
+    pub problem: Option<String>,
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -267,6 +269,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
     }
     if !whereabouts.is_empty() {
         crate::options::note(ui, &whereabouts.join(" · "));
+    }
+    if let Some(problem) = &peer.problem {
+        ui.colored_label(ui.visuals().error_fg_color, problem);
     }
     if peer.pending {
         ui.label("Check that the other machine shows this fingerprint:");

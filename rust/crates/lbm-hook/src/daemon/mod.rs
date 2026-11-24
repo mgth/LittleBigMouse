@@ -96,6 +96,11 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                     None => server.broadcast(&Event::LoadFailed { id }),
                 }
             }
+            // The multi-PC injector's desktop when no layout is running: nothing else.
+            Command::Desktop { desktop: d } => {
+                *shared.desktop.lock().unwrap_or_else(|p| p.into_inner()) =
+                    Some(crate::geometry::Rect::new(d.left, d.top, d.width, d.height));
+            }
             // Always reconciles, even when the text is unchanged: the answer is what
             // the user is waiting for, and a re-registration is cheap.
             Command::Shortcut { text } => {

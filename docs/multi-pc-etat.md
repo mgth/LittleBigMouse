@@ -3,7 +3,7 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `d7204166`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
-Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
+Mis à jour au fil des travaux (dernière fois le 2026-11-24, règles sur l'esclave) : voir « Travaux en cours » à la fin.
 
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
@@ -43,6 +43,7 @@ qui va le pointeur quand il y entre.
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines ; côté esclave et icône du tray : voir la ligne suivante) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
 | Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
 | Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running » |
+| Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -74,6 +75,8 @@ trouvés pendant l'essai.
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
 | Avertissement « fenêtre élevée » (PR #818) : hook esclave non élevé, clavier visuel (`osk.exe`, High + UIAccess) mis au premier plan par son icône de la barre des tâches | Vérifié sur la vm124 : blocage signalé à l'instant où `osk.exe` prend le focus (~300 ms après le survol de l'icône), redit au début de la session suivante ; curseur effectivement figé. Même chose, naturellement, avec la console `mmc.exe` élevée du mainteneur au premier plan. Hook élevé : rien de signalé, tout passe. `SendInput` renvoie le compte complet et `GetLastError` = 0 malgré le blocage. Essayé hook seul (à côté de l'agent du mainteneur, que le mutex d'instance empêche de doubler), pas la chaîne réseau jusqu'au maître, couverte par les tests sur boucle locale |
 | Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
+| Règles sur l'esclave Windows (vm124, 4K à 1,5 + 1080p) : affichées à leur place sur les deux écrans, zone mesurée qui suit l'écran choisi, mise à jour, retirées sur ordre et à la chute brutale du lien (maître tué), pointeur qui les traverse (`WindowFromPoint` rend la fenêtre du dessous) | Vérifié avec `peer_drive` comme maître et `peer_remote` comme esclave (l'agent installé du mainteneur tournait à côté, intact) |
+| Règles sur un esclave Linux : surfaces layer-shell, mise à jour, bail renouvelé, hôte d'overlay disparu à la fin | Vérifié dans un KWin imbriqué sans écran (`kwin_wayland --virtual`), pas sur un vrai bureau |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
@@ -88,6 +91,9 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
   provoqués sur les machines ;
+- les règles sur l'esclave **depuis `lbm-app`** sur un vrai maître (seul le chemin
+  `peer_drive` → esclave a tourné ; le calcul côté `lbm-app` et le retrait à sa fermeture
+  sont couverts par des tests), et sur un vrai bureau Linux esclave ;
 - l'indicateur côté esclave et l'icône du tray marquée (estompée / pastille) : ni la
   pastille dans le tray Plasma ni l'icône redessinée dans la zone de notification
   Windows n'ont été vues à l'écran ; le calcul des pixels et le changement d'icône sont
@@ -107,6 +113,11 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
+- Règles sur l'esclave : elles ne se tirent pas (inertes là-bas, on aligne en tirant
+  celles des écrans du maître) ; « Rulers on screens » reste grisé quand l'écran
+  sélectionné est celui de l'esclave, comme avant ; sous Linux, l'esclave renouvelle le
+  bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
+  au-delà).
 - Deux maîtres liés au même esclave partagent sa connexion unique au hook (une session
   par connexion). Quand le flux de l'un se termine, la connexion est fermée pour que le
   hook relâche ce qu'il tenait : la session de l'autre, s'il pilotait, se termine aussi.
@@ -459,6 +470,9 @@ les sections ci-dessus en tiennent compte.
 
 - Autres outils de partage (PR #814, branche `feat/concurrent-input-sharing-v6`) : la ligne
   « Autres outils de partage » ci-dessus et sa faiblesse.
+- `feat/mpc-remote-rulers` : les règles graduées sur les écrans de l'esclave (commande
+  `Overlay`, capacité `RemoteOverlay`, requête `PeerOverlay`), voir « Rulers on a
+  remote's screens » dans [`multi-pc.md`](multi-pc.md).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

@@ -89,6 +89,9 @@ pub struct Agent<W> {
     subscribers: Vec<api::Client>,
     /// The connection a live preview belongs to, while one is running.
     previewing_for: Option<api::Client>,
+    /// The rulers shown on remotes (`PeerOverlay`): for each remote, the frontend that
+    /// wrote its rulers last, the only one whose word or departure takes them down.
+    overlay_owners: std::collections::BTreeMap<String, api::Client>,
     /// What the subscribers last saw.
     published: Option<Snapshot>,
     hook_connected: bool,
@@ -213,6 +216,7 @@ impl<W: AgentWorld> Agent<W> {
             calls: None,
             subscribers: Vec::new(),
             previewing_for: None,
+            overlay_owners: std::collections::BTreeMap::new(),
             published: None,
             hook_connected: false,
             quitting: false,
@@ -826,6 +830,9 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerWallpapers { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
             }
+            Request::PeerOverlay { machine_id, bands } => {
+                self.peer_overlay(&client, machine_id, bands)
+            }
             Request::SetActiveSource {
                 layout_id,
                 monitor,
@@ -855,6 +862,40 @@ impl<W: AgentWorld> Agent<W> {
         if let Some(report) = report {
             self.forward("Probed", &report);
         }
+    }
+
+    /// `PeerOverlay`: the rulers a frontend wants on a remote's screens, handed to the
+    /// manager. The frontend that wrote a remote's rulers last owns them: only it takes
+    /// them down, by asking for none or by going ([`Self::left`]). Another frontend asking
+    /// for none there is answered and changes nothing — its own rulers were replaced —
+    /// so that a window closing its rulers never takes down those of a window still open.
+    fn peer_overlay(
+        &mut self,
+        client: &api::Client,
+        machine_id: String,
+        bands: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let Some(peers) = self.peers.as_mut().filter(|p| p.enabled()) else {
+            return Err("the multi-PC mode is off".into());
+        };
+        let shown = !bands.is_empty();
+        if !shown
+            && self
+                .overlay_owners
+                .get(&machine_id)
+                .is_some_and(|owner| !owner.is(client))
+        {
+            return Ok(serde_json::Value::Null);
+        }
+        if !peers.overlay(&machine_id, bands) {
+            return Err("the multi-PC mode is not running".into());
+        }
+        if shown {
+            self.overlay_owners.insert(machine_id, client.clone());
+        } else {
+            self.overlay_owners.remove(&machine_id);
+        }
+        Ok(serde_json::Value::Null)
     }
 
     /// A multi-PC request. What needs the network is answered from a task of its own,
@@ -1332,6 +1373,23 @@ impl<W: AgentWorld> Agent<W> {
     /// tray reconnecting, must not end somebody else's preview.
     fn left(&mut self, client: &api::Client) {
         self.subscribers.retain(|s| !s.is(client));
+        let machines: Vec<String> = self
+            .overlay_owners
+            .iter()
+            .filter(|(_, owner)| owner.is(client))
+            .map(|(machine_id, _)| machine_id.clone())
+            .collect();
+        if !machines.is_empty() {
+            eprintln!(
+                "[lbm-agent] the frontend showing rulers has gone: taking them down on the remotes"
+            );
+        }
+        for machine_id in machines {
+            self.overlay_owners.remove(&machine_id);
+            if let Some(peers) = &mut self.peers {
+                peers.overlay(&machine_id, Vec::new());
+            }
+        }
         if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {
             eprintln!("[lbm-agent] the frontend previewing has gone: ending the preview");
             self.previewing_for = None;

@@ -17,13 +17,14 @@ use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
 };
 use lbm_net::peers::{PairedPeer, PeerStore};
-use lbm_net::wire::{Bulk, Control, Hello, Role, CLIPBOARD_CAPABILITY};
+use lbm_net::wire::{Bulk, Control, Hello, Role, CLIPBOARD_CAPABILITY, OVERLAY_CAPABILITY};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use super::clipboard::{self, Sharing, Wake};
 use super::hook_input::{HookInput, Sink, Target};
+use super::overlay::{self, Painter, Shown};
 use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
 
 /// The first wait before calling a remote back, doubled at every failure up to
@@ -96,6 +97,12 @@ pub(super) enum Command {
         request: Option<u64>,
         error: Option<String>,
     },
+    /// The overlays this machine's editor wants on the screens of its remote
+    /// `machine_id` (`Control::Overlay`); empty takes them down.
+    Overlay {
+        machine_id: String,
+        bands: Vec<Value>,
+    },
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
 }
@@ -142,6 +149,12 @@ enum Internal {
         serial: u64,
     },
     Redial(String),
+    /// The overlays a master asked for, shown under `generation`, are down: they could
+    /// not be shown, or a screen changed under them.
+    OverlayFailed {
+        generation: u64,
+        error: String,
+    },
 }
 
 /// What the manager starts with.
@@ -157,6 +170,8 @@ pub(super) struct Start {
     pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
+    /// What draws the overlays a master of this machine asks for.
+    pub painter: Painter,
     pub clipboard: clipboard::Options,
     pub clipboard_factory: crate::clipboard::Factory,
 }
@@ -182,6 +197,22 @@ struct Live {
     /// What it last said of the input this machine sends it (a remote's only):
     /// `Control::InjectionBlocked`.
     blocked: Option<InjectionBlock>,
+    /// The highest revision of `Overlay` it sent (a master's only): an older one that
+    /// overtook it on its way is stale.
+    overlay_revision: u64,
+}
+
+/// The overlays a master of this machine asked for, while they are shown.
+struct Overlaid {
+    /// The master's machine id and the id of the link it asked on: they go with it.
+    master: (String, u64),
+    /// The revision of what is shown, and the bands as sent, checked again when this
+    /// machine's screens change.
+    revision: u64,
+    bands: Vec<Value>,
+    /// What the surfaces' failures are told by.
+    generation: u64,
+    shown: Box<dyn Shown>,
 }
 
 struct Actor {
@@ -239,6 +270,18 @@ struct Actor {
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
+    /// As a master: the overlays this machine's editor wants on each remote's screens,
+    /// sent again to a remote that links anew; the last revision given, and the last
+    /// sent to each remote (a failure of an earlier one is old news); and why a remote
+    /// said it could not show them.
+    overlays: HashMap<String, Vec<Value>>,
+    overlay_revision: u64,
+    overlay_sent: HashMap<String, u64>,
+    overlay_errors: HashMap<String, String>,
+    /// As a remote: the overlays a master asked for, while shown.
+    overlaid: Option<Overlaid>,
+    overlay_generation: u64,
+    painter: Painter,
     next_id: u64,
     next_serial: u64,
     /// Connections being made or accepted, and timers (see [`Actor::spawn`]).
@@ -274,6 +317,8 @@ fn shares_clipboard(live: &Live) -> bool {
 /// clipboard (whether it does is the user's choice, on each side).
 fn with_capabilities(mut hello: Hello) -> Hello {
     hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
+    // It draws the rulers its master asks for (`Control::Overlay`).
+    hello.capabilities.push(OVERLAY_CAPABILITY.to_owned());
     hello
         .capabilities
         .push(INJECTION_BLOCKED_CAPABILITY.to_owned());
@@ -355,6 +400,13 @@ pub(super) async fn run(
         internal,
         notices: start.notices,
         published: None,
+        overlays: HashMap::new(),
+        overlay_revision: 0,
+        overlay_sent: HashMap::new(),
+        overlay_errors: HashMap::new(),
+        overlaid: None,
+        overlay_generation: 0,
+        painter: start.painter,
         next_id: 0,
         next_serial: 0,
         tasks: JoinSet::new(),
@@ -450,6 +502,7 @@ impl Actor {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: self.problems.get(&paired.machine_id).cloned(),
+                    overlay_error: self.overlay_errors.get(&paired.machine_id).cloned(),
                     injection_blocked: live
                         .filter(|live| live.info.hello.role == Role::Remote)
                         .and_then(|live| live.blocked.clone()),
@@ -476,6 +529,7 @@ impl Actor {
                 role: info.hello.role,
                 state: PeerState::Pending,
                 problem: None,
+                overlay_error: None,
                 injection_blocked: None,
             }
         }));
@@ -562,6 +616,7 @@ impl Actor {
                 request,
                 error,
             } => self.input_switched(&machine_id, display, value, request, error),
+            Command::Overlay { machine_id, bands } => self.overlay(machine_id, bands),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -619,6 +674,16 @@ impl Actor {
             Internal::Redial(machine_id) => {
                 self.redial_scheduled.remove(&machine_id);
                 self.call_back(&machine_id);
+            }
+            Internal::OverlayFailed { generation, error } => {
+                if self
+                    .overlaid
+                    .as_ref()
+                    .is_some_and(|o| o.generation == generation)
+                {
+                    let overlaid = self.overlaid.take().expect("checked above");
+                    self.overlay_failed(&overlaid.master, overlaid.revision, error);
+                }
             }
         }
     }
@@ -738,6 +803,7 @@ impl Actor {
                 PeerState::Pending
             },
             problem: None,
+            overlay_error: None,
             injection_blocked: None,
         }
     }
@@ -899,12 +965,22 @@ impl Actor {
                 self.send_wallpapers(&sender);
             }
         }
+        // This machine is the master: the rulers its editor shows, if it shows any.
+        if info.hello.role == Role::Remote {
+            if let Some(bands) = self.overlays.get(&machine_id).cloned() {
+                self.overlay_errors.remove(&machine_id);
+                if let Err(error) = self.send_overlay(&machine_id, &info.hello, &sender, bands) {
+                    self.overlay_errors.insert(machine_id.clone(), error);
+                }
+            }
+        }
         let live = Live {
             id,
             sender,
             info,
             displays: None,
             wallpapers: None,
+            overlay_revision: 0,
             blocked: None,
         };
         let shares = shares_clipboard(&live);
@@ -914,6 +990,8 @@ impl Actor {
             tokio::spawn(async move {
                 older.sender.close("replaced by a newer connection").await;
             });
+            // What the older link asked to be shown goes with it.
+            self.overlay_link_gone(&machine_id, older.id);
         }
         if shares {
             let peers = sharing_peers(&self.links);
@@ -1133,6 +1211,24 @@ impl Actor {
                     live.info.hello.name
                 );
             }
+            Control::Overlay { revision, bands } if live.info.hello.role == Role::Master => {
+                if revision <= live.overlay_revision {
+                    return;
+                }
+                live.overlay_revision = revision;
+                self.show_overlay((machine_id.to_owned(), id), revision, bands);
+            }
+            Control::OverlayFailed { revision, error } if live.info.hello.role == Role::Remote => {
+                eprintln!(
+                    "[lbm-agent] multi-PC: {} cannot show the rulers: {error}",
+                    live.info.hello.name
+                );
+                if self.overlays.contains_key(machine_id)
+                    && self.overlay_sent.get(machine_id) == Some(&revision)
+                {
+                    self.overlay_errors.insert(machine_id.to_owned(), error);
+                }
+            }
             _ => {}
         }
     }
@@ -1171,6 +1267,7 @@ impl Actor {
         if let Some(problem) = LinkProblem::of_close(&reason) {
             self.problem(machine_id, problem);
         }
+        self.overlay_link_gone(machine_id, id);
         self.select();
         self.schedule_redial(machine_id);
     }
@@ -1382,6 +1479,15 @@ impl Actor {
         }
         self.displays = displays;
         self.revision += 1;
+        // Rulers drawn for the screens as they were may no longer fall where they should:
+        // checked again, and taken down if not. The master hears of the change through
+        // `Displays` below and sends rulers for the screens as they are.
+        if let Some(overlaid) = &self.overlaid {
+            if let Err(error) = overlay::check(&overlaid.bands, &self.displays) {
+                let overlaid = self.overlaid.take().expect("checked above");
+                self.overlay_failed(&overlaid.master, overlaid.revision, error);
+            }
+        }
         let masters: Vec<LinkSender> = self
             .links
             .values()
@@ -1461,8 +1567,152 @@ impl Actor {
         });
     }
 
+    //==================//
+    // Overlays         //
+    //==================//
+
+    /// As a master: the editor wants `bands` on the screens of its remote `machine_id`
+    /// (none: taken down). Kept, so that a remote linking anew gets them again, and sent
+    /// now if the remote is linked and draws overlays at all.
+    fn overlay(&mut self, machine_id: String, bands: Vec<Value>) {
+        self.overlay_errors.remove(&machine_id);
+        let known = self.overlays.contains_key(&machine_id);
+        if bands.is_empty() {
+            self.overlays.remove(&machine_id);
+            if !known {
+                return;
+            }
+        } else {
+            self.overlays.insert(machine_id.clone(), bands.clone());
+        }
+        let Some(live) = self
+            .links
+            .get(&machine_id)
+            .filter(|live| live.info.hello.role == Role::Remote)
+        else {
+            return;
+        };
+        let (hello, sender) = (live.info.hello.clone(), live.sender.clone());
+        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands) {
+            self.overlay_errors.insert(machine_id, error);
+        }
+    }
+
+    /// Sends `Overlay` to a remote under a new revision, in a task of its own as
+    /// `Displays` is — if it announced it draws them. An older remote would ignore the
+    /// message; its user is told why nothing shows instead.
+    fn send_overlay(
+        &mut self,
+        machine_id: &str,
+        hello: &Hello,
+        sender: &LinkSender,
+        bands: Vec<Value>,
+    ) -> Result<(), String> {
+        if !hello.capabilities.iter().any(|c| c == OVERLAY_CAPABILITY) {
+            return if bands.is_empty() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{} runs a LittleBigMouse that cannot show rulers",
+                    hello.name
+                ))
+            };
+        }
+        self.overlay_revision += 1;
+        self.overlay_sent
+            .insert(machine_id.to_owned(), self.overlay_revision);
+        let message = Control::Overlay {
+            revision: self.overlay_revision,
+            bands,
+        };
+        let sender = sender.clone();
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+        Ok(())
+    }
+
+    /// As a remote: what the master on link `master` asked to be shown, under `revision`.
+    /// Nothing from one master is shown on top of another's: the latest asked wins.
+    fn show_overlay(&mut self, master: (String, u64), revision: u64, bands: Vec<Value>) {
+        if bands.is_empty() {
+            if self.overlaid.as_ref().is_some_and(|o| o.master == master) {
+                self.overlaid = None;
+                eprintln!("[lbm-agent] multi-PC: the master's rulers are taken down");
+            }
+            return;
+        }
+        let checked = match overlay::check(&bands, &self.displays) {
+            Ok(checked) => checked,
+            Err(error) => {
+                if self.overlaid.as_ref().is_some_and(|o| o.master == master) {
+                    self.overlaid = None;
+                }
+                return self.overlay_failed(&master, revision, error);
+            }
+        };
+        if let Some(overlaid) = self.overlaid.as_mut().filter(|o| o.master == master) {
+            overlaid.shown.update(checked);
+            overlaid.revision = revision;
+            overlaid.bands = bands;
+            return;
+        }
+        // Another master's, if any, goes first.
+        self.overlaid = None;
+        self.overlay_generation += 1;
+        let generation = self.overlay_generation;
+        let internal = self.internal.clone();
+        let on_error = Box::new(move |error| {
+            let _ = internal.send(Internal::OverlayFailed { generation, error });
+        });
+        let count = checked.len();
+        match self.painter.paint(checked, on_error) {
+            Ok(shown) => {
+                eprintln!("[lbm-agent] multi-PC: showing {count} ruler(s) for the master");
+                self.overlaid = Some(Overlaid {
+                    master,
+                    revision,
+                    bands,
+                    generation,
+                    shown,
+                });
+            }
+            Err(error) => self.overlay_failed(&master, revision, error),
+        }
+    }
+
+    /// As a remote: tells the master why the overlays of `revision` are not shown.
+    fn overlay_failed(&self, master: &(String, u64), revision: u64, error: String) {
+        eprintln!("[lbm-agent] multi-PC: the master's rulers are not shown: {error}");
+        let Some(live) = self.links.get(&master.0).filter(|l| l.id == master.1) else {
+            return;
+        };
+        let sender = live.sender.clone();
+        let message = Control::OverlayFailed { revision, error };
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+    }
+
+    /// Link `id` with `machine_id` is gone: what it asked this machine to show goes too.
+    fn overlay_link_gone(&mut self, machine_id: &str, id: u64) {
+        if self
+            .overlaid
+            .as_ref()
+            .is_some_and(|o| o.master.0 == machine_id && o.master.1 == id)
+        {
+            self.overlaid = None;
+            eprintln!("[lbm-agent] multi-PC: the master's link ended: its rulers are taken down");
+        }
+    }
+
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
+        if self.overlaid.take().is_some() {
+            eprintln!("[lbm-agent] multi-PC: the rulers of the master are taken down");
+        }
+        self.overlays.clear();
+        self.overlay_sent.clear();
         self.selected = None;
         self.driven_by = None;
         self.relaying = None;

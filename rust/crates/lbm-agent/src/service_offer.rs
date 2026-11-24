@@ -53,17 +53,53 @@ mod windows_side {
 
     use super::SecureInput;
 
-    const KEY_W: PCWSTR = w!(r"SOFTWARE\LittleBigMouse\InputService");
+    /// Where the offer is looked for: the key, its parent (watched with all below it)
+    /// and the parent's parent (watched for the parent to be made). The service's, or
+    /// a test's own.
+    #[derive(Clone)]
+    pub(super) struct Place {
+        pub root: HKEY,
+        pub key: Vec<u16>,
+        pub parent: Vec<u16>,
+        pub above: Vec<u16>,
+    }
+
+    // SAFETY: a predefined root key and plain strings.
+    unsafe impl Send for Place {}
+
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain([0]).collect()
+    }
+
+    impl Place {
+        pub fn new(root: HKEY, above: &str) -> Place {
+            Place {
+                root,
+                key: wide(&format!(r"{above}\LittleBigMouse\InputService")),
+                parent: wide(&format!(r"{above}\LittleBigMouse")),
+                above: wide(above),
+            }
+        }
+
+        fn service() -> Place {
+            Place::new(HKEY_LOCAL_MACHINE, "SOFTWARE")
+        }
+    }
 
     /// The offer the service publishes now, if it publishes one.
     pub fn read() -> Option<SecureInput> {
+        read_at(&Place::service())
+    }
+
+    pub(super) fn read_at(place: &Place) -> Option<SecureInput> {
+        let key = PCWSTR(place.key.as_ptr());
         let mut port = 0u32;
         let mut size = 4u32;
         // SAFETY: a DWORD and its size.
         unsafe {
             RegGetValueW(
-                HKEY_LOCAL_MACHINE,
-                KEY_W,
+                place.root,
+                key,
                 w!("Port"),
                 RRF_RT_REG_DWORD,
                 None,
@@ -78,8 +114,8 @@ mod windows_side {
         // SAFETY: a buffer and its size in bytes; the value comes back NUL-terminated.
         unsafe {
             RegGetValueW(
-                HKEY_LOCAL_MACHINE,
-                KEY_W,
+                place.root,
+                key,
                 w!("MachineId"),
                 RRF_RT_REG_SZ,
                 None,
@@ -93,7 +129,7 @@ mod windows_side {
         super::offer(port, &String::from_utf16_lossy(&id[..length]))
     }
 
-    /// Following the offer: `changed` hears every change of it (and once at the start).
+    /// Following the offer: `changed` hears every change of it, and once at the start.
     /// Stopped when dropped.
     pub struct Watch {
         stop: HANDLE,
@@ -121,12 +157,16 @@ mod windows_side {
     unsafe impl Send for Stop {}
 
     pub fn watch(changed: UnboundedSender<()>) -> Option<Watch> {
+        watch_at(Place::service(), changed)
+    }
+
+    pub(super) fn watch_at(place: Place, changed: UnboundedSender<()>) -> Option<Watch> {
         // SAFETY: a fresh, unnamed, auto-reset event.
         let stop = unsafe { CreateEventW(None, false, false, None) }.ok()?;
         let handed = Stop(stop);
         let thread = std::thread::Builder::new()
             .name("service-offer".to_owned())
-            .spawn(move || follow(handed, changed))
+            .spawn(move || follow(place, handed, changed))
             .inspect_err(|error| {
                 eprintln!("[lbm-agent] the service's offer is not followed: {error}")
             })
@@ -139,63 +179,70 @@ mod windows_side {
         Some(Watch { stop, thread })
     }
 
-    /// One registration at a time: on `SOFTWARE\LittleBigMouse` and all below it when
-    /// it exists, else on `SOFTWARE` for the moment it is made. Each notification is
-    /// passed on (a read is cheap), then the registration is made again.
-    fn follow(stop: Stop, changed: UnboundedSender<()>) {
-        let mut first = true;
+    fn open(root: HKEY, path: &[u16]) -> Option<HKEY> {
+        let mut key = HKEY::default();
+        // SAFETY: a NUL-terminated path and an out pointer to a local.
+        unsafe { RegOpenKeyExW(root, PCWSTR(path.as_ptr()), 0, KEY_NOTIFY, &mut key) }
+            .is_ok()
+            .then_some(key)
+    }
+
+    /// One registration at a time: on the parent and all below it when it exists, else
+    /// on the key above it, for the moment it is made. **Every** round asks for a read
+    /// once its registration is armed, never before: a change that comes between a read
+    /// and the next registration would otherwise be lost (the service writes `Port`, then
+    /// `MachineId`). A parent made between the look and the registration on the key
+    /// above is seen at once, and watched instead.
+    fn follow(place: Place, stop: Stop, changed: UnboundedSender<()>) {
         loop {
-            // SAFETY: keys and events opened and closed in this iteration; `stop`
+            let (key, on_parent) = match open(place.root, &place.parent) {
+                Some(key) => (key, true),
+                None => match open(place.root, &place.above) {
+                    Some(key) => (key, false),
+                    None => {
+                        eprintln!("[lbm-agent] the service's offer cannot be followed");
+                        return;
+                    }
+                },
+            };
+            // SAFETY: the key and the event are this round's, closed at its end; `stop`
             // outlives the thread (its owner joins before closing it).
             let stopped = unsafe {
-                let mut key = HKEY::default();
-                let (opened, subtree, filter) = if RegOpenKeyExW(
-                    HKEY_LOCAL_MACHINE,
-                    w!(r"SOFTWARE\LittleBigMouse"),
-                    0,
-                    KEY_NOTIFY,
-                    &mut key,
-                )
-                .is_ok()
-                {
-                    (
-                        true,
-                        true,
-                        REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-                    )
-                } else {
-                    let opened =
-                        RegOpenKeyExW(HKEY_LOCAL_MACHINE, w!("SOFTWARE"), 0, KEY_NOTIFY, &mut key)
-                            .is_ok();
-                    (opened, false, REG_NOTIFY_CHANGE_NAME)
-                };
                 let Ok(event) = CreateEventW(None, false, false, None) else {
-                    if opened {
-                        let _ = RegCloseKey(key);
-                    }
+                    let _ = RegCloseKey(key);
                     return;
                 };
-                let armed =
-                    opened && RegNotifyChangeKeyValue(key, subtree, filter, event, true).is_ok();
-                // Read once the first registration is armed: a change between the
-                // caller's own read and it is not lost.
-                if std::mem::take(&mut first) && changed.send(()).is_err() {
-                    return;
-                }
-                let stopped = if armed {
-                    WaitForMultipleObjects(&[stop.0, event], false, INFINITE).0
-                        != WAIT_OBJECT_0.0 + 1
+                let filter = if on_parent {
+                    REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET
                 } else {
+                    REG_NOTIFY_CHANGE_NAME
+                };
+                let armed = RegNotifyChangeKeyValue(key, on_parent, filter, event, true).is_ok();
+                let parent_appeared = !on_parent
+                    && open(place.root, &place.parent)
+                        .inspect(|k| {
+                            let _ = RegCloseKey(*k);
+                        })
+                        .is_some();
+                let outcome = if !armed {
                     eprintln!("[lbm-agent] the service's offer cannot be followed");
-                    true
+                    Some(true)
+                } else if parent_appeared {
+                    // Watched from the next round, on the parent itself.
+                    None
+                } else if changed.send(()).is_err() {
+                    Some(true)
+                } else {
+                    Some(
+                        WaitForMultipleObjects(&[stop.0, event], false, INFINITE).0
+                            != WAIT_OBJECT_0.0 + 1,
+                    )
                 };
                 let _ = CloseHandle(event);
-                if opened {
-                    let _ = RegCloseKey(key);
-                }
-                stopped
+                let _ = RegCloseKey(key);
+                outcome
             };
-            if stopped || changed.send(()).is_err() {
+            if stopped == Some(true) {
                 return;
             }
         }
@@ -228,60 +275,84 @@ mod tests {
         assert_eq!(offer(24818, &ID.replace('0', "g")), None);
     }
 
-    /// Writes and removes the real key: an administrator's test (CI runners are).
+    /// Under a key of the test's own in HKCU: the machine's offer is never touched, and
+    /// no elevation is needed.
     #[cfg(windows)]
     #[tokio::test]
     async fn the_offer_written_is_heard_and_read_and_its_removal_too() {
-        use windows::core::w;
+        use windows::core::PCWSTR;
         use windows::Win32::System::Registry::{
-            RegDeleteKeyW, RegSetKeyValueW, HKEY_LOCAL_MACHINE, REG_DWORD, REG_SZ,
+            RegCreateKeyW, RegDeleteTreeW, RegSetKeyValueW, HKEY, HKEY_CURRENT_USER, REG_DWORD,
+            REG_SZ,
         };
-        let key = w!(r"SOFTWARE\LittleBigMouse\InputService");
-        let write = || -> bool {
+        let above = format!(r"Software\LittleBigMouseTest-{}", std::process::id());
+        let wide = |text: &str| -> Vec<u16> { text.encode_utf16().chain([0]).collect() };
+        let place = windows_side::Place::new(HKEY_CURRENT_USER, &above);
+        let delete = |path: &str| {
+            let path = wide(path);
+            // SAFETY: a NUL-terminated path under the test's own key.
+            let _ = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(path.as_ptr())) };
+        };
+        delete(&above);
+        let mut made = HKEY::default();
+        let above_w = wide(&above);
+        // SAFETY: as above; the handle is not needed.
+        unsafe { RegCreateKeyW(HKEY_CURRENT_USER, PCWSTR(above_w.as_ptr()), &mut made) }
+            .ok()
+            .unwrap();
+        let key_w = place.key.clone();
+        let write = || {
             let port = 24818u32;
-            let id: Vec<u16> = ID.encode_utf16().chain([0]).collect();
+            let id = wide(ID);
             // SAFETY: a DWORD and a NUL-terminated string, with their sizes.
             unsafe {
                 RegSetKeyValueW(
-                    HKEY_LOCAL_MACHINE,
-                    key,
-                    w!("Port"),
+                    HKEY_CURRENT_USER,
+                    PCWSTR(key_w.as_ptr()),
+                    windows::core::w!("Port"),
                     REG_DWORD.0,
                     Some(&port as *const u32 as *const _),
                     4,
                 )
-                .is_ok()
-                    && RegSetKeyValueW(
-                        HKEY_LOCAL_MACHINE,
-                        key,
-                        w!("MachineId"),
-                        REG_SZ.0,
-                        Some(id.as_ptr() as *const _),
-                        (id.len() * 2) as u32,
-                    )
-                    .is_ok()
+                .ok()
+                .unwrap();
+                RegSetKeyValueW(
+                    HKEY_CURRENT_USER,
+                    PCWSTR(key_w.as_ptr()),
+                    windows::core::w!("MachineId"),
+                    REG_SZ.0,
+                    Some(id.as_ptr() as *const _),
+                    (id.len() * 2) as u32,
+                )
+                .ok()
+                .unwrap();
             }
         };
-        // SAFETY: a constant key name.
-        let _ = unsafe { RegDeleteKeyW(HKEY_LOCAL_MACHINE, key) };
-        if !write() {
-            eprintln!("not an administrator: HKLM cannot be written, nothing to test");
-            return;
-        }
-        // SAFETY: as above.
-        let _ = unsafe { RegDeleteKeyW(HKEY_LOCAL_MACHINE, key) };
-        assert_eq!(read(), None);
-
+        assert_eq!(windows_side::read_at(&place), None);
         let (changed, mut changes) = tokio::sync::mpsc::unbounded_channel();
-        let _watch = watch(changed).unwrap();
+        let _watch = windows_side::watch_at(place.clone(), changed).unwrap();
         assert!(heard(&mut changes).await, "the first word of the watch");
-        assert!(write());
-        assert!(heard(&mut changes).await, "the offer written is heard");
-        assert_eq!(read().map(|offer| offer.port), Some(24818));
-        // SAFETY: as above.
-        let _ = unsafe { RegDeleteKeyW(HKEY_LOCAL_MACHINE, key) };
+        // The parent did not exist: made with the offer, it is seen from above.
+        write();
+        let mut read = None;
+        for _ in 0..3 {
+            if !heard(&mut changes).await {
+                break;
+            }
+            read = windows_side::read_at(&place);
+            if read.is_some() {
+                break;
+            }
+        }
+        assert_eq!(
+            read.map(|offer| offer.port),
+            Some(24818),
+            "the offer written is heard"
+        );
+        delete(&format!(r"{above}\LittleBigMouse\InputService"));
         assert!(heard(&mut changes).await, "the offer removed is heard");
-        assert_eq!(read(), None);
+        assert_eq!(windows_side::read_at(&place), None);
+        delete(&above);
     }
 
     #[cfg(windows)]

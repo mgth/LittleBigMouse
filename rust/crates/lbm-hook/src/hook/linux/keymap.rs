@@ -88,6 +88,7 @@ fn keymap_is(shared: &Shared, keymap: Vec<u8>) {
     known.keymap = Some(keymap);
     known.told_unknown = false;
     apply(shared, &mut known);
+    ASK_KDE_AGAIN.notify_one();
 }
 
 /// The active layout is `group`: read the keymap again if it changed.
@@ -125,8 +126,16 @@ fn apply(shared: &Shared, known: &mut Known) {
     }
 }
 
-/// Follows KDE's active layout, for as long as KDE is there to say it. Elsewhere, or
-/// once it goes, `wl_keyboard.modifiers` is all there is.
+/// KDE's keyboard layouts service.
+const KDE: &str = "org.kde.keyboard";
+
+/// Asks KDE for the active layout again: a new keymap is the desktop's layouts being
+/// (re)loaded, which is also when its `/Layouts` may have just appeared.
+static ASK_KDE_AGAIN: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+/// Follows KDE's active layout for as long as the session bus lives, from whenever KDE's
+/// service appears, and again each time it comes back. Elsewhere, `wl_keyboard.modifiers`
+/// is all there is.
 fn follow_kde(shared: &'static Shared) {
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -136,41 +145,92 @@ fn follow_kde(shared: &'static Shared) {
     };
     let followed = runtime.block_on(async {
         let connection = zbus::Connection::session().await?;
-        let layouts = zbus::Proxy::new(
-            &connection,
-            "org.kde.keyboard",
-            "/Layouts",
-            "org.kde.KeyboardLayouts",
-        )
-        .await?;
-        // Subscribed before the first question: a switch in between is not missed.
-        let mut changed = layouts.receive_signal("layoutChanged").await?;
-        let mut relisted = layouts.receive_signal("layoutListChanged").await?;
-        group_is(shared, layouts.call::<_, _, u32>("getLayout", &()).await?);
-        eprintln!("[LittleBigMouse.Hook] keyboard layout: the active layout is followed in KDE's");
-        loop {
-            tokio::select! {
-                message = changed.next() => {
-                    let Some(message) = message else { break };
-                    if let Ok(group) = message.body().deserialize::<u32>() {
-                        group_is(shared, group);
-                    }
-                }
-                message = relisted.next() => {
-                    if message.is_none() {
-                        break;
-                    }
-                    group_is(shared, layouts.call::<_, _, u32>("getLayout", &()).await?);
-                }
-            }
-        }
-        Ok::<_, zbus::Error>(())
+        follow_layouts(&connection, &ASK_KDE_AGAIN, |group| group_is(shared, group)).await
     });
     if let Err(error) = followed {
-        // Not KDE, or not yet: the ordinary case on any other desktop.
         eprintln!(
             "[LittleBigMouse.Hook] keyboard layout: KDE's active layout not followed ({error})"
         );
+    }
+}
+
+/// Says each active layout KDE gives on `connection`. Waits for the service to have an
+/// owner, follows it until it has none, and waits again: a hook started before KDE's
+/// session, or a KDE restarted, is followed all the same.
+async fn follow_layouts(
+    connection: &zbus::Connection,
+    ask_again: &tokio::sync::Notify,
+    mut on_group: impl FnMut(u32),
+) -> zbus::Result<()> {
+    let bus = zbus::fdo::DBusProxy::new(connection).await?;
+    // Subscribed before asking whether it is there: an arrival in between is not missed.
+    let mut owners = bus
+        .receive_name_owner_changed_with_args(&[(0, KDE)])
+        .await?;
+    let name = zbus::names::BusName::try_from(KDE)?;
+    loop {
+        if bus.name_has_owner(name.clone()).await? {
+            follow_service(connection, &mut owners, ask_again, &mut on_group).await?;
+        }
+        loop {
+            let Some(change) = owners.next().await else {
+                return Ok(());
+            };
+            if change.args().is_ok_and(|a| a.new_owner().is_some()) {
+                break;
+            }
+        }
+    }
+}
+
+/// Follows KDE's service while it has an owner. Its name may come before its `/Layouts`:
+/// a question it cannot answer yet is asked again at the next keymap, and its signals
+/// are heard meanwhile.
+async fn follow_service(
+    connection: &zbus::Connection,
+    owners: &mut zbus::fdo::NameOwnerChangedStream,
+    ask_again: &tokio::sync::Notify,
+    on_group: &mut impl FnMut(u32),
+) -> zbus::Result<()> {
+    let layouts = zbus::Proxy::new(connection, KDE, "/Layouts", "org.kde.KeyboardLayouts").await?;
+    // Subscribed before the first question: a switch in between is not missed.
+    let mut changed = layouts.receive_signal("layoutChanged").await?;
+    let mut relisted = layouts.receive_signal("layoutListChanged").await?;
+    let mut told = false;
+    let mut ask = true;
+    loop {
+        if std::mem::take(&mut ask) {
+            if let Ok(group) = layouts.call::<_, _, u32>("getLayout", &()).await {
+                on_group(group);
+                if !std::mem::replace(&mut told, true) {
+                    eprintln!(
+                        "[LittleBigMouse.Hook] keyboard layout: the active layout is followed in KDE's"
+                    );
+                }
+            }
+        }
+        tokio::select! {
+            message = changed.next() => {
+                let Some(message) = message else { return Ok(()) };
+                if let Ok(group) = message.body().deserialize::<u32>() {
+                    on_group(group);
+                }
+            }
+            message = relisted.next() => {
+                if message.is_none() {
+                    return Ok(());
+                }
+                ask = true;
+            }
+            () = ask_again.notified() => ask = true,
+            change = owners.next() => match change {
+                None => return Ok(()),
+                Some(change) if change.args().is_ok_and(|a| a.new_owner().is_none()) => {
+                    return Ok(())
+                }
+                Some(_) => ask = true,
+            },
+        }
     }
 }
 
@@ -513,6 +573,139 @@ mod tests {
         );
         // A group the keymap does not have is read as its first, as xkbcommon wraps it.
         assert_eq!(letters_of_keymap(xkb, &text, 7).map(|r| r.layouts), Some(2));
+    }
+
+    /// A session bus of its own, gone with it; `None` where there is no dbus-daemon.
+    struct PrivateBus {
+        daemon: std::process::Child,
+        address: String,
+    }
+
+    impl PrivateBus {
+        fn start() -> Option<PrivateBus> {
+            use std::io::BufRead;
+            let mut daemon = std::process::Command::new("dbus-daemon")
+                .args(["--session", "--nofork", "--print-address"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .ok()?;
+            let mut address = String::new();
+            std::io::BufReader::new(daemon.stdout.take()?)
+                .read_line(&mut address)
+                .ok()?;
+            Some(PrivateBus {
+                daemon,
+                address: address.trim().to_owned(),
+            })
+        }
+
+        async fn connect(&self) -> zbus::Connection {
+            zbus::connection::Builder::address(self.address.as_str())
+                .expect("an address")
+                .build()
+                .await
+                .expect("the private bus")
+        }
+    }
+
+    impl Drop for PrivateBus {
+        fn drop(&mut self) {
+            let _ = self.daemon.kill();
+            let _ = self.daemon.wait();
+        }
+    }
+
+    /// KDE's service as the test publishes it.
+    struct FakeLayouts(u32);
+
+    #[zbus::interface(name = "org.kde.KeyboardLayouts")]
+    impl FakeLayouts {
+        #[zbus(name = "getLayout")]
+        fn get_layout(&self) -> u32 {
+            self.0
+        }
+    }
+
+    async fn next(heard: &mut tokio::sync::mpsc::UnboundedReceiver<u32>, what: &str) -> u32 {
+        tokio::time::timeout(std::time::Duration::from_secs(5), heard.recv())
+            .await
+            .unwrap_or_else(|_| panic!("{what}: no layout in time"))
+            .expect("the follower is running")
+    }
+
+    async fn emit_layout_changed(connection: &zbus::Connection, group: u32) {
+        connection
+            .emit_signal(
+                None::<()>,
+                "/Layouts",
+                "org.kde.KeyboardLayouts",
+                "layoutChanged",
+                &(group,),
+            )
+            .await
+            .expect("the signal");
+    }
+
+    /// The hook starts before KDE: its name comes, then its `/Layouts`, then it is
+    /// restarted. Each active layout is heard.
+    #[tokio::test]
+    async fn kde_started_after_the_hook_is_followed_all_the_same() {
+        let Some(bus) = PrivateBus::start() else {
+            eprintln!("no dbus-daemon here: skipped");
+            return;
+        };
+        let hook = bus.connect().await;
+        let ask_again: &'static tokio::sync::Notify =
+            Box::leak(Box::new(tokio::sync::Notify::new()));
+        let (said, mut heard) = tokio::sync::mpsc::unbounded_channel();
+        let following = tokio::spawn(async move {
+            follow_layouts(&hook, ask_again, |group| {
+                let _ = said.send(group);
+            })
+            .await
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // The name first, nothing behind it yet: the question goes unanswered.
+        let kde = bus.connect().await;
+        // Serving no object yet, as a service does whose name comes first: a question
+        // is answered "no such object".
+        let _ = kde.object_server();
+        kde.request_name(KDE).await.expect("the name");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // Its signals are heard all the same.
+        emit_layout_changed(&kde, 1).await;
+        assert_eq!(
+            next(&mut heard, "the signal of a name with no layouts").await,
+            1
+        );
+
+        // Its layouts published, then a keymap: asked again and answered.
+        kde.object_server()
+            .at("/Layouts", FakeLayouts(0))
+            .await
+            .expect("served");
+        ask_again.notify_one();
+        assert_eq!(next(&mut heard, "the layouts published").await, 0);
+
+        // KDE restarted, on the French layout: asked as soon as it is back.
+        drop(kde);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let kde = zbus::connection::Builder::address(bus.address.as_str())
+            .unwrap()
+            .name(KDE)
+            .unwrap()
+            .serve_at("/Layouts", FakeLayouts(1))
+            .unwrap()
+            .build()
+            .await
+            .expect("KDE again");
+        assert_eq!(next(&mut heard, "KDE restarted").await, 1);
+        emit_layout_changed(&kde, 0).await;
+        assert_eq!(next(&mut heard, "its switch").await, 0);
+
+        following.abort();
     }
 
     #[test]

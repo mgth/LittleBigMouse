@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use lbm_ipc::input::{InputEvent, LOCKS_CAPABILITY};
-use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
+use lbm_ipc::peer::{
+    InjectionBlock, Peer, PeerDisplay, PeerWallpaper, INJECTION_BLOCKED_CAPABILITY,
+};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
@@ -74,6 +76,8 @@ pub(super) enum Command {
     PointerLocked(bool),
     /// Whether this machine's hook reads the lock keys' state (`Service::hook_reads_locks`).
     HookReadsLocks(bool),
+    /// This machine's hook says Windows drops what it injects, or no longer does.
+    InjectionBlocked(Option<InjectionBlock>),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -164,6 +168,9 @@ struct Live {
     /// The wallpapers it last sent (a remote's only): their revision on that link, the
     /// stamp the frontends know them by, and the pictures.
     wallpapers: Option<(u64, u64, Vec<PeerWallpaper>)>,
+    /// What it last said of the input this machine sends it (a remote's only):
+    /// `Control::InjectionBlocked`.
+    blocked: Option<InjectionBlock>,
 }
 
 struct Actor {
@@ -211,6 +218,10 @@ struct Actor {
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
     pointer_locked: bool,
+    /// The last thing sent to the masters about this machine's injection being blocked,
+    /// still on its way: the next waits for it, so that a block and its end arrive in
+    /// the order they happened.
+    block_sent: Option<tokio::task::JoinHandle<()>>,
     /// The master whose stream drives this machine now, with the id of its link
     /// ([`PeersState::driven_by`]).
     driven_by: Option<(String, u64)>,
@@ -224,9 +235,13 @@ struct Actor {
 }
 
 /// What this node can do beyond the protocol's baseline: its hook reads the master's
-/// lock keys (the hook ships with this agent, which retires one of another protocol).
+/// lock keys (the hook ships with this agent, which retires one of another protocol),
+/// and it tells and hears when a remote's injection is blocked.
 fn with_capabilities(mut hello: Hello) -> Hello {
     hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
+    hello
+        .capabilities
+        .push(INJECTION_BLOCKED_CAPABILITY.to_owned());
     hello
 }
 
@@ -299,6 +314,7 @@ pub(super) async fn run(
         relaying: None,
         pointer_lock_shortcut: start.pointer_lock_shortcut,
         pointer_locked: false,
+        block_sent: None,
         driven_by: None,
         internal,
         notices: start.notices,
@@ -396,6 +412,9 @@ impl Actor {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: self.problems.get(&paired.machine_id).cloned(),
+                    injection_blocked: live
+                        .filter(|live| live.info.hello.role == Role::Remote)
+                        .and_then(|live| live.blocked.clone()),
                 }
             })
             .collect();
@@ -419,6 +438,7 @@ impl Actor {
                 role: info.hello.role,
                 state: PeerState::Pending,
                 problem: None,
+                injection_blocked: None,
             }
         }));
         PeersState {
@@ -481,6 +501,7 @@ impl Actor {
             Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
             Command::PointerLocked(locked) => self.pointer_locked = locked,
             Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
+            Command::InjectionBlocked(block) => self.tell_masters_blocked(block),
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
                 self.retarget();
@@ -661,6 +682,7 @@ impl Actor {
                 PeerState::Pending
             },
             problem: None,
+            injection_blocked: None,
         }
     }
 
@@ -827,6 +849,7 @@ impl Actor {
             info,
             displays: None,
             wallpapers: None,
+            blocked: None,
         };
         if let Some(older) = self.links.insert(machine_id, live) {
             tokio::spawn(async move {
@@ -951,6 +974,36 @@ impl Actor {
                     live.info.hello.name
                 );
                 self.hook.restart();
+            }
+            // The remote's injection is blocked: Windows drops what this machine sends
+            // there, pointer motion included. Shown until it says otherwise; and if the
+            // pointer is over there now, it is brought home rather than left frozen on
+            // a screen nobody can act on — the same end of the hop as `InputReset`.
+            Control::InjectionBlocked { block } if live.info.hello.role == Role::Remote => {
+                match &block {
+                    Some(block) if block.cause == lbm_ipc::peer::BlockCause::Integrity => eprintln!(
+                        "[lbm-agent] multi-PC: Windows blocks the input sent to {}: {} has the focus there",
+                        live.info.hello.name,
+                        if block.process.is_empty() { "an elevated window" } else { &block.process }
+                    ),
+                    Some(_) => eprintln!(
+                        "[lbm-agent] multi-PC: Windows blocks the input sent to {}, cause unknown there",
+                        live.info.hello.name
+                    ),
+                    None => eprintln!(
+                        "[lbm-agent] multi-PC: the input sent to {} is no longer blocked",
+                        live.info.hello.name
+                    ),
+                }
+                let blocked = block.is_some();
+                live.blocked = block;
+                if blocked
+                    && self.hook.driven()
+                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
+                {
+                    eprintln!("[lbm-agent] multi-PC: the pointer comes home");
+                    self.hook.restart();
+                }
             }
             // Only this machine's master may switch its monitors: a remote of this
             // machine has no say over them, and an unpaired machine never gets a link.
@@ -1184,6 +1237,40 @@ impl Actor {
         tokio::spawn(async move {
             let _ = sender.control(&message).await;
         });
+    }
+
+    /// Tells every master linked to this machine that heard of it
+    /// ([`INJECTION_BLOCKED_CAPABILITY`]) what this machine's hook said of its injection.
+    /// In a task of its own, as `Displays` is, but after the previous word: two of them
+    /// overtaking each other would leave the master showing the wrong one.
+    fn tell_masters_blocked(&mut self, block: Option<InjectionBlock>) {
+        let masters: Vec<LinkSender> = self
+            .links
+            .values()
+            .filter(|live| {
+                live.info.hello.role == Role::Master
+                    && live
+                        .info
+                        .hello
+                        .capabilities
+                        .iter()
+                        .any(|c| c == INJECTION_BLOCKED_CAPABILITY)
+            })
+            .map(|live| live.sender.clone())
+            .collect();
+        if masters.is_empty() {
+            return;
+        }
+        let message = Control::InjectionBlocked { block };
+        let previous = self.block_sent.take();
+        self.block_sent = Some(tokio::spawn(async move {
+            if let Some(previous) = previous {
+                let _ = previous.await;
+            }
+            for sender in masters {
+                let _ = sender.control(&message).await;
+            }
+        }));
     }
 
     /// Records why linking with a paired machine went wrong, for the state to show. A

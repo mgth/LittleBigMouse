@@ -43,7 +43,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
+use lbm_ipc::peer::{InjectionBlock, Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::{Identity, IDENTITY_FILE};
 use lbm_net::link;
 use lbm_net::peers::PeerStore;
@@ -81,6 +81,46 @@ pub struct PeerEntry {
     /// Additive: absent from an older agent's state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<LinkProblem>,
+    /// A remote linked to this machine says Windows drops the input this machine sends
+    /// it, and why (`Control::InjectionBlocked`). Kept
+    /// until it says otherwise or the link ends. Additive: absent when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub injection_blocked: Option<InjectionBlock>,
+}
+
+/// A remote where Windows drops the input this machine sends (the agent's state, for the
+/// tray): its name here, the process whose window has the focus there, and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct BlockedRemote {
+    pub name: String,
+    #[serde(default)]
+    pub process: String,
+    #[serde(default)]
+    pub cause: lbm_ipc::peer::BlockCause,
+}
+
+/// The linked remotes of `state` that say their injection is blocked.
+pub fn blocked_remotes(state: &PeersState) -> Vec<BlockedRemote> {
+    if !state.enabled {
+        return Vec::new();
+    }
+    state
+        .peers
+        .iter()
+        .filter(|p| p.peer.connected)
+        .filter_map(|p| {
+            p.injection_blocked.as_ref().map(|block| BlockedRemote {
+                name: if p.peer.name.is_empty() {
+                    p.peer.machine_id.clone()
+                } else {
+                    p.peer.name.clone()
+                },
+                process: block.process.clone(),
+                cause: block.cause,
+            })
+        })
+        .collect()
 }
 
 /// What went wrong between this machine and another, for the user to read: the kind,
@@ -502,6 +542,14 @@ impl Service {
         }
     }
 
+    /// This machine's hook says Windows drops what it injects for a master, or no longer
+    /// does: every master linked that hears of it is told.
+    pub fn injection_blocked(&mut self, block: Option<InjectionBlock>) {
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::InjectionBlocked(block));
+        }
+    }
+
     pub fn hook_locked(&mut self, locked: bool) {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::PointerLocked(locked));
@@ -745,6 +793,7 @@ impl Service {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: None,
+                    injection_blocked: None,
                 })
                 .collect(),
         }
@@ -788,6 +837,7 @@ mod tests {
             role,
             state,
             problem: None,
+            injection_blocked: None,
         }
     }
 

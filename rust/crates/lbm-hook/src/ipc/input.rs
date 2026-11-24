@@ -65,12 +65,29 @@ pub struct Client {
 pub struct Outlet {
     generation: AtomicU64,
     current: Mutex<Option<Client>>,
+    /// Told whenever the client changes, for a master that is not woken by a device
+    /// of its own (the Windows hooks): it is how it learns that there is a machine to
+    /// drive before the next mouse move.
+    notify: std::sync::OnceLock<fn()>,
 }
 
 impl Outlet {
+    /// Has `notify` called, on the endpoint's thread, after every change of client.
+    /// Only the first call counts. It must not wait.
+    pub fn on_change(&self, notify: fn()) {
+        let _ = self.notify.set(notify);
+    }
+
+    fn changed(&self) {
+        if let Some(notify) = self.notify.get() {
+            notify();
+        }
+    }
+
     fn adopt(&self, client: Client) {
         *self.current.lock().unwrap_or_else(|p| p.into_inner()) = Some(client);
         self.generation.fetch_add(1, Ordering::Release);
+        self.changed();
     }
 
     /// A connection ended: if it was the current one, there is no client any more. A
@@ -80,6 +97,8 @@ impl Outlet {
         if current.as_ref().is_some_and(|client| client.id == id) {
             *current = None;
             self.generation.fetch_add(1, Ordering::Release);
+            drop(current);
+            self.changed();
         }
     }
 }
@@ -862,6 +881,33 @@ mod tests {
             .expect("the batch arrives at the newer client")
             .expect("read");
         assert_eq!(read, batch);
+    }
+
+    #[test]
+    fn whoever_waits_for_the_client_is_told_when_it_comes_and_when_it_goes() {
+        static TOLD: AtomicU64 = AtomicU64::new(0);
+        let outlet = Outlet::default();
+        let told = &TOLD;
+        outlet.on_change(|| {
+            TOLD.fetch_add(1, Ordering::SeqCst);
+        });
+        let (batches, _outgoing) = mpsc::channel(1);
+        let client = |id| Client {
+            id,
+            batches: batches.clone(),
+            abandon: Arc::new(Notify::new()),
+        };
+        outlet.adopt(client(1));
+        assert_eq!(told.load(Ordering::SeqCst), 1);
+        outlet.adopt(client(2));
+        outlet.end(1);
+        assert_eq!(
+            told.load(Ordering::SeqCst),
+            2,
+            "a replaced client's end changes nothing"
+        );
+        outlet.end(2);
+        assert_eq!(told.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]

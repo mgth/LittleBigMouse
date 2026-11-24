@@ -79,14 +79,99 @@ pub(crate) struct Combination {
 }
 
 impl Combination {
-    /// The shortcut as the layout or the agent spells it; `None` for an empty or
-    /// unreadable text, and for a final key with no fixed place on a keyboard.
-    pub(crate) fn parse(text: &str) -> Option<Combination> {
+    /// The Linux code of its final key.
+    #[cfg(test)]
+    pub(crate) fn key(&self) -> u16 {
+        self.key
+    }
+
+    /// The shortcut as the layout or the agent spells it, its letter found where
+    /// `letters` puts it; `None` for an empty or unreadable text, and for a final key
+    /// with no fixed place on a keyboard.
+    pub(crate) fn parse(text: &str, letters: &Letters) -> Option<Combination> {
         let shortcut = Shortcut::parse(text)?;
         Some(Combination {
             modifiers: shortcut.modifiers,
-            key: key_of_virtual_key(shortcut.key)?,
+            key: letters
+                .code_of(shortcut.key)
+                .or_else(|| key_of_virtual_key(shortcut.key))?,
         })
+    }
+}
+
+/// Where the letters A to Z are on the keyboard, as Linux codes: what the desktop's
+/// keyboard layout says, US until it is known.
+///
+/// A shortcut names a letter by what the layout prints (a virtual key, a character of
+/// the active layout), and the keyboard of a master is read below any layout: `M` is
+/// the key right of `N` on a US keyboard, the key right of `L` on a French one. The
+/// desktop's layout is read where it can be (`hook::linux::keymap`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Letters([u16; 26]);
+
+impl Default for Letters {
+    fn default() -> Self {
+        Letters::US
+    }
+}
+
+impl Letters {
+    pub(crate) const US: Letters = Letters([
+        30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50, 49, 24, 25, 16, 19, 31, 20, 22, 47, 17,
+        45, 21, 44,
+    ]);
+
+    /// The letters of a layout from where it puts each of A to Z, as Linux codes; one
+    /// it has nowhere stays where US has it. For a master that can ask its system
+    /// where a letter's virtual key is (Windows, `MapVirtualKeyEx`).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn from_places(places: [Option<u16>; 26]) -> Letters {
+        let mut letters = Letters::US;
+        for (code, place) in letters.0.iter_mut().zip(places) {
+            if let Some(place) = place {
+                *code = place;
+            }
+        }
+        letters
+    }
+
+    /// The letters of a layout, from the keysyms each key gives: `keys` yields a Linux
+    /// code and its keysyms by level. A letter is the key that gives it without a
+    /// modifier, else at any level; one the layout has nowhere stays where US has it.
+    pub(crate) fn from_keysyms(keys: impl IntoIterator<Item = (u16, Vec<u32>)>) -> Letters {
+        const KEYSYM_A: u32 = 0x61;
+        const KEYSYM_CAPITAL_A: u32 = 0x41;
+        let letter = |sym: u32| match sym {
+            KEYSYM_A..=0x7a => Some((sym - KEYSYM_A) as usize),
+            KEYSYM_CAPITAL_A..=0x5a => Some((sym - KEYSYM_CAPITAL_A) as usize),
+            _ => None,
+        };
+        let mut unshifted = [None; 26];
+        let mut anywhere = [None; 26];
+        for (code, levels) in keys {
+            for (level, &sym) in levels.iter().enumerate() {
+                if let Some(i) = letter(sym) {
+                    if level == 0 {
+                        unshifted[i].get_or_insert(code);
+                    }
+                    anywhere[i].get_or_insert(code);
+                }
+            }
+        }
+        let mut letters = Letters::US;
+        for (i, code) in letters.0.iter_mut().enumerate() {
+            if let Some(found) = unshifted[i].or(anywhere[i]) {
+                *code = found;
+            }
+        }
+        letters
+    }
+
+    /// The Linux code of a letter's virtual key (`A` to `Z`); `None` for any other.
+    fn code_of(&self, vk: u32) -> Option<u16> {
+        (0x41..=0x5A)
+            .contains(&vk)
+            .then(|| self.0[(vk - 0x41) as usize])
     }
 }
 
@@ -147,6 +232,8 @@ pub(crate) struct RescueKeys {
     /// The text `wanted` was parsed from, so a re-read that finds the same text does
     /// not parse it again.
     text: String,
+    /// Where `wanted`'s letter was looked for.
+    letters: Letters,
     /// Modifier keys held in the grabbed stream.
     modifiers: Modifiers,
     /// The final key being held, kept back.
@@ -167,11 +254,17 @@ struct Kept {
 impl RescueKeys {
     /// Adopts the shortcut as the layout or the agent spells it.
     pub(crate) fn set(&mut self, text: &str) {
-        if text == self.text {
+        self.set_on(text, self.letters);
+    }
+
+    /// Adopts the shortcut, its letter found where `letters` puts it.
+    pub(crate) fn set_on(&mut self, text: &str, letters: Letters) {
+        if text == self.text && letters == self.letters {
             return;
         }
         self.text = text.to_owned();
-        self.wanted = Combination::parse(text);
+        self.letters = letters;
+        self.wanted = Combination::parse(text, &letters);
         if let Some(kept) = &mut self.kept {
             kept.armed = false;
         }
@@ -248,6 +341,8 @@ pub(crate) struct ToggleKeys {
     text: String,
     /// The rescue's shortcut, as last read: `wanted` is never it.
     rescue: String,
+    /// Where the letters of both were looked for.
+    letters: Letters,
     modifiers: Modifiers,
     /// The key that fired is still down.
     kept: bool,
@@ -264,6 +359,16 @@ impl ToggleKeys {
         self.adopt()
     }
 
+    /// The keyboard layout the letters are found on. Whether the shortcut in force
+    /// changed.
+    pub(crate) fn relayout(&mut self, letters: Letters) -> bool {
+        if letters == self.letters {
+            return false;
+        }
+        self.letters = letters;
+        self.adopt()
+    }
+
     /// The rescue's shortcut, as the layout spells it. Whether the pointer lock's in
     /// force changed: it is none while it is the rescue's.
     pub(crate) fn avoid(&mut self, rescue: &str) -> bool {
@@ -275,8 +380,8 @@ impl ToggleKeys {
     }
 
     fn adopt(&mut self) -> bool {
-        let rescue = Combination::parse(&self.rescue);
-        let wanted = Combination::parse(&self.text).filter(|&w| Some(w) != rescue);
+        let rescue = Combination::parse(&self.rescue, &self.letters);
+        let wanted = Combination::parse(&self.text, &self.letters).filter(|&w| Some(w) != rescue);
         if wanted == self.wanted {
             return false;
         }
@@ -339,20 +444,13 @@ fn is_modifier(code: u16) -> bool {
 /// The Linux code of the key a Win32 virtual-key code names, over the closed set the
 /// shortcut grammar accepts (`lbm_ipc::shortcut`).
 ///
-/// Letters and punctuation are taken at their place on a US keyboard, which is what a
-/// Linux code names. A virtual key is a character of the active layout instead, so on
-/// another layout the two can be different keys: `M` here is the key right of `N`,
-/// wherever the layout prints `M`. The keyboard of a master is read below any layout,
-/// and there is no layout to ask; the portal, which binds by character, may pick
-/// another physical key for the same text.
+/// Letters are where a US keyboard has them: [`Letters`] finds them on the desktop's
+/// layout first. The digits and the OEM keys are positions, as on Windows, which is
+/// what a Linux code names too.
 pub(crate) fn key_of_virtual_key(vk: u32) -> Option<u16> {
-    const LETTERS: [u16; 26] = [
-        30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50, 49, 24, 25, 16, 19, 31, 20, 22, 47, 17,
-        45, 21, 44,
-    ];
     const NUMPAD: [u16; 10] = [82, 79, 80, 81, 75, 76, 77, 71, 72, 73];
     Some(match vk {
-        0x41..=0x5A => LETTERS[(vk - 0x41) as usize],
+        0x41..=0x5A => Letters::US.0[(vk - 0x41) as usize],
         0x30 => 11,
         0x31..=0x39 => (vk - 0x31 + 2) as u16,
         0x70..=0x79 => (vk - 0x70 + 59) as u16,
@@ -584,5 +682,20 @@ mod tests {
             keys.filter(KEY_M, Press::Up, start),
             Verdict::Release(KEY_M)
         );
+    }
+
+    #[test]
+    fn letters_from_their_places_keep_us_where_the_layout_says_nothing() {
+        // French AZERTY: A where US has Q, Q where US has A, M right of L.
+        let mut places = [None; 26];
+        places[0] = Some(16);
+        places[(b'Q' - b'A') as usize] = Some(30);
+        places[(b'M' - b'A') as usize] = Some(39);
+        let letters = Letters::from_places(places);
+        assert_eq!(letters.code_of(0x41), Some(16));
+        assert_eq!(letters.code_of(0x51), Some(30));
+        assert_eq!(letters.code_of(0x4D), Some(39));
+        assert_eq!(letters.code_of(0x42), Letters::US.code_of(0x42));
+        assert_eq!(Letters::from_places([None; 26]), Letters::US);
     }
 }

@@ -18,6 +18,7 @@
 pub mod accel;
 pub mod evdev;
 pub mod focus;
+pub mod keymap;
 pub mod portal;
 pub mod rescue;
 pub mod wake;

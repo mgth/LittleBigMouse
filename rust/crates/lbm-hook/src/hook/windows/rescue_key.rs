@@ -121,6 +121,9 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
             shared.report_rescue_unavailable(&text);
         }
         shared.rescue_registered.store(false, Ordering::SeqCst);
+        shared
+            .rescue_bound_by_desktop
+            .store(false, Ordering::SeqCst);
         return None;
     };
 
@@ -137,6 +140,10 @@ fn register_wanted(shared: &Shared, current: Option<Shortcut>) -> Option<Shortcu
     .is_ok();
 
     shared.rescue_registered.store(ok, Ordering::SeqCst);
+    // Registered, the system fires it while the pointer is here: the keys a multi-PC
+    // master reads then (`hook::crossing`, `observed_key`) leave it to the system
+    // rather than fire it a second time.
+    shared.rescue_bound_by_desktop.store(ok, Ordering::SeqCst);
     if ok {
         eprintln!("[LittleBigMouse.Hook] rescue shortcut registered: {text}");
         shared.report_rescue_available(&text);

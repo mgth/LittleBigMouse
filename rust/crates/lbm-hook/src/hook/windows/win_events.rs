@@ -66,6 +66,7 @@ pub unsafe extern "system" fn desktop_proc(
 ) {
     crate::hook::guard(|| {
         super::mouse::reset();
+        super::master::desktop_switched();
         if let Some(shared) = SHARED.get() {
             crate::hook::on_desktop_changed(shared);
         }

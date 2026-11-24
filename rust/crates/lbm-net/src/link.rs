@@ -12,7 +12,9 @@
 //! A `Link` runs in a task of its own and is driven through channels, so that a
 //! single-threaded `select!` loop can hold many: [`Link::next`] is cancel-safe, and
 //! [`LinkSender::try_input`] never waits, so relaying input never stalls the caller
-//! behind a slow network. The keepalive (`Ping` when idle, lost after three silent
+//! behind a slow network. Bulk transfers ([`LinkSender::bulk`]) wait in a queue of their
+//! own that is served only when nothing else is waiting, a piece at a time: see
+//! [`SEND_BUFFER`] for why that alone is not enough. The keepalive (`Ping` when idle, lost after three silent
 //! intervals) runs inside the link; the caller only sees the link close.
 
 use std::fmt;
@@ -29,12 +31,32 @@ use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 
 use crate::identity::Identity;
 use crate::tls;
-use crate::wire::{self, Control, Frame, Hello, PROTOCOL};
+use crate::wire::{self, Bulk, Control, Frame, Hello, BULK_PIECE, PROTOCOL};
 
 #[cfg(test)]
 mod tests;
 
 type Stream = TlsStream<TcpStream>;
+
+/// The kernel's send buffer on every link, in bytes. What the writer hands the socket
+/// leaves in order, so an input frame written behind a bulk transfer waits for all the
+/// bulk the kernel already holds: with the buffer the system would size for a fast
+/// transfer (megabytes), a clipboard crossing would hold the pointer up for as long.
+/// Kept small, the writer is held back instead, and puts the input first. 64 KiB is
+/// more than a wired network holds in flight between two desks, so a transfer still
+/// goes at the network's pace there; what it costs input is a few milliseconds at worst
+/// on a slow Wi-Fi.
+pub const SEND_BUFFER: usize = 64 * 1024;
+
+/// Bulk pieces waiting to leave: enough to keep the network busy, few enough that a
+/// transfer that is cancelled leaves little behind.
+const BULK_QUEUE: usize = 8;
+
+/// See [`SEND_BUFFER`]. A failure only costs a larger buffer, which is no reason to
+/// refuse the link.
+fn small_send_buffer(tcp: &TcpStream) {
+    let _ = socket2::SockRef::from(tcp).set_send_buffer_size(SEND_BUFFER);
+}
 
 /// The timings of a link. The defaults are the protocol's; tests shrink them.
 #[derive(Debug, Clone)]
@@ -151,6 +173,7 @@ pub async fn listen(
             tokio::spawn(async move {
                 let pending = timeout(options.handshake_timeout, async {
                     tcp.set_nodelay(true)?;
+                    small_send_buffer(&tcp);
                     let stream = acceptor.accept(tcp).await?;
                     handshake(TlsStream::Server(stream), address, &hello, options.clone()).await
                 })
@@ -198,6 +221,7 @@ pub async fn connect(
     timeout(options.handshake_timeout, async {
         let tcp = TcpStream::connect(address).await?;
         tcp.set_nodelay(true)?;
+        small_send_buffer(&tcp);
         let peer = tcp.peer_addr()?;
         let stream = connector.connect(name, tcp).await?;
         handshake(TlsStream::Client(stream), peer, &hello, options.clone()).await
@@ -261,6 +285,7 @@ fn describe(frame: &Frame) -> String {
     match frame {
         Frame::Control(message) => format!("{message:?}"),
         Frame::Input(batch) => format!("an input batch of {} bytes", batch.len()),
+        Frame::Bulk(piece) => format!("a piece of bulk transfer {}", piece.transfer),
     }
 }
 
@@ -360,6 +385,8 @@ pub enum Event {
     Control(Control),
     /// An input batch, still encoded, to relay.
     Input(Vec<u8>),
+    /// A piece of a bulk transfer.
+    Bulk(Bulk),
     /// The link is over; nothing follows.
     Closed(CloseReason),
 }
@@ -396,11 +423,12 @@ impl fmt::Debug for Link {
 impl Link {
     fn start(peer: PeerInfo, stream: Stream, options: Options) -> Link {
         let (outgoing, queue) = mpsc::channel(options.queue.max(1));
+        let (bulk, bulk_queue) = mpsc::channel(BULK_QUEUE);
         let (events_sender, events) = mpsc::channel(options.queue.max(1));
-        tokio::spawn(drive(stream, options, queue, events_sender));
+        tokio::spawn(drive(stream, options, queue, bulk_queue, events_sender));
         Link {
             peer,
-            sender: LinkSender { outgoing },
+            sender: LinkSender { outgoing, bulk },
             events,
         }
     }
@@ -460,9 +488,19 @@ enum Outgoing {
 #[derive(Clone, Debug)]
 pub struct LinkSender {
     outgoing: mpsc::Sender<Outgoing>,
+    /// Bulk pieces, encoded: served after everything in `outgoing`.
+    bulk: mpsc::Sender<Vec<u8>>,
 }
 
 impl LinkSender {
+    /// A sender of no link: everything sent fails as on a link closed. For a caller,
+    /// a test mostly, that needs one before or without a link.
+    pub fn closed() -> LinkSender {
+        let (outgoing, _) = mpsc::channel(1);
+        let (bulk, _) = mpsc::channel(1);
+        LinkSender { outgoing, bulk }
+    }
+
     /// Queues a control message, waiting for room if the queue is full.
     pub async fn control(&self, message: &Control) -> Result<(), SendError> {
         let frame = wire::encode_control(message).map_err(SendError::Invalid)?;
@@ -494,6 +532,36 @@ impl LinkSender {
             })
     }
 
+    /// Queues `data` as the bulk transfer numbered `transfer`, in pieces, the last one
+    /// marked; waits for room as the network takes them. Nothing queued by the other
+    /// methods ever waits behind it: a piece leaves only when nothing else is waiting.
+    /// Only for a peer that announced [`wire::CLIPBOARD_CAPABILITY`].
+    ///
+    /// Dropping the future stops the transfer where it is: the peer then sees no last
+    /// piece, and is told why by the caller (`ClipboardAbort`).
+    pub async fn bulk(&self, transfer: u64, data: &[u8]) -> Result<(), SendError> {
+        let mut pieces = data.chunks(BULK_PIECE).peekable();
+        if pieces.peek().is_none() {
+            return self.piece(transfer, true, &[]).await;
+        }
+        while let Some(piece) = pieces.next() {
+            self.piece(transfer, pieces.peek().is_none(), piece).await?;
+        }
+        Ok(())
+    }
+
+    /// Queues one piece of a bulk transfer, `last` or not; for a caller that produces
+    /// the data as it goes. See [`LinkSender::bulk`].
+    pub async fn piece(&self, transfer: u64, last: bool, data: &[u8]) -> Result<(), SendError> {
+        let frame = wire::encode_bulk(&Bulk {
+            transfer,
+            last,
+            data: data.to_vec(),
+        })
+        .map_err(SendError::Invalid)?;
+        self.bulk.send(frame).await.map_err(|_| SendError::Closed)
+    }
+
     /// Says `Bye` with `reason` after what is already queued, and closes.
     pub async fn close(&self, reason: &str) {
         let _ = self.outgoing.send(Outgoing::Close(reason.to_owned())).await;
@@ -510,6 +578,7 @@ async fn drive(
     stream: Stream,
     options: Options,
     mut outgoing: mpsc::Receiver<Outgoing>,
+    mut bulk: mpsc::Receiver<Vec<u8>>,
     events: mpsc::Sender<Event>,
 ) {
     let (mut reader, mut writer) = tokio::io::split(stream);
@@ -524,7 +593,15 @@ async fn drive(
         }
     });
 
-    let reason = run(&mut writer, &options, &mut outgoing, &mut incoming, &events).await;
+    let reason = run(
+        &mut writer,
+        &options,
+        &mut outgoing,
+        &mut bulk,
+        &mut incoming,
+        &events,
+    )
+    .await;
     reading.abort();
     let _ = timeout(options.keepalive, writer.shutdown()).await;
     let _ = events.send(Event::Closed(reason)).await;
@@ -548,6 +625,7 @@ async fn run(
     writer: &mut WriteHalf<Stream>,
     options: &Options,
     outgoing: &mut mpsc::Receiver<Outgoing>,
+    bulk: &mut mpsc::Receiver<Vec<u8>>,
     incoming: &mut mpsc::Receiver<io::Result<Frame>>,
     events: &mpsc::Sender<Event>,
 ) -> CloseReason {
@@ -561,37 +639,23 @@ async fn run(
     let mut last_received = Instant::now();
     let mut last_sent = Instant::now();
     loop {
+        // In this order, first ready first served. The keepalive is ready twice a second
+        // and costs nothing. What this side sends (control and input) goes before what it
+        // reads, which a peer streaming a transfer at it would otherwise keep ready. What
+        // it reads goes before its own bulk: two sides that both wrote bulk without
+        // reading would fill each other's buffers and wait on each other for good.
+        // Bulk last: a piece leaves only when nothing else is waiting.
         tokio::select! {
-            frame = incoming.recv() => {
-                let frame = match frame {
-                    Some(Ok(frame)) => frame,
-                    Some(Err(error)) if error.kind() == io::ErrorKind::UnexpectedEof => {
-                        return CloseReason::Failed("the peer closed the connection".into())
+            biased;
+            _ = tick.tick() => {
+                if last_received.elapsed() >= dead_after {
+                    return CloseReason::Lost;
+                }
+                if last_sent.elapsed() >= options.keepalive {
+                    if let Err(reason) = write(writer, control(Control::Ping), dead_after).await {
+                        return reason;
                     }
-                    Some(Err(error)) => return CloseReason::Failed(error.to_string()),
-                    None => return CloseReason::Failed("the reader stopped".into()),
-                };
-                last_received = Instant::now();
-                let event = match frame {
-                    Frame::Input(batch) => Event::Input(batch),
-                    Frame::Control(Control::Ping) => {
-                        if let Err(reason) = write(writer, control(Control::Pong), dead_after).await {
-                            return reason;
-                        }
-                        last_sent = Instant::now();
-                        continue;
-                    }
-                    Frame::Control(Control::Bye { reason }) => return CloseReason::Bye(reason),
-                    Frame::Control(Control::Refused { reason }) => {
-                        return CloseReason::Refused(reason)
-                    }
-                    Frame::Control(
-                        Control::Pong | Control::Unknown | Control::Hello(_) | Control::Paired,
-                    ) => continue,
-                    Frame::Control(message) => Event::Control(message),
-                };
-                if events.send(event).await.is_err() {
-                    return CloseReason::Local("nobody listens to this link".into());
+                    last_sent = Instant::now();
                 }
             }
             queued = outgoing.recv() => {
@@ -614,20 +678,48 @@ async fn run(
                 }
                 last_sent = Instant::now();
             }
+            frame = incoming.recv() => {
+                let frame = match frame {
+                    Some(Ok(frame)) => frame,
+                    Some(Err(error)) if error.kind() == io::ErrorKind::UnexpectedEof => {
+                        return CloseReason::Failed("the peer closed the connection".into())
+                    }
+                    Some(Err(error)) => return CloseReason::Failed(error.to_string()),
+                    None => return CloseReason::Failed("the reader stopped".into()),
+                };
+                last_received = Instant::now();
+                let event = match frame {
+                    Frame::Input(batch) => Event::Input(batch),
+                    Frame::Bulk(piece) => Event::Bulk(piece),
+                    Frame::Control(Control::Ping) => {
+                        if let Err(reason) = write(writer, control(Control::Pong), dead_after).await {
+                            return reason;
+                        }
+                        last_sent = Instant::now();
+                        continue;
+                    }
+                    Frame::Control(Control::Bye { reason }) => return CloseReason::Bye(reason),
+                    Frame::Control(Control::Refused { reason }) => {
+                        return CloseReason::Refused(reason)
+                    }
+                    Frame::Control(
+                        Control::Pong | Control::Unknown | Control::Hello(_) | Control::Paired,
+                    ) => continue,
+                    Frame::Control(message) => Event::Control(message),
+                };
+                if events.send(event).await.is_err() {
+                    return CloseReason::Local("nobody listens to this link".into());
+                }
+            }
             _ = events.closed() => {
                 let _ = write(writer, control(Control::Bye { reason: "closed".into() }), dead_after).await;
                 return CloseReason::Local("nobody listens to this link".into());
             }
-            _ = tick.tick() => {
-                if last_received.elapsed() >= dead_after {
-                    return CloseReason::Lost;
+            Some(piece) = bulk.recv() => {
+                if let Err(reason) = write(writer, piece, dead_after).await {
+                    return reason;
                 }
-                if last_sent.elapsed() >= options.keepalive {
-                    if let Err(reason) = write(writer, control(Control::Ping), dead_after).await {
-                        return reason;
-                    }
-                    last_sent = Instant::now();
-                }
+                last_sent = Instant::now();
             }
         }
     }

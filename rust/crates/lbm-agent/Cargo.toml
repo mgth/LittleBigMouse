@@ -55,21 +55,30 @@ libc = "0.2"
 ksni = { version = "0.3.6", default-features = false, features = ["async-io"] }
 # System sleep from logind (sleep.rs), with the hook's zbus build.
 zbus = { version = "5", default-features = false, features = ["async-io"] }
+# The shared clipboard (clipboard/wayland.rs): ext-data-control-v1, the same crates as
+# the hook's and the overlay's Wayland connections.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [
     "Win32_Devices_Display",
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Gdi",
     "Win32_NetworkManagement_IpHelper",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Console",
+    "Win32_System_DataExchange",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
     "Win32_System_Pipes",
     "Win32_System_Registry",
     "Win32_System_RemoteDesktop",

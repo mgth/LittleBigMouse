@@ -820,6 +820,11 @@ impl<W: AgentWorld> Agent<W> {
                 port,
                 name,
                 pointer_lock_shortcut,
+                clipboard_send,
+                clipboard_receive,
+                clipboard_max_bytes,
+                clipboard_files_max_bytes,
+                clipboard_folder,
             } => {
                 return self.ask_peers(
                     id,
@@ -829,6 +834,13 @@ impl<W: AgentWorld> Agent<W> {
                         port,
                         name,
                         pointer_lock_shortcut,
+                        clipboard: crate::peers::ClipboardChange {
+                            send: clipboard_send,
+                            receive: clipboard_receive,
+                            max_bytes: clipboard_max_bytes,
+                            files_max_bytes: clipboard_files_max_bytes,
+                            folder: clipboard_folder,
+                        },
                     },
                 )
             }

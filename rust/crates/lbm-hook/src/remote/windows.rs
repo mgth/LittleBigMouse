@@ -16,8 +16,8 @@
 //! watch (no window is above SYSTEM), and the thread moved to the input desktop instead,
 //! the secure one included ([`input_desktop`]).
 
-mod foreground;
-mod hider;
+pub(crate) mod foreground;
+pub(crate) mod hider;
 mod input_desktop;
 
 pub use hider::local_pointer_input;

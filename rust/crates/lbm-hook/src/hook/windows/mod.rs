@@ -8,6 +8,7 @@
 
 pub mod display;
 pub mod focus_restore;
+pub(crate) mod master;
 pub mod mouse;
 mod native_touch;
 pub mod rescue_key;
@@ -38,6 +39,8 @@ const WM_BREAK_LOOP: u32 = WM_APP + 1;
 const WM_TOUCH_OPTIONS: u32 = WM_APP + 2;
 /// A physical mouse move may release a focus restoration waiting for it.
 const WM_DEFERRED_RESTORE: u32 = WM_APP + 3;
+/// The input endpoint's client changed: the multi-PC master looks again ([`master`]).
+const WM_MASTER_CLIENT: u32 = WM_APP + 4;
 
 /// Record the pump thread id before the IPC server can accept a command that
 /// would post to it. Must be called from the thread that will call [`run`].
@@ -84,7 +87,16 @@ pub fn spawn_watchdog(shared: &'static Shared) {
             // We believe we are hooked and want to be, the mouse physically moved since the last
             // check, yet our hook saw nothing: the OS silently dropped it (LowLevelHooksTimeout).
             // Reinstall on the pump thread so crossing heals instead of staying dead until a restart.
-            if hooked && want && pos != last_pos && moves == last_moves {
+            // A multi-PC master moves the cursor itself (onto what hides it, back
+            // home), with no move of the mouse: that is no dropped hook. Anywhere else
+            // it is one, the pointer being away or not — the mouse would then move this
+            // machine's cursor while the keyboard drives the other.
+            if hooked
+                && want
+                && pos != last_pos
+                && moves == last_moves
+                && !master::placed_by_master(pos.0, pos.1)
+            {
                 eprintln!(
                     "[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook"
                 );
@@ -123,6 +135,7 @@ impl Hooker {
     /// C++ `Hooker::Loop`.
     pub fn run(&mut self, shared: &'static Shared) {
         register_main_thread(shared);
+        master::listen(shared);
 
         let mut stopping = false;
         while !stopping {
@@ -150,6 +163,9 @@ impl Hooker {
         self.hook_desktop();
         self.hwnd = display::create_window();
         apply_touch_options();
+        if let Some(shared) = SHARED.get() {
+            master::client_changed(shared);
+        }
     }
 
     /// C++ `Hooker::DoUnhook`.
@@ -190,6 +206,7 @@ impl Hooker {
     /// C++ `Hooker::UnhookMouse`.
     fn unhook_mouse(&mut self, shared: &Shared) {
         focus_restore::reset();
+        master::unhooked();
         if self.mouse_hook == HHOOK::default() {
             return;
         }
@@ -279,6 +296,12 @@ fn pump_messages() -> bool {
                 }
                 if msg.message == WM_TOUCH_OPTIONS {
                     crate::hook::guard(apply_touch_options);
+                    continue;
+                }
+                if msg.message == WM_MASTER_CLIENT {
+                    if let Some(shared) = SHARED.get() {
+                        crate::hook::guard(|| master::client_changed(shared));
+                    }
                     continue;
                 }
                 if msg.message == WM_DEFERRED_RESTORE {

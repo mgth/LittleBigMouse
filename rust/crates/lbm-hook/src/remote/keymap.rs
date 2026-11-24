@@ -122,10 +122,75 @@ pub fn windows_key(linux: u16) -> Option<WindowsKey> {
     }
 }
 
+/// The Linux code of the key a Windows low-level keyboard hook reports, by its set-1
+/// scancode and `LLKHF_EXTENDED`: the inverse of [`windows_key`], for a Windows master
+/// (docs/multi-pc.md). `None` for a key [`windows_key`] leaves out, and for the
+/// `E0 2A` "fake shift" some keyboards send around the navigation keys, which is no key
+/// of its own.
+///
+/// The Pause key reports `45` without the extended flag (its `E1 1D 45` has no other
+/// way to say it), Num Lock `45` with it: the two ends of the virtual-key entries.
+pub fn linux_key(scan: u16, extended: bool) -> Option<u16> {
+    static TABLE: std::sync::OnceLock<[[u16; 256]; 2]> = std::sync::OnceLock::new();
+    let table = TABLE.get_or_init(|| {
+        let mut table = [[0u16; 256]; 2];
+        for linux in 1..=0x2ffu16 {
+            let (code, extended) = match windows_key(linux) {
+                Some(WindowsKey::Scan { code, extended }) => (code, extended),
+                Some(WindowsKey::Virtual { scan, extended, .. }) => (scan, extended),
+                None => continue,
+            };
+            if let Some(slot) = table[usize::from(extended)].get_mut(usize::from(code)) {
+                *slot = linux;
+            }
+        }
+        table
+    });
+    let linux = *table[usize::from(extended)].get(usize::from(scan))?;
+    (linux != 0).then_some(linux)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn every_key_windows_is_sent_comes_back_as_itself() {
+        for linux in 0..=0x2ffu16 {
+            let Some(key) = windows_key(linux) else {
+                continue;
+            };
+            let (scan, extended) = match key {
+                WindowsKey::Scan { code, extended } => (code, extended),
+                WindowsKey::Virtual { scan, extended, .. } => (scan, extended),
+            };
+            assert_eq!(linux_key(scan, extended), Some(linux), "Linux key {linux}");
+        }
+    }
+
+    #[test]
+    fn a_low_level_hooks_reports_are_read_as_the_keys_they_are() {
+        assert_eq!(linux_key(0x1e, false), Some(30)); // A
+        assert_eq!(linux_key(0x1d, false), Some(29)); // left Ctrl
+        assert_eq!(linux_key(0x1d, true), Some(97)); // right Ctrl
+        assert_eq!(linux_key(0x38, true), Some(100)); // AltGr
+        assert_eq!(linux_key(0x1c, true), Some(96)); // keypad Enter
+        assert_eq!(linux_key(0x48, true), Some(103)); // up arrow
+        assert_eq!(linux_key(0x48, false), Some(72)); // keypad 8
+        assert_eq!(linux_key(0x45, true), Some(69)); // Num Lock
+        assert_eq!(linux_key(0x45, false), Some(119)); // Pause
+        assert_eq!(linux_key(0x5b, true), Some(125)); // left Windows key
+        assert_eq!(linux_key(0x56, false), Some(86)); // the ISO key left of Z
+    }
+
+    #[test]
+    fn what_is_no_key_is_not_read_as_one() {
+        assert_eq!(linux_key(0, false), None);
+        assert_eq!(linux_key(0x2a, true), None, "the fake shift around arrows");
+        assert_eq!(linux_key(0x1e, true), None);
+        assert_eq!(linux_key(0x1ff, false), None);
+    }
 
     #[test]
     fn the_main_block_keeps_its_linux_numbering() {

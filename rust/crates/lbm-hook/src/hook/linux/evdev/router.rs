@@ -62,6 +62,10 @@ pub fn run(shared: &'static Shared) -> bool {
 
     let debug = std::env::var("LBM_HOOK_DEBUG").is_ok();
 
+    // The keys read here are positions: where the layout puts the letters a shortcut
+    // names is asked of the compositor.
+    crate::hook::linux::keymap::spawn(shared);
+
     let mut router: Option<Router> = None;
     let mut hooked_since: Option<Instant> = None;
     let mut last_report = Instant::now();
@@ -116,6 +120,11 @@ pub fn run(shared: &'static Shared) -> bool {
                 continue;
             }
         }
+
+        // The rescue is read from the keyboards only while some are: one plugged in
+        // late, the last one gone, or the router stopped, says it again. A swap, a
+        // no-op when nothing changed.
+        shared.set_keyboards_read(router.as_ref().is_some_and(|r| !r.keyboards.is_empty()));
 
         match router.as_mut() {
             Some(r) => r.pump(shared),
@@ -306,7 +315,7 @@ impl Router {
             ));
         }
         eprintln!(
-            "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
+            "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override and the shortcuts",
             keyboards.len()
         );
 

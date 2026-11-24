@@ -17,11 +17,12 @@ use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
 };
 use lbm_net::peers::{PairedPeer, PeerStore};
-use lbm_net::wire::{Control, Hello, Role, OVERLAY_CAPABILITY};
+use lbm_net::wire::{Bulk, Control, Hello, Role, CLIPBOARD_CAPABILITY, OVERLAY_CAPABILITY};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
+use super::clipboard::{self, Sharing, Wake};
 use super::hook_input::{HookInput, Sink, Target};
 use super::overlay::{self, Painter, Shown};
 use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
@@ -86,6 +87,8 @@ pub(super) enum Command {
         value: u16,
         request: Option<u64>,
     },
+    /// What the user lets the shared clipboard do.
+    Clipboard(clipboard::Options),
     /// `InputSwitched` to this machine's master `machine_id`.
     InputSwitched {
         machine_id: String,
@@ -128,6 +131,12 @@ enum Internal {
         machine_id: String,
         reason: CloseReason,
     },
+    /// A piece of a bulk transfer, from the link `id`.
+    Bulk {
+        id: u64,
+        machine_id: String,
+        piece: Bulk,
+    },
     /// A master's stream crossed onto this machine (`driving`) or left it: its `Enter`
     /// and `Leave` as they reach the hook, a session ended here, the end of the link.
     Driving {
@@ -163,6 +172,8 @@ pub(super) struct Start {
     pub notices: mpsc::UnboundedSender<Notice>,
     /// What draws the overlays a master of this machine asks for.
     pub painter: Painter,
+    pub clipboard: clipboard::Options,
+    pub clipboard_factory: crate::clipboard::Factory,
 }
 
 /// An unknown machine, waiting for the user to say whether it is trusted.
@@ -275,11 +286,35 @@ struct Actor {
     next_serial: u64,
     /// Connections being made or accepted, and timers (see [`Actor::spawn`]).
     tasks: JoinSet<()>,
+    /// The shared clipboard.
+    sharing: Sharing,
+}
+
+/// The links whose machines share their clipboard.
+fn sharing_peers(links: &HashMap<String, Live>) -> Vec<clipboard::Peer<'_>> {
+    links
+        .iter()
+        .filter(|(_, live)| shares_clipboard(live))
+        .map(|(machine_id, live)| clipboard::Peer {
+            machine_id,
+            id: live.id,
+            sender: &live.sender,
+        })
+        .collect()
+}
+
+fn shares_clipboard(live: &Live) -> bool {
+    live.info
+        .hello
+        .capabilities
+        .iter()
+        .any(|c| c == CLIPBOARD_CAPABILITY)
 }
 
 /// What this node can do beyond the protocol's baseline: its hook reads the master's
 /// lock keys (the hook ships with this agent, which retires one of another protocol),
-/// and it tells and hears when a remote's injection is blocked.
+/// it tells and hears when a remote's injection is blocked, and it can share its
+/// clipboard (whether it does is the user's choice, on each side).
 fn with_capabilities(mut hello: Hello) -> Hello {
     hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
     // It draws the rulers its master asks for (`Control::Overlay`).
@@ -287,6 +322,7 @@ fn with_capabilities(mut hello: Hello) -> Hello {
     hello
         .capabilities
         .push(INJECTION_BLOCKED_CAPABILITY.to_owned());
+    hello.capabilities.push(CLIPBOARD_CAPABILITY.to_owned());
     hello
 }
 
@@ -323,6 +359,7 @@ pub(super) async fn run(
             None
         }
     };
+    let identity_id = start.identity.fingerprint().to_owned();
     let mut actor = Actor {
         listen_address: listener.as_ref().map(Listener::local_addr),
         listen_error: match &listener {
@@ -374,6 +411,11 @@ pub(super) async fn run(
         next_id: 0,
         next_serial: 0,
         tasks: JoinSet::new(),
+        sharing: Sharing::new(
+            start.clipboard,
+            start.clipboard_factory,
+            identity_id.clone(),
+        ),
     };
     if let Some(address) = actor.listen_address {
         eprintln!(
@@ -416,6 +458,7 @@ pub(super) async fn run(
                 None => listener = None,
             },
             Some(internal) = internal_rx.recv() => actor.internal(internal),
+            wake = actor.sharing.next() => actor.sharing_wake(wake),
             Ok(()) = driving.changed() => {}
         }
     }
@@ -514,6 +557,7 @@ impl Actor {
                 .map(|(machine_id, _)| machine_id.clone()),
             pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
             pointer_locked: self.pointer_locked,
+            clipboard: self.sharing.state(),
             driven_by: self
                 .driven_by
                 .as_ref()
@@ -553,6 +597,10 @@ impl Actor {
                 let _ = reply.send(self.remote_wallpapers(&machine_id));
             }
             Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
+            Command::Clipboard(options) => {
+                let peers = sharing_peers(&self.links);
+                self.sharing.set_options(options, &peers);
+            }
             Command::PointerLocked(locked) => self.pointer_locked = locked,
             Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
             Command::InjectionBlocked(block) => self.tell_masters_blocked(block),
@@ -600,6 +648,19 @@ impl Actor {
                 machine_id,
                 reason,
             } => self.closed(id, &machine_id, reason),
+            Internal::Bulk {
+                id,
+                machine_id,
+                piece,
+            } => {
+                let peers = sharing_peers(&self.links);
+                if let Some(from) = peers
+                    .iter()
+                    .find(|p| p.machine_id == machine_id && p.id == id)
+                {
+                    self.sharing.bulk(from, piece, &peers);
+                }
+            }
             Internal::Driving {
                 id,
                 machine_id,
@@ -927,14 +988,36 @@ impl Actor {
             overlay_revision: 0,
             blocked: None,
         };
+        let shares = shares_clipboard(&live);
         if let Some(older) = self.links.insert(machine_id.clone(), live) {
+            let peers = sharing_peers(&self.links);
+            self.sharing.unlinked(&machine_id, older.id, &peers);
             tokio::spawn(async move {
                 older.sender.close("replaced by a newer connection").await;
             });
             // What the older link asked to be shown goes with it.
             self.overlay_link_gone(&machine_id, older.id);
         }
+        if shares {
+            let peers = sharing_peers(&self.links);
+            if let Some(peer) = peers.iter().find(|p| p.machine_id == machine_id) {
+                self.sharing.linked(peer, &peers);
+            }
+        }
         self.select();
+    }
+
+    /// What the shared clipboard waited on.
+    fn sharing_wake(&mut self, wake: Wake) {
+        let peers = sharing_peers(&self.links);
+        match wake {
+            Wake::Clipboard(event) => self.sharing.clipboard(event, &peers),
+            Wake::Patience(transfer) => self.sharing.patience(transfer, &peers),
+            Wake::Listed(serial, copy, formats, listed) => {
+                self.sharing.listed(serial, copy, formats, listed, &peers)
+            }
+            Wake::Fetched(local, fetched) => self.sharing.fetched(local, fetched),
+        }
     }
 
     /// Calls back every paired remote this machine knows an address for.
@@ -1002,6 +1085,21 @@ impl Actor {
     //==================//
 
     fn control(&mut self, id: u64, machine_id: &str, message: Control) {
+        if matches!(
+            message,
+            Control::ClipboardOffer { .. }
+                | Control::ClipboardRequest { .. }
+                | Control::ClipboardAbort { .. }
+        ) {
+            let peers = sharing_peers(&self.links);
+            if let Some(from) = peers
+                .iter()
+                .find(|p| p.machine_id == machine_id && p.id == id)
+            {
+                self.sharing.control(from, message);
+            }
+            return;
+        }
         let Some(live) = self.links.get_mut(machine_id).filter(|l| l.id == id) else {
             return;
         };
@@ -1169,6 +1267,8 @@ impl Actor {
             return;
         }
         let live = self.links.remove(machine_id).expect("checked above");
+        let peers = sharing_peers(&self.links);
+        self.sharing.unlinked(machine_id, id, &peers);
         eprintln!(
             "[lbm-agent] multi-PC: the link with {} ended: {reason:?}",
             live.info.hello.name
@@ -1267,6 +1367,8 @@ impl Actor {
         self.backoff.remove(machine_id);
         self.problems.remove(machine_id);
         if let Some(live) = self.links.remove(machine_id) {
+            let peers = sharing_peers(&self.links);
+            self.sharing.unlinked(machine_id, live.id, &peers);
             tokio::spawn(async move { live.sender.close("forgotten").await });
             self.select();
         }
@@ -1628,6 +1730,7 @@ impl Actor {
         // Half-made connections are dropped, which closes them; timers simply stop.
         self.tasks.abort_all();
         let senders: Vec<LinkSender> = self.links.drain().map(|(_, live)| live.sender).collect();
+        self.sharing.reconcile(&[]);
         let _ = tokio::time::timeout(SHUTDOWN_PATIENCE, async {
             for sender in senders {
                 sender.close("the multi-PC mode was turned off").await;
@@ -1733,6 +1836,13 @@ async fn forward(
                 }
             }
             Some(Event::Input(_)) => {}
+            Some(Event::Bulk(piece)) => {
+                let _ = internal.send(Internal::Bulk {
+                    id,
+                    machine_id: machine_id.clone(),
+                    piece,
+                });
+            }
             Some(Event::Control(message)) => {
                 let _ = internal.send(Internal::Control {
                     id,

@@ -2474,6 +2474,8 @@ dependencies = [
  "tokio-native-tls",
  "tokio-tungstenite",
  "url",
+ "wayland-client",
+ "wayland-protocols",
  "windows 0.58.0",
  "zbus",
 ]
@@ -2560,6 +2562,7 @@ dependencies = [
  "windows 0.58.0",
  "winresource",
  "x11rb 0.13.2",
+ "xkbcommon-dl",
  "zbus",
 ]
 
@@ -2601,6 +2604,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "socket2",
  "tempfile",
  "tokio",
  "tokio-rustls",

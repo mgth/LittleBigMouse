@@ -423,7 +423,8 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-Aucun : toutes les PR de la série (#806 à #811, #813, #814) sont fusionnées dans `v6`.
+La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; elle est
+décrite dans « Ce qui est livré » et « Faiblesses connues ».
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

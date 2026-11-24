@@ -41,9 +41,7 @@ pub fn trust(machine_id: &str, name: &str) -> Result<(), String> {
     if answer != IDYES {
         return Err("not approved".into());
     }
-    let mut trusted = store::read()?;
-    let done = trusted.trust(&machine_id, name)?;
-    store::write(&trusted)?;
+    let done = store::edit(|trusted| trusted.trust(&machine_id, name))?;
     println!(
         "{} {machine_id}",
         match done {
@@ -56,9 +54,7 @@ pub fn trust(machine_id: &str, name: &str) -> Result<(), String> {
 }
 
 pub fn untrust(machine_id: &str) -> Result<(), String> {
-    let mut trusted = store::read()?;
-    if trusted.untrust(machine_id)? {
-        store::write(&trusted)?;
+    if store::edit(|trusted| trusted.untrust(machine_id))? {
         println!("withdrawn");
         notify_service();
     } else {

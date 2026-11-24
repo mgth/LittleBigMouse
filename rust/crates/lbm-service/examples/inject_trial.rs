@@ -11,6 +11,8 @@
 //! inject_trial <lbm-inject.exe> <script> [<log>]
 //! ```
 //!
+//! The injector's diagnostics are printed and, with `<log>`, written there.
+//!
 //! One command per line: `enter X Y`, `move X Y`, `key CODE down|up`,
 //! `button CODE down|up`, `sleep MS`, `leave`. Codes are Linux ones
 //! (`KEY_ESC` = 1, `KEY_SPACE` = 57, `BTN_LEFT` = 272).
@@ -31,9 +33,15 @@ fn main() -> Result<(), String> {
         .map(std::fs::File::create)
         .transpose()
         .map_err(|e| format!("log: {e}"))?;
+    let log = std::sync::Mutex::new(log);
 
     let session = lbm_service::win::launch::console_session().ok_or("no console session")?;
-    let mut started = lbm_service::win::launch::launch(&injector, session, log.as_ref())?;
+    let mut started = lbm_service::win::launch::launch(&injector, session, move |line| {
+        println!("[lbm-inject] {line}");
+        if let Some(file) = log.lock().unwrap().as_mut() {
+            let _ = writeln!(file, "{line}");
+        }
+    })?;
     println!("injector {} in session {session}", started.pid);
 
     for (number, line) in script.lines().enumerate() {

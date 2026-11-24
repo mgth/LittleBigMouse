@@ -20,9 +20,11 @@ features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
     "Win32_Storage",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
+    "Win32_System_IO",
     "Win32_System_Pipes",
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
@@ -31,5 +33,6 @@ features = [
 ]
 
 [dev-dependencies]
+tempfile.workspace = true
 # The trial example writes batches the way the service will.
 lbm-ipc = { path = "../lbm-ipc" }

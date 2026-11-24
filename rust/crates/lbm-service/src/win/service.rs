@@ -169,22 +169,30 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
             }
         };
         match action {
-            Some(Action::Launch(session)) => match launch::launch(injector, session, None) {
-                Ok(mut started) => {
-                    eprintln!(
-                        "[lbm-service] injector {} in session {session}",
-                        started.pid
-                    );
-                    if let Err(error) = started.notify_exit(exits.clone()) {
-                        eprintln!("[lbm-service] {error}");
+            Some(Action::Launch(session)) => {
+                match launch::launch(injector, session, |line| eprintln!("[lbm-inject] {line}")) {
+                    Ok(mut started) => {
+                        eprintln!(
+                            "[lbm-service] injector {} in session {session}",
+                            started.pid
+                        );
+                        // Without its exit watched, an injector that leaves would never be
+                        // launched again in this session: a failed watch is a failed start.
+                        match started.notify_exit(exits.clone()) {
+                            Ok(()) => running = Some(started),
+                            Err(error) => {
+                                eprintln!("[lbm-service] {error}");
+                                started.stop(STOP_GRACE);
+                                supervisor.launch_failed(session);
+                            }
+                        }
                     }
-                    running = Some(started);
+                    Err(error) => {
+                        eprintln!("[lbm-service] no injector in session {session}: {error}");
+                        supervisor.launch_failed(session);
+                    }
                 }
-                Err(error) => {
-                    eprintln!("[lbm-service] no injector in session {session}: {error}");
-                    supervisor.launch_failed(session);
-                }
-            },
+            }
             Some(Action::Stop(session)) => {
                 if let Some(stopped) = running.take() {
                     debug_assert_eq!(stopped.session, session);

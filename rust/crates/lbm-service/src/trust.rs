@@ -7,10 +7,78 @@
 //! fingerprint of its certificate, the `MachineId` its own page Machines shows, so
 //! that the administrator can compare the two.
 
+use std::io;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 /// The file, in the service's folder under `%ProgramData%`.
 pub const FILE: &str = "trusted-masters.json";
+
+/// The lock every change holds, from its read to its write, beside the store.
+pub const LOCK: &str = "trusted-masters.lock";
+
+/// What decides whether a folder may hold the store: on Windows, that only SYSTEM and
+/// Administrators can change it and what it holds (`lbm_admin_only`).
+pub type FolderCheck<'a> = &'a dyn Fn(&Path) -> Result<(), String>;
+
+/// The store in `folder`, after `check` accepted it. No file is an empty store.
+pub fn read_in(folder: &Path, check: FolderCheck) -> Result<TrustStore, String> {
+    if !folder.is_dir() {
+        return Ok(TrustStore::default());
+    }
+    check(folder)?;
+    read_file(folder)
+}
+
+fn read_file(folder: &Path) -> Result<TrustStore, String> {
+    let file = folder.join(FILE);
+    match std::fs::read_to_string(&file) {
+        Ok(text) => TrustStore::parse(&text),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(TrustStore::default()),
+        Err(error) => Err(format!("{}: {error}", file.display())),
+    }
+}
+
+/// Changes the store in `folder`: `check` accepts the folder before anything is
+/// written there, and one lock covers the read, the change and the write, so two
+/// administrators changing it at once cannot undo each other — a withdrawal confirmed
+/// to one is never put back by the other's older copy. The new text is written to a
+/// file of this process's own, created anew, then renamed over the store.
+pub fn edit_in<R>(
+    folder: &Path,
+    check: FolderCheck,
+    change: impl FnOnce(&mut TrustStore) -> Result<R, String>,
+) -> Result<R, String> {
+    check(folder)?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(folder.join(LOCK))
+        .map_err(|e| format!("{}: {e}", folder.join(LOCK).display()))?;
+    lock.lock().map_err(|e| format!("lock the store: {e}"))?;
+    let mut store = read_file(folder)?;
+    let result = change(&mut store)?;
+    let staged = folder.join(format!("{FILE}.{}.new", std::process::id()));
+    let written = (|| {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged)?;
+        file.write_all(store.to_text().as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&staged, folder.join(FILE))
+    })();
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&staged);
+        return Err(format!("{}: {error}", folder.join(FILE).display()));
+    }
+    drop(lock);
+    Ok(result)
+}
 
 /// One approved master.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,6 +188,76 @@ fn is_fingerprint(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn accept(_: &Path) -> Result<(), String> {
+        Ok(())
+    }
+
+    #[test]
+    fn an_edit_is_read_back() {
+        let folder = tempfile::tempdir().unwrap();
+        edit_in(folder.path(), &accept, |store| store.trust(A, "a")).unwrap();
+        let store = read_in(folder.path(), &accept).unwrap();
+        assert!(store.allows(A));
+        let left: Vec<_> = std::fs::read_dir(folder.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert!(
+            left.iter().all(|name| name == FILE || name == LOCK),
+            "{left:?}"
+        );
+    }
+
+    #[test]
+    fn a_folder_the_check_refuses_is_neither_written_nor_read() {
+        let folder = tempfile::tempdir().unwrap();
+        let refuse = |_: &Path| Err::<(), _>("not protected".to_string());
+        assert!(edit_in(folder.path(), &refuse, |store| store.trust(A, "a")).is_err());
+        assert_eq!(std::fs::read_dir(folder.path()).unwrap().count(), 0);
+        std::fs::write(folder.path().join(FILE), "{}").unwrap();
+        assert!(read_in(folder.path(), &refuse).is_err());
+    }
+
+    #[test]
+    fn no_folder_is_an_empty_store() {
+        let folder = tempfile::tempdir().unwrap();
+        let absent = folder.path().join("absent");
+        assert_eq!(read_in(&absent, &accept), Ok(TrustStore::default()));
+    }
+
+    #[test]
+    fn a_change_that_fails_writes_nothing() {
+        let folder = tempfile::tempdir().unwrap();
+        edit_in(folder.path(), &accept, |store| store.trust(A, "a")).unwrap();
+        assert!(edit_in(folder.path(), &accept, |store| store.trust("bad", "b")).is_err());
+        assert_eq!(read_in(folder.path(), &accept).unwrap().masters().len(), 1);
+    }
+
+    #[test]
+    fn two_editors_at_once_lose_no_change() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().to_path_buf();
+        let withdrawing = {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                for _ in 0..50 {
+                    edit_in(&path, &accept, |store| store.trust(A, "a")).unwrap();
+                    edit_in(&path, &accept, |store| store.untrust(A)).unwrap();
+                }
+            })
+        };
+        let adding = std::thread::spawn(move || {
+            for round in 0..50 {
+                edit_in(&path, &accept, |store| store.trust(B, &format!("b{round}"))).unwrap();
+            }
+        });
+        withdrawing.join().unwrap();
+        adding.join().unwrap();
+        let store = read_in(folder.path(), &accept).unwrap();
+        assert!(!store.allows(A), "a withdrawal was undone");
+        assert!(store.allows(B), "an approval was lost");
+    }
 
     const A: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const B: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";

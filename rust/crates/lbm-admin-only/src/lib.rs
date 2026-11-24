@@ -109,6 +109,26 @@ pub fn is_admin_only_with(exe: &Path, read: impl Fn(&Path) -> io::Result<Descrip
     let Some(folder) = exe.parent().filter(|_| exe.is_file()) else {
         return false;
     };
+    is_admin_only_folder_with(folder, read)
+}
+
+/// True when `folder`, everything in it and every folder above are out of reach of
+/// anyone but the trusted accounts: [`is_admin_only`] for a folder that holds data
+/// rather than a program — the Windows service's store of approved masters. False on
+/// any doubt.
+#[cfg(windows)]
+pub fn is_admin_only_folder(folder: &Path) -> bool {
+    is_admin_only_folder_with(folder, windows_read::read)
+}
+
+/// [`is_admin_only_folder`] over any source of descriptors.
+pub fn is_admin_only_folder_with(
+    folder: &Path,
+    read: impl Fn(&Path) -> io::Result<Descriptor>,
+) -> bool {
+    if !folder.is_dir() {
+        return false;
+    }
     // A junction or a symbolic link anywhere on the way hides where the program really
     // lies: the folders checked would not be the ones that hold it.
     let holds = |path: &Path, rights| {
@@ -614,5 +634,26 @@ mod tests {
     fn a_missing_exe_is_not_admin_only() {
         let install = Install::new();
         assert!(!install.admin_only(&install.at("app/missing.exe")));
+    }
+
+    #[test]
+    fn a_folder_is_checked_like_an_application_s() {
+        let install = Install::new();
+        let read = |path: &Path| install.read(path);
+        assert!(is_admin_only_folder_with(&install.at("app"), read));
+        install.writable("app/runtimes/win-x64/native/av_libglesv2.dll");
+        assert!(!is_admin_only_folder_with(
+            &install.at("app"),
+            |path: &Path| install.read(path)
+        ));
+    }
+
+    #[test]
+    fn a_missing_folder_is_not_admin_only() {
+        let install = Install::new();
+        assert!(!is_admin_only_folder_with(
+            &install.at("absent"),
+            |path: &Path| install.read(path)
+        ));
     }
 }

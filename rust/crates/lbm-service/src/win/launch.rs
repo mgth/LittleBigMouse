@@ -5,36 +5,58 @@
 //! started on `winsta0\default` and moves itself to the input desktop when it needs
 //! to (`lbm_hook`'s `input_desktop`).
 //!
-//! Its only input is an anonymous pipe: the read end is its standard input, the only
-//! handle it inherits (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`), and the write end stays
-//! here. No named object exists that another process could open or create first.
+//! Handles are not inherited across sessions, and the service is in session 0, so the
+//! input cannot be an inherited pipe. It is a named pipe made for this launch: a name
+//! nobody can guess (`lbm-inject-` and 128 random bits), a DACL that grants SYSTEM
+//! alone, a first and only instance, no remote client. The injector checks that the
+//! pipe's server is the process that launched it (`--server`), and this side that its
+//! client is the process it launched. A second pipe, `<name>-log`, carries the
+//! injector's diagnostics back; nothing read from it is acted on.
+//!
+//! Nothing is inherited: `bInheritHandles` is false.
 
 use std::ffi::c_void;
 use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::mem::size_of;
 use std::os::windows::ffi::OsStrExt;
-use std::os::windows::io::{FromRawHandle, RawHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 use std::path::Path;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{self, Sender};
+use std::time::Duration;
 
-use windows::core::{PCWSTR, PWSTR};
+use windows::core::{w, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
-    CloseHandle, SetHandleInformation, BOOLEAN, HANDLE, HANDLE_FLAGS, HANDLE_FLAG_INHERIT,
+    CloseHandle, LocalFree, BOOLEAN, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, WAIT_OBJECT_0,
 };
+use windows::Win32::Security::Authorization::{
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+};
+use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
 use windows::Win32::Security::{
     DuplicateTokenEx, SecurityImpersonation, SetTokenInformation, TokenPrimary, TokenSessionId,
-    TOKEN_ADJUST_DEFAULT, TOKEN_ADJUST_SESSIONID, TOKEN_ALL_ACCESS, TOKEN_ASSIGN_PRIMARY,
-    TOKEN_DUPLICATE, TOKEN_QUERY,
+    PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_ADJUST_DEFAULT, TOKEN_ADJUST_SESSIONID,
+    TOKEN_ALL_ACCESS, TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY,
 };
-use windows::Win32::System::Pipes::CreatePipe;
+use windows::Win32::Storage::FileSystem::{
+    FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND, PIPE_ACCESS_OUTBOUND,
+};
+use windows::Win32::System::Pipes::{
+    ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeClientProcessId, PIPE_REJECT_REMOTE_CLIENTS,
+    PIPE_TYPE_BYTE, PIPE_WAIT,
+};
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
 use windows::Win32::System::Threading::{
-    CreateProcessAsUserW, DeleteProcThreadAttributeList, GetCurrentProcess,
-    InitializeProcThreadAttributeList, OpenProcessToken, RegisterWaitForSingleObject,
-    TerminateProcess, UnregisterWaitEx, UpdateProcThreadAttribute, CREATE_NO_WINDOW,
-    EXTENDED_STARTUPINFO_PRESENT, INFINITE, LPPROC_THREAD_ATTRIBUTE_LIST, PROCESS_INFORMATION,
-    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, STARTF_USESTDHANDLES, STARTUPINFOEXW, WT_EXECUTEONLYONCE,
+    CreateProcessAsUserW, GetCurrentProcess, GetCurrentProcessId, OpenProcessToken,
+    RegisterWaitForSingleObject, TerminateProcess, UnregisterWaitEx, WaitForSingleObject,
+    CREATE_NO_WINDOW, INFINITE, PROCESS_INFORMATION, STARTUPINFOW, WT_EXECUTEONLYONCE,
 };
+
+/// How long a launched injector has to open its input.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// SYSTEM alone, nothing inherited.
+const PIPE_SDDL: PCWSTR = w!("D:P(A;;GA;;;SY)");
 
 /// A handle closed on drop.
 struct Owned(HANDLE);
@@ -110,8 +132,6 @@ impl Injector {
             ..
         } = self;
         drop(input);
-        use windows::Win32::Foundation::WAIT_OBJECT_0;
-        use windows::Win32::System::Threading::WaitForSingleObject;
         // SAFETY: a process handle this value owns.
         let ended = unsafe { WaitForSingleObject(process.0, grace.as_millis() as u32) };
         if ended != WAIT_OBJECT_0 {
@@ -132,42 +152,41 @@ unsafe extern "system" fn exited(context: *mut c_void, _timed_out: BOOLEAN) {
     let _ = context.1.send(context.0);
 }
 
-/// Launches `injector` into `session` with this process's token moved there.
-/// `log` becomes its standard error.
-pub fn launch(injector: &Path, session: u32, log: Option<&File>) -> Result<Injector, String> {
+/// Launches `injector` into `session` with this process's token moved there, and
+/// waits until it has opened its input. Each line of its diagnostics goes to `log`.
+pub fn launch(
+    injector: &Path,
+    session: u32,
+    log: impl Fn(&str) + Send + 'static,
+) -> Result<Injector, String> {
     let token = system_token_in(session)?;
+    let name = random_name()?;
+    let input = create_pipe(&name, PIPE_ACCESS_OUTBOUND.0)?;
+    let diagnostics = create_pipe(&format!("{name}-log"), PIPE_ACCESS_INBOUND.0)?;
+    let (process, pid) = spawn(injector, &token, &name)?;
+    let process = Owned(process);
 
-    let mut read = HANDLE::default();
-    let mut write = HANDLE::default();
-    // SAFETY: out pointers to locals; neither end is inheritable yet.
-    unsafe { CreatePipe(&mut read, &mut write, None, 0) }
-        .map_err(|e| format!("CreatePipe: {e}"))?;
-    let read = Owned(read);
-    // SAFETY: the handle was just made; from here the File owns it.
-    let input = unsafe { File::from_raw_handle(write.0 as RawHandle) };
-    // SAFETY: a handle this function owns.
-    unsafe { SetHandleInformation(read.0, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-        .map_err(|e| format!("SetHandleInformation: {e}"))?;
-
-    let error = match log {
-        Some(log) => {
-            use std::os::windows::io::AsRawHandle;
-            let handle = HANDLE(log.as_raw_handle());
-            // The log is inheritable for the launch only: the inheritance is reset
-            // at the end of this function, whatever happens.
-            // SAFETY: a handle owned by the caller's File, alive for this call.
-            unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-                .map_err(|e| format!("SetHandleInformation(log): {e}"))?;
-            Some(handle)
-        }
-        None => None,
-    };
-    let result = create(injector, &token, &read, error);
-    if let Some(handle) = error {
-        // SAFETY: as above.
-        let _ = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0)) };
+    let started = (|| {
+        connect(&input, pid, &name)?;
+        Ok::<_, String>(())
+    })();
+    if let Err(error) = started {
+        // SAFETY: a process this function started.
+        let _ = unsafe { TerminateProcess(process.0, 1) };
+        return Err(error);
     }
-    let (process, pid) = result?;
+    // The log is a convenience: an injector that did not open it still injects.
+    let log_name = format!("{name}-log");
+    std::thread::spawn(move || {
+        if connect(&diagnostics, pid, &log_name).is_ok() {
+            for line in BufReader::new(diagnostics).lines() {
+                match line {
+                    Ok(line) => log(&line),
+                    Err(_) => break,
+                }
+            }
+        }
+    });
     Ok(Injector {
         session,
         pid,
@@ -175,6 +194,109 @@ pub fn launch(injector: &Path, session: u32, log: Option<&File>) -> Result<Injec
         process,
         wait: None,
     })
+}
+
+/// `lbm-inject-` and 32 hex digits from the system's random generator.
+fn random_name() -> Result<String, String> {
+    let mut bytes = [0u8; 16];
+    // SAFETY: a buffer of its own length.
+    unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }
+        .ok()
+        .map_err(|e| format!("BCryptGenRandom: {e}"))?;
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(format!("lbm-inject-{hex}"))
+}
+
+/// The first and only instance of `\\.\pipe\<name>`, open to SYSTEM alone.
+fn create_pipe(name: &str, direction: u32) -> Result<File, String> {
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: a constant SDDL string; the descriptor is freed below.
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PIPE_SDDL,
+            SDDL_REVISION_1,
+            &mut descriptor,
+            None,
+        )
+    }
+    .map_err(|e| format!("pipe security: {e}"))?;
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0,
+        bInheritHandle: false.into(),
+    };
+    let path: Vec<u16> = format!(r"\\.\pipe\{name}")
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    // SAFETY: a NUL-terminated name and attributes alive for the call.
+    let pipe = unsafe {
+        CreateNamedPipeW(
+            PCWSTR(path.as_ptr()),
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(
+                direction | FILE_FLAG_FIRST_PIPE_INSTANCE.0,
+            ),
+            PIPE_TYPE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
+            64 * 1024,
+            64 * 1024,
+            0,
+            Some(&attributes),
+        )
+    };
+    // SAFETY: allocated by the conversion above.
+    unsafe {
+        let _ = LocalFree(HLOCAL(descriptor.0));
+    }
+    if pipe.is_invalid() {
+        return Err(format!(
+            "pipe {name}: {}",
+            windows::core::Error::from_win32()
+        ));
+    }
+    // SAFETY: a handle just made, owned by the File from here.
+    Ok(unsafe { File::from_raw_handle(pipe.0 as RawHandle) })
+}
+
+/// Waits for the injector to open `pipe`, at most [`CONNECT_TIMEOUT`], and checks that
+/// the process that did is the one launched. The wait is a blocking connect on a
+/// thread of its own; on time out, this side connects to its own pipe to end it.
+fn connect(pipe: &File, pid: u32, name: &str) -> Result<(), String> {
+    let handle = pipe.as_raw_handle() as usize;
+    let (done, connected) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        // SAFETY: the pipe outlives this thread, which is joined below.
+        let result = unsafe { ConnectNamedPipe(HANDLE(handle as *mut c_void), None) };
+        let _ = done.send(match result {
+            Ok(()) => Ok(()),
+            Err(error) if error.code() == ERROR_PIPE_CONNECTED.to_hresult() => Ok(()),
+            Err(error) => Err(error.to_string()),
+        });
+    });
+    let outcome = match connected.recv_timeout(CONNECT_TIMEOUT) {
+        Ok(result) => result,
+        Err(_) => {
+            // Ends the blocked connect; whatever it connected is closed at once.
+            // Read for an outbound pipe, write for an inbound one: the side that
+            // matches is the one that opens.
+            let path = format!(r"\\.\pipe\{name}");
+            let _ = std::fs::OpenOptions::new()
+                .read(true)
+                .open(&path)
+                .or_else(|_| std::fs::OpenOptions::new().write(true).open(&path));
+            Err(format!("the injector did not open {name} in time"))
+        }
+    };
+    let _ = waiter.join();
+    outcome?;
+    let mut client = 0u32;
+    // SAFETY: a pipe handle owned by `pipe`, an out pointer to a local.
+    unsafe { GetNamedPipeClientProcessId(HANDLE(pipe.as_raw_handle()), &mut client) }
+        .map_err(|e| format!("{name}: no client process id: {e}"))?;
+    if client != pid {
+        return Err(format!("{name} was opened by process {client}, not {pid}"));
+    }
+    Ok(())
 }
 
 fn system_token_in(session: u32) -> Result<Owned, String> {
@@ -220,71 +342,24 @@ fn system_token_in(session: u32) -> Result<Owned, String> {
     Ok(primary)
 }
 
-fn create(
-    injector: &Path,
-    token: &Owned,
-    input: &Owned,
-    error: Option<HANDLE>,
-) -> Result<(Owned, u32), String> {
-    let mut inherited = vec![input.0];
-    inherited.extend(error);
-
-    let mut size = 0usize;
-    // SAFETY: the documented size query; it fails with the size filled in.
-    let _ = unsafe {
-        InitializeProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST::default(), 1, 0, &mut size)
-    };
-    let mut list_storage = vec![0u8; size];
-    let list = LPPROC_THREAD_ATTRIBUTE_LIST(list_storage.as_mut_ptr().cast());
-    // SAFETY: storage of the size asked for.
-    unsafe { InitializeProcThreadAttributeList(list, 1, 0, &mut size) }
-        .map_err(|e| format!("InitializeProcThreadAttributeList: {e}"))?;
-    // SAFETY: `inherited` outlives the list, which is deleted below.
-    let updated = unsafe {
-        UpdateProcThreadAttribute(
-            list,
-            0,
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            Some(inherited.as_ptr() as *const c_void),
-            inherited.len() * size_of::<HANDLE>(),
-            None,
-            None,
-        )
-    };
-    let result = updated
-        .map_err(|e| format!("UpdateProcThreadAttribute: {e}"))
-        .and_then(|()| spawn(injector, token, input, error, list));
-    // SAFETY: initialised above.
-    unsafe { DeleteProcThreadAttributeList(list) };
-    result
-}
-
-fn spawn(
-    injector: &Path,
-    token: &Owned,
-    input: &Owned,
-    error: Option<HANDLE>,
-    list: LPPROC_THREAD_ATTRIBUTE_LIST,
-) -> Result<(Owned, u32), String> {
+fn spawn(injector: &Path, token: &Owned, name: &str) -> Result<(HANDLE, u32), String> {
     let application: Vec<u16> = injector.as_os_str().encode_wide().chain([0]).collect();
-    let mut command_line: Vec<u16> = format!("\"{}\"", injector.display())
-        .encode_utf16()
-        .chain([0])
-        .collect();
+    // SAFETY: no arguments.
+    let server = unsafe { GetCurrentProcessId() };
+    let mut command_line: Vec<u16> =
+        format!("\"{}\" --pipe {name} --server {server}", injector.display())
+            .encode_utf16()
+            .chain([0])
+            .collect();
     let mut desktop: Vec<u16> = "winsta0\\default".encode_utf16().chain([0]).collect();
-
-    let mut startup = STARTUPINFOEXW::default();
-    startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
-    startup.StartupInfo.lpDesktop = PWSTR(desktop.as_mut_ptr());
-    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-    startup.StartupInfo.hStdInput = input.0;
-    startup.StartupInfo.hStdOutput = HANDLE::default();
-    startup.StartupInfo.hStdError = error.unwrap_or_default();
-    startup.lpAttributeList = list;
-
+    let startup = STARTUPINFOW {
+        cb: size_of::<STARTUPINFOW>() as u32,
+        lpDesktop: PWSTR(desktop.as_mut_ptr()),
+        ..Default::default()
+    };
     let mut information = PROCESS_INFORMATION::default();
     // SAFETY: every buffer outlives the call; the application path is absolute, so
-    // no search path is consulted.
+    // no search path is consulted; nothing is inherited.
     unsafe {
         CreateProcessAsUserW(
             token.0,
@@ -292,15 +367,15 @@ fn spawn(
             PWSTR(command_line.as_mut_ptr()),
             None,
             None,
-            true,
-            EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+            false,
+            CREATE_NO_WINDOW,
             None,
             PCWSTR::null(),
-            &startup.StartupInfo,
+            &startup,
             &mut information,
         )
     }
     .map_err(|e| format!("CreateProcessAsUserW: {e}"))?;
     drop(Owned(information.hThread));
-    Ok((Owned(information.hProcess), information.dwProcessId))
+    Ok((information.hProcess, information.dwProcessId))
 }

@@ -279,6 +279,23 @@ Liste de contrôle pour la relecture de chaque PR :
   contrôle « Verify signed binaries » de la release ; `SIGNING.md` les liste. Côté SignPath,
   la configuration d'artefact est à compléter par le mainteneur (comme pour `lbm-agent.exe`).
 
+### Essai de l'installeur (2026-11-24, vm124, compte administrateur)
+
+Installeur compilé avec ISCC 6 (sous Wine) depuis l'artefact portable de la CI de #832,
+lancé en SYSTEM en mode silencieux (`/VERYSILENT /TASKS=...`). Il arrête d'abord tous les
+processus LittleBigMouse : le v6 du mainteneur a été relancé après par ses tâches.
+
+| Étape | Résultat |
+|---|---|
+| Installation, tâche cochée | **marche** : service `LittleBigMouseInput` en marche, LocalSystem, démarrage automatique différé, deux relances (5 s, 30 s) remises à zéro par jour, description ; règles 24817 (agent) et 24818 (service) limitées au sous-réseau local |
+| Mise à jour, tâche cochée | **marche** : service arrêté avant la copie (fichier remplacé sur place, aucun renommage au redémarrage), recréé, relancé ; dossier `ProgramData` gardé |
+| Mise à jour, tâche décochée | **marche** : service et règle 24818 retirés, dossier `ProgramData` et application gardés |
+| Désinstallation | **marche** : service, deux règles, `Program Files\LittleBigMouse`, `ProgramData\LittleBigMouse\service`, clé de l'offre et clé parente vide, entrée de désinstallation : tout retiré |
+
+Trouvé : le dossier parent `ProgramData\LittleBigMouse` restait vide ; il est maintenant
+retiré s'il est vide. Pas essayé : l'installeur interactif (case à cocher, message hors
+Program Files), une mise à jour depuis une version publiée sans service.
+
 ## 5. Étapes de code (PR vers `v6`, jamais empilées)
 
 1. **Cette conception.**

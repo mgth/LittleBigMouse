@@ -356,6 +356,8 @@ begin
     service's identity go, and the offer it published for the agents. }
   if CurUninstallStep = usPostUninstall then begin
     DelTree(ExpandConstant('{commonappdata}\LittleBigMouse\service'), True, True, True);
+    { Only if empty: nothing else of ours is kept there yet, but something may be one day. }
+    RemoveDir(ExpandConstant('{commonappdata}\LittleBigMouse'));
     RegDeleteKeyIncludingSubkeys(HKLM64, 'SOFTWARE\LittleBigMouse\InputService');
     { The service writes its offer there, and nothing else of ours lives under it yet. }
     RegDeleteKeyIfEmpty(HKLM64, 'SOFTWARE\LittleBigMouse');

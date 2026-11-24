@@ -266,7 +266,11 @@ Windows actuel ne connaît pas les zones distantes.
 Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
 couvrirait aussi les fenêtres élevées pour un utilisateur standard. Conception :
 [`multi-pc-service-windows.md`](multi-pc-service-windows.md), option B validée le
-2026-11-24 ; injecteur (#824) et service (#825) en revue, jamais exécutés sous Windows.
+2026-11-24 ; injecteur (#824) et service (#825) en revue. Essayé sur la vm124 sans le
+service (même lancement, depuis la session 0) : invite UAC annulée par Échap injecté,
+fenêtre élevée au premier plan pilotée, session verrouillée atteinte (`Winlogon`, effet
+non vu à l'œil). Jamais tournés : le service sous le SCM, un compte standard, le réseau
+du service (étape 4), l'installeur (étape 5).
 Son point principal : un canal agent → service limité à l'utilisateur ne suffit pas (tout
 processus de l'utilisateur peut se faire passer pour l'agent, donc valider une invite
 UAC) ; le service reçoit lui-même le flux d'un maître approuvé par un administrateur.

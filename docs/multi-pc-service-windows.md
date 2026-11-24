@@ -3,7 +3,7 @@
 > **Statut : option B (§ 1) validée par le mainteneur le 2026-11-24.** Choix par défaut
 > retenus pour les autres questions, en attendant son avis : port à part, `SendSAS` en
 > dernière étape optionnelle, écran de connexion hors de cette série (§ 2). Rien de ce qui
-> suit n'a tourné. Les comportements de Windows marqués *(à vérifier)* ne sont connus que
+> suit n'a tourné, sauf ce que dit « Essai du 2026-11-24 » (§ 6). Les comportements de Windows marqués *(à vérifier)* ne sont connus que
 > par la documentation ou par l'usage qu'en font d'autres outils, pas par un essai ici.
 
 Contexte : [`multi-pc-etat.md`](multi-pc-etat.md), « 3. Esclave Windows : les deux
@@ -305,6 +305,32 @@ mainteneur) ; service installé par l'installeur, maître Linux :
 - `trust` avec une empreinte qui n'est pas celle affichée : la confirmation le montre ;
 - `untrust` pendant une session pilotée : la connexion tombe, rien ne reste enfoncé ;
 - mise à jour par l'installeur : un maître approuvé retrouve le même service.
+
+### Essai du 2026-11-24 (vm124, compte administrateur)
+
+Sans le service : `examples/inject_trial`, lancé en SYSTEM depuis la session 0
+(`qm guest exec`), fait le même lancement que lui, tube nommé compris, et écrit un script
+d'entrées. Binaires de #824 + #825 réunis (3ed05ec6), compilés pour
+`x86_64-pc-windows-gnu`. Le LBM v6 du mainteneur tournait en même temps dans la session.
+
+| Cas | Résultat |
+|---|---|
+| Canal : session 0 → session 1 par tube nommé | **marche** : l'injecteur démarre dans la session 1, ouvre son tube, ses diagnostics reviennent |
+| Bureau par défaut | **marche** : pointeur au pixel injecté (520, 410) |
+| Invite UAC (`Start-Process -Verb RunAs` depuis la session) | **marche** : l'injecteur passe sur `Winlogon`, Échap injecté annule l'invite (« L'opération a été annulée par l'utilisateur »), `consent.exe` se ferme |
+| Fenêtre élevée au premier plan (sonde WinForms lancée par une tâche `Highest`) | **marche** : mouvements, clic gauche et touche reçus (A → Q : disposition AZERTY de la VM, comme pour le hook) |
+| Pointeur au-dessus d'`osk.exe` (non au premier plan) | **marche** : pointeur au pixel injecté |
+| Écran de verrouillage (`LockWorkStation`), session verrouillée | l'injecteur passe sur `Winlogon`, `SendInput` prend tout (mouvement, Espace) ; **effet non vu à l'œil** (le bureau sécurisé ne se capture pas) |
+| Même chose ~6 s après le verrouillage | l'injecteur restait sur `Default` sans perte signalée : soit la bascule n'avait pas eu lieu, soit `SendInput` jette **en silence** hors du bureau d'entrée. Non tranché ; si c'est le second cas, l'abonnement à `EVENT_SYSTEM_DESKTOPSWITCH` devient nécessaire |
+
+Pas fait : contraste avec un injecteur non élevé contre la même fenêtre élevée (la sonde a
+cessé de s'afficher aux essais suivants ; le blocage depuis un processus moyen reste celui
+mesuré pour la PR #818) ; compte standard (aucun sur la VM) ; le service installé et
+démarré par le SCM ; Ctrl+Alt+Suppr ; changement d'utilisateur, veille ; maître réel (le
+réseau du service est l'étape 4).
+
+Effet de bord à connaître : un `osk.exe` ouvert au moment du verrouillage est relancé par
+ATBroker, côté utilisateur et sur l'écran de verrouillage (en SYSTEM).
 
 ## Questions pour le mainteneur
 

@@ -109,14 +109,13 @@ use crate::engine::MouseEngine;
 use crate::geometry::{Point, Rect};
 use crate::hook::hot_path::{count_event, route_move_then, Routed};
 use crate::shared::Shared;
-use crate::zones::HostPoint;
 
 use super::cursor::EvdevCursor;
 use super::frame::PumpBuffers;
 use super::probe::{extents, try_device_bounds};
 use super::{BTN_MOUSE_RANGE, BTN_RANGE, BTN_TRIGGER_HAPPY_RANGE};
-use crate::hook::crossing::keys::{HeldSet, RescueKeys, Verdict};
-use crate::hook::crossing::Press;
+use crate::hook::crossing::keys::{HeldSet, RescueKeys};
+use crate::hook::crossing::{self, route_button, route_key, Place, Press};
 
 /// Everything a cycle writes to: this machine's two virtual devices, the input stream,
 /// and the keyboards' exclusivity. The router's implementation owns the devices; the
@@ -153,21 +152,6 @@ pub(crate) trait Outputs {
 enum Side {
     Local,
     Remote,
-}
-
-/// Where a routed position is, as far as the next frame is concerned.
-#[derive(Debug, PartialEq)]
-enum Place {
-    Local,
-    /// On another machine, the pointer coming from here.
-    Enter {
-        pixel: Point<i32>,
-        host: String,
-    },
-    /// On the machine being driven.
-    Remote(Point<i32>),
-    /// Neither here nor on the machine being driven.
-    Away,
 }
 
 /// The pump's state between devices and outputs.
@@ -410,8 +394,9 @@ impl Pipeline {
             } else {
                 let remote = self.is_remote();
                 let Pipeline { env, host, .. } = self;
+                let driving = remote.then_some(host.as_str());
                 route_move_then(&shared.engine, env, candidate, |engine, env, handled| {
-                    locate(engine, env, candidate, handled, remote, host)
+                    locate(engine, env, candidate, handled, driving)
                 })
             };
             match routed {
@@ -698,123 +683,21 @@ impl Pipeline {
     }
 }
 
-/// Where a routed report leaves the pointer. Only a position outside this desktop is
-/// looked up: the other machines' desktops lie outside it, so a position inside is
-/// this machine's without asking.
+/// Where a routed report leaves the pointer: what the caller will commit — the
+/// engine's verdict, or the clamped candidate — located by [`crossing::locate`].
 fn locate(
     engine: &MouseEngine,
     env: &EvdevCursor,
     candidate: Point<i32>,
     handled: bool,
-    remote: bool,
-    host: &str,
+    driving: Option<&str>,
 ) -> Place {
-    // What the caller will commit: the engine's verdict, or the clamped candidate.
     let pos = if handled {
         env.virtual_pos
     } else {
         env.clamp(candidate)
     };
-    if !remote && env.device.contains(pos) {
-        return Place::Local;
-    }
-    match engine.layout.host_point(pos) {
-        Some(HostPoint { host: None, .. }) => Place::Local,
-        Some(HostPoint {
-            host: Some(there),
-            pixel,
-        }) if remote => {
-            if there == host {
-                Place::Remote(pixel)
-            } else {
-                Place::Away
-            }
-        }
-        Some(HostPoint {
-            host: Some(there),
-            pixel,
-        }) => Place::Enter {
-            pixel,
-            host: there.to_owned(),
-        },
-        None if remote => Place::Away,
-        None => Place::Local,
-    }
-}
-
-/// A mouse button while the pointer is away: `true` when it went into the batch.
-fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, press: Press) -> bool {
-    match press {
-        Press::Down => {
-            held.insert(code);
-            wire.push(Wire::Button {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        // Released where it was pressed.
-        Press::Up if held.remove(code) => {
-            wire.push(Wire::Button {
-                code,
-                pressed: false,
-            });
-            true
-        }
-        Press::Up => false,
-        // A repeat goes where its press went; a button's means nothing anywhere.
-        Press::Repeat => held.contains(code),
-    }
-}
-
-/// A key of the grabbed stream while the pointer is away: `true` when it was taken —
-/// into the batch, or kept back as the rescue's final key.
-fn route_key(
-    wire: &mut Vec<Wire>,
-    held: &mut HeldSet,
-    rescue: &mut RescueKeys,
-    code: u16,
-    press: Press,
-    now: Instant,
-) -> bool {
-    match rescue.filter(code, press, now) {
-        Verdict::Hold => return true,
-        Verdict::Release(kept) => {
-            held.insert(kept);
-            wire.push(Wire::Key {
-                code: kept,
-                pressed: true,
-            });
-        }
-        Verdict::Pass => {}
-    }
-    match press {
-        Press::Down => {
-            held.insert(code);
-            wire.push(Wire::Key {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        Press::Up if held.remove(code) => {
-            wire.push(Wire::Key {
-                code,
-                pressed: false,
-            });
-            true
-        }
-        Press::Up => false,
-        // Autorepeat: the remote repeats an injected key only when told to.
-        Press::Repeat if held.contains(code) => {
-            wire.push(Wire::Key {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        Press::Repeat => false,
-    }
+    crossing::locate(&engine.layout, pos, env.device.contains(pos), driving)
 }
 
 #[cfg(test)]

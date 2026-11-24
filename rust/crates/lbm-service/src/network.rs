@@ -5,8 +5,16 @@
 //! The link is `lbm_net::link` as the agents use it — mutual TLS, `Hello`, keepalive,
 //! input frames — so a master speaks to the service as to a remote. Before anything
 //! but `Hello` is said, the master's certificate is looked up in the store
-//! ([`TrustStore::allows`]): any other is refused. One master drives at a time; a
-//! newer one replaces the older.
+//! ([`TrustStore::allows`]): any other is refused.
+//!
+//! Several approved masters may be linked at once, and none of them is closed for
+//! another: an agent dials again whatever closes its link, so two masters evicting
+//! each other would take turns forever. **Who drives is decided at the start of an
+//! input session**: the master whose batch carries an `Enter` drives from then on; the
+//! one that drove before sees its stream end here ([`Stream::Ended`], whose `Leave`
+//! releases what it held) and is told `InputReset`, which brings its pointer home.
+//! Batches of a master that does not drive are dropped. Batches and ends of every link
+//! go through the one loop that decides, so nothing of a stream follows its end.
 //!
 //! - It listens only while the store approves someone: an empty store is a closed port.
 //! - A withdrawal takes effect at once: the link of a master no longer approved is
@@ -96,16 +104,34 @@ pub fn hello(name: &str) -> Hello {
 }
 
 enum Inner {
-    // Boxed: a live link is large, and the other message is a number.
+    // Boxed: a live link is large, and the other messages are small.
     Linked(Box<link::Link>),
+    Batch(u64, Vec<u8>),
     Closed(u64),
 }
 
-/// The master driving now.
-struct Current {
-    id: u64,
+/// A master linked now.
+struct Linked {
     fingerprint: String,
     sender: LinkSender,
+}
+
+/// What a batch does to who drives: whether it carries an `Enter` (a session
+/// starts), and whether it ends on a `Leave` (the session is over).
+fn edges(batch: &[u8]) -> (bool, bool) {
+    let enters = lbm_ipc::input::decode(batch).is_ok_and(|events| {
+        events
+            .iter()
+            .any(|event| matches!(event, lbm_ipc::input::InputEvent::Enter { .. }))
+    });
+    (enters, lbm_ipc::input::crossing(batch) == Some(false))
+}
+
+fn say_reset(sender: &LinkSender) {
+    let sender = sender.clone();
+    tokio::spawn(async move {
+        let _ = sender.control(&Control::InputReset).await;
+    });
 }
 
 async fn serve(
@@ -119,7 +145,8 @@ async fn serve(
 ) {
     let (inner, mut inner_rx) = mpsc::unbounded_channel::<Inner>();
     let mut listener: Option<link::Listener> = None;
-    let mut current: Option<Current> = None;
+    let mut links: std::collections::HashMap<u64, Linked> = std::collections::HashMap::new();
+    let mut driving: Option<u64> = None;
     let mut next_id = 0u64;
     // The first look at the store opens the port if it approves someone.
     let mut trust_changed = true;
@@ -139,9 +166,10 @@ async fn serve(
                     Err(error) => eprintln!("[lbm-service] cannot listen on {bind}: {error}"),
                 }
             }
-            if let Some(driving) = &current {
-                if !store.allows(&driving.fingerprint) {
-                    let sender = driving.sender.clone();
+            // Withdrawn: closed at once; the end of its stream follows from its reader.
+            for linked in links.values() {
+                if !store.allows(&linked.fingerprint) {
+                    let sender = linked.sender.clone();
                     tokio::spawn(async move { sender.close("no longer approved").await });
                 }
             }
@@ -190,23 +218,15 @@ async fn serve(
                     }
                     next_id += 1;
                     let id = next_id;
-                    eprintln!("[lbm-service] master {} ({}) drives", peer.hello.name, peer.fingerprint);
-                    if let Some(older) = current.replace(Current {
-                        id,
-                        fingerprint: peer.fingerprint,
-                        sender,
-                    }) {
-                        let _ = out.send(Stream::Ended { link: older.id });
-                        tokio::spawn(async move { older.sender.close("replaced by another master").await });
-                    }
-                    let out = out.clone();
+                    eprintln!("[lbm-service] master {} ({}) linked", peer.hello.name, peer.fingerprint);
+                    links.insert(id, Linked { fingerprint: peer.fingerprint, sender });
                     let inner = inner.clone();
                     tokio::spawn(async move {
                         while let Some(event) = events.recv().await {
                             match event {
                                 Event::Input(batch) => {
-                                    if out.send(Stream::Batch { link: id, batch }).is_err() {
-                                        break;
+                                    if inner.send(Inner::Batch(id, batch)).is_err() {
+                                        return;
                                     }
                                 }
                                 Event::Closed(_) => break,
@@ -216,23 +236,50 @@ async fn serve(
                         let _ = inner.send(Inner::Closed(id));
                     });
                 }
+                Inner::Batch(id, batch) => {
+                    if !links.contains_key(&id) {
+                        continue;
+                    }
+                    let (enters, leaves) = edges(&batch);
+                    if enters && driving != Some(id) {
+                        // A session of another master starts: the one driving is done.
+                        if let Some(previous) = driving.take() {
+                            let _ = out.send(Stream::Ended { link: previous });
+                            if let Some(linked) = links.get(&previous) {
+                                say_reset(&linked.sender);
+                            }
+                        }
+                        driving = Some(id);
+                    }
+                    if driving == Some(id) {
+                        if out.send(Stream::Batch { link: id, batch }).is_err() {
+                            break;
+                        }
+                        if leaves {
+                            driving = None;
+                        }
+                    }
+                }
                 Inner::Closed(id) => {
-                    if current.as_ref().is_some_and(|driving| driving.id == id) {
-                        current = None;
+                    links.remove(&id);
+                    if driving == Some(id) {
+                        driving = None;
                         let _ = out.send(Stream::Ended { link: id });
                     }
                 }
             },
             Some(id) = resets.recv() => {
-                if let Some(driving) = current.as_ref().filter(|driving| driving.id == id) {
-                    let sender = driving.sender.clone();
-                    tokio::spawn(async move { let _ = sender.control(&Control::InputReset).await; });
+                if let Some(linked) = links.get(&id) {
+                    say_reset(&linked.sender);
+                }
+                if driving == Some(id) {
+                    driving = None;
                 }
             }
         }
     }
-    if let Some(driving) = current.take() {
-        let _ = driving.sender.close("the service stops").await;
+    for (_, linked) in links.drain() {
+        let _ = linked.sender.close("the service stops").await;
     }
     if listener.take().is_some() {
         let _ = out.send(Stream::Listening(None));

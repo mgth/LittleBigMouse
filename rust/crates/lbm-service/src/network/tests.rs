@@ -6,6 +6,15 @@ use lbm_net::link::{self, Event, Link, LinkError};
 use lbm_net::wire::{Control, Hello, Role};
 
 use super::*;
+use lbm_ipc::input::{encode, InputEvent};
+
+fn enter() -> Vec<u8> {
+    encode(&[InputEvent::Enter { x: 1, y: 1 }])
+}
+
+fn motion(x: i32) -> Vec<u8> {
+    encode(&[InputEvent::Motion { x, y: 0 }])
+}
 
 const PATIENCE: Duration = Duration::from_secs(10);
 
@@ -91,12 +100,12 @@ async fn an_approved_masters_stream_is_handed_over_and_its_end_said() {
     let (_dir, _network, heard) = service(&[&master]);
     let port = port(&heard).await;
     let link = connect(&master, port).await.unwrap();
-    link.sender().input(&[1, 2, 3]).await.unwrap();
+    link.sender().input(&enter()).await.unwrap();
     assert_eq!(
         next(&heard).await,
         Stream::Batch {
             link: 1,
-            batch: vec![1, 2, 3]
+            batch: enter()
         }
     );
     link.sender().close("done").await;
@@ -123,8 +132,9 @@ async fn an_empty_store_is_a_closed_port_and_listening_follows_the_store() {
     assert!(heard.try_recv().is_err(), "listening with nobody approved");
     network.trust(approving(&[&master]));
     let port = port(&heard).await;
-    assert!(connect(&master, port).await.is_ok());
-    let _ended = next(&heard).await;
+    let linked = connect(&master, port).await.unwrap();
+    linked.sender().input(&enter()).await.unwrap();
+    next(&heard).await;
     network.trust(TrustStore::default());
     let mut told = Vec::new();
     while !told.contains(&Stream::Listening(None)) {
@@ -139,7 +149,7 @@ async fn a_withdrawal_closes_the_link_of_the_master_driving_at_once() {
     let (_dir, network, heard) = service(&[&master]);
     let port = port(&heard).await;
     let mut link = connect(&master, port).await.unwrap();
-    link.sender().input(&[1]).await.unwrap();
+    link.sender().input(&enter()).await.unwrap();
     next(&heard).await;
     // Withdrawn, while another stays approved: the port stays open.
     let (_other_dir, other) = identity();
@@ -152,24 +162,86 @@ async fn a_withdrawal_closes_the_link_of_the_master_driving_at_once() {
 }
 
 #[tokio::test]
-async fn a_newer_master_replaces_the_one_driving() {
+async fn a_master_that_links_takes_nobody_off_and_drives_from_its_crossing() {
     let (_first_dir, first) = identity();
     let (_second_dir, second) = identity();
     let (_dir, _network, heard) = service(&[&first, &second]);
     let port = port(&heard).await;
     let mut older = connect(&first, port).await.unwrap();
+    older.sender().input(&enter()).await.unwrap();
+    assert!(matches!(next(&heard).await, Stream::Batch { link: 1, .. }));
+    // Linking is not driving: the first master goes on.
     let newer = connect(&second, port).await.unwrap();
-    assert_eq!(next(&heard).await, Stream::Ended { link: 1 });
-    assert!(
-        closed(&mut older).await,
-        "the older master's link stays open"
+    newer.sender().input(&motion(5)).await.unwrap();
+    older.sender().input(&motion(6)).await.unwrap();
+    assert_eq!(
+        next(&heard).await,
+        Stream::Batch {
+            link: 1,
+            batch: motion(6)
+        },
+        "the newer master's batch outside a session went through"
     );
-    newer.sender().input(&[7]).await.unwrap();
+    // The newer master crosses: the older one's stream ends, and it is told.
+    newer.sender().input(&enter()).await.unwrap();
+    assert_eq!(next(&heard).await, Stream::Ended { link: 1 });
     assert_eq!(
         next(&heard).await,
         Stream::Batch {
             link: 2,
-            batch: vec![7]
+            batch: enter()
+        }
+    );
+    let said = tokio::time::timeout(PATIENCE, async {
+        loop {
+            match older.next().await {
+                Some(Event::Control(message)) => return message,
+                Some(Event::Closed(_)) | None => panic!("the older master's link was closed"),
+                Some(_) => {}
+            }
+        }
+    })
+    .await
+    .expect("the older master is told");
+    assert_eq!(said, Control::InputReset);
+    // What the older master still sends is not handed over, before or after.
+    older.sender().input(&motion(7)).await.unwrap();
+    newer.sender().input(&motion(8)).await.unwrap();
+    assert_eq!(
+        next(&heard).await,
+        Stream::Batch {
+            link: 2,
+            batch: motion(8)
+        }
+    );
+}
+
+#[tokio::test]
+async fn after_a_leave_another_master_waits_for_its_own_crossing() {
+    let (_first_dir, first) = identity();
+    let (_second_dir, second) = identity();
+    let (_dir, _network, heard) = service(&[&first, &second]);
+    let port = port(&heard).await;
+    let one = connect(&first, port).await.unwrap();
+    let two = connect(&second, port).await.unwrap();
+    one.sender().input(&enter()).await.unwrap();
+    next(&heard).await;
+    let leave = encode(&[InputEvent::Leave]);
+    one.sender().input(&leave).await.unwrap();
+    assert_eq!(
+        next(&heard).await,
+        Stream::Batch {
+            link: 1,
+            batch: leave
+        }
+    );
+    one.sender().input(&motion(1)).await.unwrap();
+    two.sender().input(&enter()).await.unwrap();
+    assert_eq!(
+        next(&heard).await,
+        Stream::Batch {
+            link: 2,
+            batch: enter()
         }
     );
 }
@@ -181,7 +253,7 @@ async fn a_reset_is_said_to_the_master_of_that_link_only() {
     let port = port(&heard).await;
     let mut link = connect(&master, port).await.unwrap();
     // Driving once its first batch is heard.
-    link.sender().input(&[1]).await.unwrap();
+    link.sender().input(&enter()).await.unwrap();
     next(&heard).await;
     network.reset(99);
     network.reset(1);

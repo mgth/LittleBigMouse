@@ -138,7 +138,7 @@ fn moves_the_console(reason: SessionChangeReason) -> bool {
 /// The deciding loop, until `Stop`.
 fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<Event>) {
     let mut supervisor = Supervisor::new(launch::console_session());
-    let mut running: Option<(u64, launch::Injector)> = None;
+    let mut running: Option<Active> = None;
     // The link whose stream the injector carries now.
     let mut driving: Option<u64> = None;
     let (exits, exited) = mpsc::channel::<u64>();
@@ -161,7 +161,7 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                 if let Some(Action::Stop { .. }) =
                     supervisor.console_changed(launch::console_session())
                 {
-                    if let Some((_, stopped)) = running.take() {
+                    if let Some(stopped) = running.take() {
                         stopped.stop(STOP_GRACE);
                     }
                     // The master's pointer comes home: the screen it drove is gone.
@@ -179,7 +179,7 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                 // Only the exit of the injector running now: a late one of a replaced
                 // injector, even of the same session, leaves the new one alone.
                 if supervisor.exited(launch) {
-                    if let Some((_, gone)) = running.take() {
+                    if let Some(gone) = running.take() {
                         gone.stop(Duration::ZERO);
                     }
                     if let (Some(network), Some(link)) = (&network, driving.take()) {
@@ -204,15 +204,15 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                         }
                     }
                 }
-                let written = running
-                    .as_mut()
-                    .is_some_and(|(_, injector)| write_batch(&mut injector.input, &batch));
+                let written = running.as_ref().is_some_and(|r| r.writer.send(&batch));
                 if written {
                     driving = Some(link);
                 } else {
                     // No injector, or one that stopped reading: the session is over here.
-                    if let Some((launch, gone)) = running.take() {
-                        supervisor.exited(launch);
+                    // (A queue full is an injector that stopped reading: its session ends
+                    // here, rather than the loop that serves the SCM waiting on it.)
+                    if let Some(gone) = running.take() {
+                        supervisor.exited(gone.launch);
                         gone.stop(STOP_GRACE);
                     }
                     driving = None;
@@ -225,8 +225,8 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                 if driving == Some(link) {
                     driving = None;
                     let leave = lbm_ipc::input::encode(&[lbm_ipc::input::InputEvent::Leave]);
-                    if let Some((_, injector)) = running.as_mut() {
-                        write_batch(&mut injector.input, &leave);
+                    if let Some(running) = &running {
+                        running.writer.send(&leave);
                     }
                 }
             }
@@ -234,7 +234,7 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
     }
     drop(network);
     super::offer::withdraw();
-    if let Some((_, stopped)) = running.take() {
+    if let Some(stopped) = running.take() {
         stopped.stop(STOP_GRACE);
     }
 }
@@ -305,7 +305,7 @@ fn start_injector(
     session: u32,
     launch: u64,
     exits: &mpsc::Sender<u64>,
-) -> Option<(u64, launch::Injector)> {
+) -> Option<Active> {
     match launch::launch(injector, session, |line| eprintln!("[lbm-inject] {line}")) {
         Ok(mut started) => {
             eprintln!(
@@ -315,7 +315,17 @@ fn start_injector(
             // Without its exit watched, an injector that leaves would never be
             // launched again in this session: a failed watch is a failed start.
             match started.notify_exit(launch, exits.clone()) {
-                Ok(()) => Some((launch, started)),
+                Ok(()) => match Writer::start(&started.input) {
+                    Some(writer) => Some(Active {
+                        launch,
+                        injector: started,
+                        writer,
+                    }),
+                    None => {
+                        started.stop(STOP_GRACE);
+                        None
+                    }
+                },
                 Err(error) => {
                     eprintln!("[lbm-service] {error}");
                     started.stop(STOP_GRACE);
@@ -330,12 +340,57 @@ fn start_injector(
     }
 }
 
-/// Writes one batch, framed, to the injector's input; `false` when it did not take it.
-fn write_batch(input: &mut std::fs::File, batch: &[u8]) -> bool {
-    use std::io::Write;
-    let mut frame = (batch.len() as u32).to_le_bytes().to_vec();
-    frame.extend_from_slice(batch);
-    input.write_all(&frame).is_ok()
+/// Batches waiting for the injector: a few dozen milliseconds of a fast mouse. Beyond
+/// it the injector is not reading, and its session is ended rather than waited on.
+const WRITE_QUEUE: usize = 64;
+
+/// The injector running, and what writes to its pipe.
+struct Active {
+    launch: u64,
+    injector: launch::Injector,
+    writer: Writer,
+}
+
+impl Active {
+    /// The writer goes first, so that its copy of the pipe closes with the injector's:
+    /// the injector reads the end of its stream and releases what is pressed.
+    fn stop(self, grace: Duration) {
+        drop(self.writer);
+        self.injector.stop(grace);
+    }
+}
+
+/// Writes batches to the injector's pipe on a thread of its own, from a bounded queue:
+/// a pipe write blocks while the injector does not read, and the deciding loop, which
+/// also serves the SCM's stop, the session changes and the withdrawals, must not.
+struct Writer {
+    frames: mpsc::SyncSender<Vec<u8>>,
+}
+
+impl Writer {
+    fn start(input: &std::fs::File) -> Option<Writer> {
+        let mut pipe = input
+            .try_clone()
+            .inspect_err(|e| eprintln!("[lbm-service] the injector's pipe: {e}"))
+            .ok()?;
+        let (frames, queued) = mpsc::sync_channel::<Vec<u8>>(WRITE_QUEUE);
+        std::thread::spawn(move || {
+            use std::io::Write;
+            for frame in queued {
+                if pipe.write_all(&frame).is_err() {
+                    break;
+                }
+            }
+        });
+        Some(Writer { frames })
+    }
+
+    /// Queues one batch, framed; `false` when the queue is full or the writer gone.
+    fn send(&self, batch: &[u8]) -> bool {
+        let mut frame = (batch.len() as u32).to_le_bytes().to_vec();
+        frame.extend_from_slice(batch);
+        self.frames.try_send(frame).is_ok()
+    }
 }
 
 /// This computer's name, for the masters' logs.

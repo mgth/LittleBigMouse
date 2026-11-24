@@ -3,11 +3,13 @@
 
 use base64::Engine as _;
 use lbm_display::edid;
-use lbm_display::peer::{merge_peer, panel_key, remote_monitor};
+use lbm_display::peer::{merge_peer_as, panel_key, remote_monitor_as, IdForm};
+use lbm_display::windows::tree::MonitorDevice;
 use lbm_ipc::peer::PeerDisplay;
 use lbm_layout::linux::{add_monitor, LinuxMonitor};
 use lbm_layout::model::{Layout, LayoutOptions};
 use lbm_layout::remote::remote_source_id;
+use lbm_layout::windows::{add_or_update_monitor_device, WindowsMonitor};
 
 const LAPTOP: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
 
@@ -145,7 +147,7 @@ fn a_display_without_an_edid_has_no_key() {
 #[test]
 fn the_remote_monitor_carries_the_edids_model_and_size() {
     let edid = edid_block("ABC123", 2);
-    let monitor = remote_monitor(&peer_display("D", "HDMI-1", Some(&edid), 0));
+    let monitor = remote_monitor_as(&peer_display("D", "HDMI-1", Some(&edid), 0), IdForm::Linux);
     assert_eq!(monitor.pnp_code.as_deref(), Some("DEL4065"));
     assert_eq!(monitor.model_name.as_deref(), Some("DELL U2720Q"));
     assert_eq!(monitor.edid_size_mm, Some((597.0, 336.0)));
@@ -157,7 +159,7 @@ fn the_remote_monitor_carries_the_edids_model_and_size() {
 fn merging_a_peer_makes_its_view_of_our_panel_a_second_source() {
     let mut layout = local_dell(&edid_block("ABC123", 5));
     let other = edid_block("OTHER", 5);
-    merge_peer(
+    merge_peer_as(
         &mut layout,
         LAPTOP,
         "laptop",
@@ -165,6 +167,7 @@ fn merging_a_peer_makes_its_view_of_our_panel_a_second_source() {
             peer_display("A", "HDMI-1", Some(&edid_block("ABC123", 2)), 0),
             peer_display("B", "DP-2", Some(&other), 1920),
         ],
+        IdForm::Linux,
     );
     let dell = &layout.monitors()[0];
     assert_eq!(dell.sources.len(), 2);
@@ -219,12 +222,98 @@ fn the_layout_id_is_the_same_whichever_machine_shows_a_kvm_switched_panel() {
         panel_key(&shown_there).as_deref(),
         Some("SAME035_H1AK500000")
     );
-    merge_peer(&mut there, LAPTOP, "windows", &[shown_there]);
+    merge_peer_as(&mut there, LAPTOP, "windows", &[shown_there], IdForm::Linux);
 
     assert_eq!(here.compute_id(), "DEL4065_ABC123+SAME035_H1AK500000");
     assert_eq!(there.compute_id(), here.compute_id());
     assert_eq!(
         there.monitor("SAME035_H1AK500000").unwrap().sources,
         vec![remote_source_id(LAPTOP, device)]
+    );
+}
+
+/// A monitor as Windows detection hands it to the layout: its device id, and the ids
+/// `MonitorDevice` makes of it and its EDID.
+fn windows_monitor(device_id: &str, edid_bytes: &[u8]) -> WindowsMonitor {
+    let parsed = edid::parse(device_id, edid_bytes);
+    let device = MonitorDevice::new(device_id, "", Some(parsed.clone()));
+    WindowsMonitor {
+        id: device_id.to_owned(),
+        pnp_code: device.pnp_code,
+        source_id: device.source_id,
+        interface_path: String::new(),
+        monitor_number: String::new(),
+        is_specialized: false,
+        edid: Some(parsed.to_windows()),
+        active_connection: None,
+    }
+}
+
+const WINDOWS_SAMSUNG: &str = r"MONITOR\SAME035\{4d36e96e-e325-11ce-bfc1-08002be10318}\0010";
+const WINDOWS_DELL: &str = r"MONITOR\DEL4065\{4d36e96e-e325-11ce-bfc1-08002be10318}\0003";
+
+#[test]
+fn a_windows_master_names_a_remote_panel_as_windows_names_it_here() {
+    // The Samsung behind the KVM, read by the Linux remote through the same KVM port:
+    // the same block Windows reads when the KVM points at it.
+    let samsung = edid_block_of("SAM", 0xE035, [0; 4], "H1AK500000", 2);
+    let dell = edid_block("ABC123", 5);
+
+    let mut here = Layout::new(LayoutOptions::default());
+    add_or_update_monitor_device(&mut here, &windows_monitor(WINDOWS_DELL, &dell));
+    add_or_update_monitor_device(&mut here, &windows_monitor(WINDOWS_SAMSUNG, &samsung));
+
+    let mut there = Layout::new(LayoutOptions::default());
+    add_or_update_monitor_device(&mut there, &windows_monitor(WINDOWS_DELL, &dell));
+    let shown_there = peer_display("SAME035_H1AK500000", "HDMI-A-1", Some(&samsung), 0);
+    let remote = remote_monitor_as(&shown_there, IdForm::Windows);
+    let local_samsung = &here.monitors()[1].id;
+    assert_eq!(remote.local_id.as_ref(), Some(local_samsung));
+    merge_peer_as(&mut there, LAPTOP, "linux", &[shown_there], IdForm::Windows);
+
+    assert_eq!(
+        there.compute_id(),
+        here.compute_id(),
+        "one profile both ways"
+    );
+    let shown = there.monitor(local_samsung).unwrap();
+    assert_eq!(
+        shown.sources,
+        vec![remote_source_id(LAPTOP, "SAME035_H1AK500000")]
+    );
+    assert_eq!(shown.model, here.monitors()[1].model, "and one model");
+}
+
+#[test]
+fn a_windows_master_without_a_serial_string_still_keeps_one_id() {
+    // No serial string, so no panel key: the Windows id has the week, year and
+    // checksum, which a KVM passes through unchanged.
+    let samsung = edid_block_of("SAM", 0xE035, [0; 4], "", 2);
+    let shown_there = peer_display("HDMI-A-1", "HDMI-A-1", Some(&samsung), 0);
+    assert_eq!(panel_key(&shown_there), None);
+
+    let mut here = Layout::new(LayoutOptions::default());
+    add_or_update_monitor_device(&mut here, &windows_monitor(WINDOWS_SAMSUNG, &samsung));
+    let mut there = Layout::new(LayoutOptions::default());
+    merge_peer_as(&mut there, LAPTOP, "linux", &[shown_there], IdForm::Windows);
+    assert_eq!(there.compute_id(), here.compute_id());
+}
+
+#[test]
+fn a_windows_id_already_taken_here_falls_back_to_the_source_id() {
+    // Two panels of one model, made the same week, with no serial string: one EDID,
+    // one Windows id, no panel key. The one shown here keeps the id; the remote's,
+    // which nothing tells apart from it, gets an id no local monitor can have.
+    let samsung = edid_block_of("SAM", 0xE035, [0; 4], "", 2);
+    let mut layout = Layout::new(LayoutOptions::default());
+    add_or_update_monitor_device(&mut layout, &windows_monitor(WINDOWS_SAMSUNG, &samsung));
+    let local = layout.monitors()[0].id.clone();
+    let twin = peer_display("HDMI-A-1", "HDMI-A-1", Some(&samsung), 0);
+    merge_peer_as(&mut layout, LAPTOP, "linux", &[twin], IdForm::Windows);
+    assert_eq!(layout.monitors().len(), 2);
+    assert_eq!(layout.monitors()[0].id, local);
+    assert_eq!(
+        layout.monitors()[1].id,
+        remote_source_id(LAPTOP, "HDMI-A-1")
     );
 }

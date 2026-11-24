@@ -39,14 +39,21 @@ pub fn source_id(device_id: &str, edid: Option<&Edid>) -> String {
     let pnp_code = pnp_code_from_id(device_id);
     match edid {
         None => format!("NOEDID_{pnp_code}_{}", last_segment(device_id)),
-        Some(e) => format!(
-            "{pnp_code}{}_{:02X}_{:04X}_{:02X}",
-            e.serial_number.as_deref().unwrap_or(""),
-            e.week,
-            e.year,
-            e.checksum
-        ),
+        Some(e) => source_id_of(pnp_code, e),
     }
+}
+
+/// [`source_id`] of a monitor with an EDID, given its PnP code (`DEL4065`): what a
+/// monitor's id is made of, with no device id needed — a multi-PC master names a
+/// remote's panel this way from the EDID the remote sent (`crate::peer`).
+pub fn source_id_of(pnp_code: &str, edid: &Edid) -> String {
+    format!(
+        "{pnp_code}{}_{:02X}_{:04X}_{:02X}",
+        edid.serial_number.as_deref().unwrap_or(""),
+        edid.week,
+        edid.year,
+        edid.checksum
+    )
 }
 
 /// The duplicate scan of `GetDisplayDevices`, over the monitors in the enumeration's

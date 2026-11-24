@@ -28,22 +28,59 @@ pub fn panel_key(display: &PeerDisplay) -> Option<String> {
     peer_edid(display)?.panel_key()
 }
 
-/// The display as the layout's merge reads it.
+/// How this machine names its own monitors: what a remote's panel is named after, so
+/// that a panel a KVM moves between the two machines keeps one id
+/// ([`lbm_layout::remote::remote_monitor_id`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdForm {
+    /// `{pnp}_{serial}`: the panel key itself.
+    Linux,
+    /// `{pnp}{serial string}_{week}_{year}_{checksum}` (`crate::windows::ids`).
+    Windows,
+}
+
+impl IdForm {
+    /// The form of this machine's ids.
+    pub const HERE: IdForm = if cfg!(windows) {
+        IdForm::Windows
+    } else {
+        IdForm::Linux
+    };
+}
+
+/// The display as the layout's merge reads it, on this machine.
 pub fn remote_monitor(display: &PeerDisplay) -> RemoteMonitor {
+    remote_monitor_as(display, IdForm::HERE)
+}
+
+/// The display as the layout's merge reads it, on a machine whose monitor ids have
+/// the form `form`.
+pub fn remote_monitor_as(display: &PeerDisplay, form: IdForm) -> RemoteMonitor {
     let edid = peer_edid(display);
     let non_empty = |s: &Option<String>| s.clone().filter(|s| !s.is_empty());
+    let pnp_code = edid.as_ref().and_then(|e| {
+        Some(format!(
+            "{}{}",
+            non_empty(&e.manufacturer_code)?,
+            e.product_code.as_deref().unwrap_or("")
+        ))
+    });
+    // Windows' own id needs the EDID only, and its PnP code is the EDID's manufacturer
+    // and product: `MONITOR\SAME035\...` for manufacturer SAM, product E035.
+    let local_id = match form {
+        IdForm::Linux => None,
+        IdForm::Windows => edid
+            .as_ref()
+            .zip(pnp_code.as_deref())
+            .map(|(e, pnp)| crate::windows::ids::source_id_of(pnp, e)),
+    };
     RemoteMonitor {
         id: display.id.clone(),
         connector: display.connector.clone(),
         name: display.name.clone(),
         panel_key: edid.as_ref().and_then(Edid::panel_key),
-        pnp_code: edid.as_ref().and_then(|e| {
-            Some(format!(
-                "{}{}",
-                non_empty(&e.manufacturer_code)?,
-                e.product_code.as_deref().unwrap_or("")
-            ))
-        }),
+        local_id,
+        pnp_code,
         model_name: edid.as_ref().and_then(|e| non_empty(&e.model)),
         video_interface: edid.as_ref().and_then(|e| e.video_interface.clone()),
         edid_size_mm: edid
@@ -75,6 +112,20 @@ pub fn merge_peer(
     machine_name: &str,
     displays: &[PeerDisplay],
 ) {
-    let remotes: Vec<RemoteMonitor> = displays.iter().map(remote_monitor).collect();
+    merge_peer_as(layout, machine_id, machine_name, displays, IdForm::HERE);
+}
+
+/// [`merge_peer`] on a machine whose monitor ids have the form `form`.
+pub fn merge_peer_as(
+    layout: &mut Layout,
+    machine_id: &str,
+    machine_name: &str,
+    displays: &[PeerDisplay],
+    form: IdForm,
+) {
+    let remotes: Vec<RemoteMonitor> = displays
+        .iter()
+        .map(|display| remote_monitor_as(display, form))
+        .collect();
     remote::merge_remote(layout, machine_id, machine_name, &remotes);
 }

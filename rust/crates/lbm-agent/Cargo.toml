@@ -7,6 +7,7 @@ publish = false
 description = "The resident process of LittleBigMouse v6: watches the system, loads the profiles, drives the hook"
 
 [dependencies]
+lbm-admin-only = { path = "../lbm-admin-only" }
 lbm-wallpaper = { path = "../lbm-wallpaper" }
 indexmap.workspace = true
 lbm-display = { path = "../lbm-display" }

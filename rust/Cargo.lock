@@ -2441,6 +2441,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "lbm-admin-only"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "lbm-agent"
 version = "0.1.0"
 dependencies = [
@@ -2451,6 +2459,7 @@ dependencies = [
  "image",
  "indexmap",
  "ksni",
+ "lbm-admin-only",
  "lbm-display",
  "lbm-engine",
  "lbm-ipc",
@@ -2642,6 +2651,19 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
+]
+
+[[package]]
+name = "lbm-service"
+version = "0.1.0"
+dependencies = [
+ "lbm-admin-only",
+ "lbm-ipc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "windows 0.58.0",
+ "windows-service",
 ]
 
 [[package]]
@@ -5645,6 +5667,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5819,6 +5847,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "windows-service"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "857224b3b211c6f3616921f081ee54721ee3ad2ace2fac6a6337e032f7b4dcf2"
+dependencies = [
+ "bitflags 2.13.0",
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

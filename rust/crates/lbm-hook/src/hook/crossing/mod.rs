@@ -22,6 +22,8 @@ use crate::zones::{HostPoint, ZonesLayout};
 use keys::{HeldSet, RescueKeys, Verdict};
 
 pub(crate) mod keys;
+#[cfg(test)]
+mod tests;
 
 /// What one event does to a key or a button. Codes are Linux `EV_KEY` codes whatever
 /// the platform: they are what the input stream carries (`lbm_ipc::input`), and a

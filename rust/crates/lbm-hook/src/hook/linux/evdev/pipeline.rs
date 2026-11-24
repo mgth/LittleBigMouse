@@ -807,36 +807,6 @@ mod tests {
     }
 
     #[test]
-    fn keys_go_to_the_other_machine_only_while_the_pointer_is_there() {
-        let mut rig = Rig::new(true);
-        rig.type_key(KEY_A, 1);
-        rig.type_key(KEY_A, 0);
-        assert!(rig.out.sent.is_empty(), "typed here: {:?}", rig.out.sent);
-
-        rig.go_over();
-        rig.type_key(KEY_A, 1);
-        rig.type_key(KEY_A, 2);
-        rig.type_key(KEY_A, 0);
-        assert_eq!(
-            rig.out.sent[1..],
-            [
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: true
-                },
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: true
-                },
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: false
-                },
-            ]
-        );
-    }
-
-    #[test]
     fn a_grabbed_mouses_own_keys_follow_the_pointer_too() {
         let mut rig = Rig::new(true);
         rig.go_over();
@@ -936,19 +906,6 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_that_takes_no_more_brings_the_pointer_home() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.out.accepting = false;
-        rig.move_by(10, 0);
-
-        assert!(!rig.pipe.is_remote());
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-        assert_eq!(rig.local_cursor(), START);
-    }
-
-    #[test]
     fn a_layout_without_the_machine_brings_the_pointer_home() {
         let mut rig = Rig::new(true);
         rig.go_over();
@@ -990,48 +947,6 @@ mod tests {
     }
 
     #[test]
-    fn going_away_brings_the_pointer_home_first() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.pipe.shut_down(&mut rig.out);
-        assert!(!rig.pipe.is_remote());
-        assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-        assert_eq!(rig.local_cursor(), START);
-    }
-
-    #[test]
-    fn the_rescue_held_over_there_brings_the_pointer_home_and_never_sends_its_key() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
-            rig.type_key(code, 1);
-        }
-        rig.type_key(KEY_M, 1);
-        rig.type_key(KEY_M, 2);
-        rig.pipe
-            .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.out);
-
-        assert!(!rig.pipe.is_remote());
-        assert!(
-            !rig.shared.want_hook.load(Ordering::SeqCst),
-            "the rescue's unhook was asked for"
-        );
-        assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
-        assert!(
-            !rig.out
-                .sent
-                .iter()
-                .any(|e| matches!(e, Wire::Key { code: KEY_M, .. })),
-            "{:?}",
-            rig.out.sent
-        );
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-    }
-
-    #[test]
     fn a_button_pressed_here_is_released_here_even_from_over_there() {
         let mut rig = Rig::new(true);
         rig.cycle(&[key(BTN_LEFT, 1), syn()]);
@@ -1050,48 +965,6 @@ mod tests {
         let frame = rig.out.pointer.last().unwrap();
         assert!(frame.contains(&(1, BTN_LEFT, 0)), "{frame:?}");
         assert_eq!(rig.local_cursor(), START, "the local cursor did not move");
-    }
-
-    #[test]
-    fn a_button_pressed_over_there_is_released_there_by_the_leave() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
-        rig.move_by(-40, 0);
-        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
-
-        assert_eq!(
-            rig.out.sent,
-            [
-                Wire::Enter { x: 0, y: 500 },
-                Wire::Button {
-                    code: BTN_LEFT,
-                    pressed: true
-                },
-                Wire::Leave,
-            ]
-        );
-    }
-
-    #[test]
-    fn a_key_held_over_there_is_released_there_by_the_leave_and_not_again() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.type_key(KEY_LEFTCTRL, 1);
-        rig.move_by(-40, 0);
-        rig.type_key(KEY_LEFTCTRL, 0);
-
-        assert_eq!(
-            rig.out.sent,
-            [
-                Wire::Enter { x: 0, y: 500 },
-                Wire::Key {
-                    code: KEY_LEFTCTRL,
-                    pressed: true
-                },
-                Wire::Leave,
-            ]
-        );
     }
 
     #[test]
@@ -1140,17 +1013,6 @@ mod tests {
     }
 
     // --- the local cursor ----------------------------------------------------
-
-    #[test]
-    fn the_cursor_is_hidden_once_on_crossing_out_after_the_enter_is_queued() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.move_by(10, 4);
-        rig.move_by(10, 4);
-        // From where the pointer last was here; the Enter was the first thing sent.
-        assert_eq!(rig.out.hides, [(START, 1)]);
-        assert_eq!(rig.out.shows, 0);
-    }
 
     #[test]
     fn the_cursor_is_never_hidden_while_the_pointer_stays_here() {
@@ -1216,26 +1078,6 @@ mod tests {
             assert_eq!(rig.out.shows, 1, "{way}: shown once only");
             assert_eq!(rig.out.hides.len(), 1, "{way}: hidden once, on the way out");
         }
-    }
-
-    #[test]
-    fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_home_from_where_it_left(
-    ) {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.move_by(5, 0);
-        assert!(rig.out.pointer.is_empty(), "nothing in place yet");
-
-        rig.out.spot = Some(Point::new(1915, 500));
-        rig.cycle(&[]);
-        assert_eq!(rig.local_cursor(), (1915, 500));
-        rig.cycle(&[]);
-        rig.move_by(5, 0);
-        assert_eq!(rig.out.pointer.len(), 1, "moved there once");
-
-        // Home is where it left, not where it hid.
-        rig.pipe.shut_down(&mut rig.out);
-        assert_eq!(rig.local_cursor(), START);
     }
 
     #[test]

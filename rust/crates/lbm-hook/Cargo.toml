@@ -15,6 +15,14 @@ publish = false
 name = "lbm-hook"
 path = "src/main.rs"
 
+# The injector the Windows service launches into the user's session with a SYSTEM
+# token, for the secure desktop and the windows above the user
+# (docs/multi-pc-service-windows.md). It reads input batches on its standard input,
+# the pipe the service hands it, and does nothing else.
+[[bin]]
+name = "lbm-inject"
+path = "src/inject_main.rs"
+
 # The library keeps its historical name: tests, benches and examples import
 # `littlebigmouse_hook::…`, and the modules split out into sibling crates are
 # re-exported under their old paths (see src/lib.rs).
@@ -64,6 +72,7 @@ features = [
     "Win32_System_SystemInformation",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Power",
+    "Win32_System_StationsAndDesktops",
 ]
 
 # Benchmarks only. `default-features = false` drops plotters/rayon and the HTML

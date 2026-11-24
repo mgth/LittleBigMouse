@@ -10,9 +10,15 @@
 //! While a session lasts, the window in the foreground is watched ([`foreground`]):
 //! when it belongs to a process of a higher integrity level, Windows drops everything
 //! injected here, and the agent is told so.
+//!
+//! `lbm-inject`, which the Windows service launches with a SYSTEM token, uses the same
+//! injector built by [`SendInputInjector::following_input_desktop`]: no foreground to
+//! watch (no window is above SYSTEM), and the thread moved to the input desktop instead,
+//! the secure one included ([`input_desktop`]).
 
 mod foreground;
 mod hider;
+mod input_desktop;
 
 pub use hider::local_pointer_input;
 
@@ -49,16 +55,34 @@ const BTN_BACK: u16 = 0x116;
 pub struct SendInputInjector {
     inputs: Vec<INPUT>,
     hider: hider::Hider,
-    /// Where the agent is told that injection is blocked.
-    shared: &'static crate::shared::Shared,
+    /// What this injector runs as: the hook, or `lbm-inject`.
+    mode: Mode,
+}
+
+enum Mode {
+    /// In the hook: the foreground is watched, and the agent told through `shared`
+    /// when a window above this process drops the input.
+    Hook(&'static crate::shared::Shared),
+    /// In `lbm-inject`: the thread follows the input desktop.
+    Inject(input_desktop::InputDesktop),
 }
 
 impl SendInputInjector {
     pub fn new(shared: &'static crate::shared::Shared) -> Self {
+        Self::with(Mode::Hook(shared))
+    }
+
+    /// The injector of `lbm-inject`. Its thread must own no window and no hook, or it
+    /// cannot be moved to another desktop.
+    pub fn following_input_desktop() -> Self {
+        Self::with(Mode::Inject(input_desktop::InputDesktop::default()))
+    }
+
+    fn with(mode: Mode) -> Self {
         Self {
             inputs: Vec::with_capacity(16),
             hider: hider::Hider::default(),
-            shared,
+            mode,
         }
     }
 
@@ -208,23 +232,45 @@ impl Injector for SendInputInjector {
         if self.inputs.is_empty() {
             return;
         }
-        foreground::input();
-        let sent = unsafe { SendInput(&self.inputs, std::mem::size_of::<INPUT>() as i32) };
-        // A UIPI block is silent: `SendInput` counts what it dropped as sent, which is
-        // why the foreground is watched. Fewer than asked is a desktop this process
-        // cannot reach (a secure desktop): as final, said the same way, once.
-        if (sent as usize) < self.inputs.len() {
-            foreground::short();
+        let inputs = &self.inputs;
+        let send = |start: usize| {
+            // SAFETY: a slice of initialised INPUTs and their size.
+            unsafe { SendInput(&inputs[start..], std::mem::size_of::<INPUT>() as i32) as usize }
+        };
+        match &mut self.mode {
+            Mode::Hook(_) => {
+                foreground::input();
+                // A UIPI block is silent: `SendInput` counts what it dropped as sent,
+                // which is why the foreground is watched. Fewer than asked is a desktop
+                // this process cannot reach (a secure desktop): as final, said the same
+                // way, once.
+                if send(0) < inputs.len() {
+                    foreground::short();
+                }
+            }
+            Mode::Inject(desktop) => {
+                if !super::stream::send_following(inputs.len(), send, || desktop.attach()) {
+                    eprintln!("[lbm-inject] input lost: SendInput fell short");
+                }
+            }
         }
     }
 
     fn begin(&mut self) {
-        foreground::begin(self.shared);
+        match &mut self.mode {
+            Mode::Hook(shared) => foreground::begin(shared),
+            // The secure desktop may have come up while nothing was driven.
+            Mode::Inject(desktop) => {
+                desktop.attach();
+            }
+        }
         self.unpark();
     }
 
     fn park(&mut self) {
-        foreground::end();
+        if let Mode::Hook(_) = self.mode {
+            foreground::end();
+        }
         self.hider.park();
     }
 

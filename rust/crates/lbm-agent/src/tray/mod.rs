@@ -170,6 +170,13 @@ impl TrayModel {
         if state["PointerLocked"] == true {
             self.state = format!("{} · pointer locked", self.state);
         }
+        // Another sharing tool moves the pointer whatever this engine does: said here,
+        // where a user looks when the mouse leaves the screen with LittleBigMouse stopped.
+        let running: Vec<lbm_ipc::sharing::Running> =
+            serde_json::from_value(state["InputSharing"].clone()).unwrap_or_default();
+        for warning in lbm_ipc::sharing::warnings(&running) {
+            self.state = format!("{}\n{warning}", self.state);
+        }
     }
 
     pub fn icon(&self) -> TrayIcon {
@@ -350,6 +357,25 @@ mod tests {
         assert_eq!(tray.state(), "Running · pointer locked");
         tray.show(&json!({ "Engine": "Running", "PointerLocked": false }));
         assert_eq!(tray.state(), "Running");
+    }
+
+    #[test]
+    fn the_words_say_another_sharing_tool_runs() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Stopped", "InputSharing": [
+            { "Tool": "Deskflow", "Process": "deskflow-core", "Pid": 40,
+              "Role": "Server", "Connected": true },
+        ]}));
+        assert_eq!(
+            tray.state(),
+            "Stopped\nDeskflow is also running and can move the mouse to other machines, \
+             and it is connected to one now"
+        );
+        // An older agent, or none found: nothing said.
+        tray.show(&json!({ "Engine": "Stopped" }));
+        assert_eq!(tray.state(), "Stopped");
+        tray.show(&json!({ "Engine": "Stopped", "InputSharing": "garbled" }));
+        assert_eq!(tray.state(), "Stopped");
     }
 
     #[tokio::test]

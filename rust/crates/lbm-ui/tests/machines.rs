@@ -50,6 +50,7 @@ struct Shown {
     state: Option<State>,
     draft: Panel,
     did: Option<Did>,
+    sharing: Vec<lbm_ipc::sharing::Running>,
 }
 
 fn page(state: Option<State>) -> Harness<'static, Shown> {
@@ -65,6 +66,7 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
                     &mut page.draft,
                     false,
                     None,
+                    &page.sharing,
                 ) {
                     page.did = Some(did);
                 }
@@ -73,8 +75,36 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
                 state,
                 draft: Panel::default(),
                 did: None,
+                sharing: Vec::new(),
             },
         )
+}
+
+/// The case of 2026-11-24: a Deskflow server left running moved the pointer to another
+/// machine with the engine stopped. The page says so, in the words the tray uses, and
+/// says nothing when the agent found none.
+#[test]
+fn the_page_says_another_sharing_tool_runs() {
+    let warning = "Deskflow is also running and can move the mouse to other machines, \
+                   and it is connected to one now";
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    assert!(h.query_by_label(warning).is_none());
+
+    h.state_mut().sharing = vec![lbm_ipc::sharing::Running {
+        tool: lbm_ipc::sharing::Tool::Deskflow,
+        process: "deskflow-core".into(),
+        pid: 40,
+        role: Some(lbm_ipc::sharing::Role::Server),
+        window: false,
+        connected: Some(true),
+    }];
+    h.run();
+    assert!(h.query_by_label(warning).is_some());
+    // Before the agent has said anything about the machines, too.
+    h.state_mut().state = None;
+    h.run();
+    assert!(h.query_by_label(warning).is_some());
 }
 
 #[test]

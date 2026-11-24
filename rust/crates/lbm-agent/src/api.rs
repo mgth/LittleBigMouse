@@ -397,6 +397,11 @@ pub struct Snapshot {
     /// is on this machine. The other end of [`Self::driven_machine`]. Additive.
     #[serde(default)]
     pub driven_by: Option<String>,
+    /// The other mouse-and-keyboard sharing tools running on this machine (Deskflow,
+    /// Synergy, Barrier, Input Leap), as found at the last of the moments the agent looks
+    /// (`crate::input_sharing`): never watched in between. Additive; absent when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_sharing: Vec<lbm_ipc::sharing::Running>,
 }
 
 /// An answer to request `id`.

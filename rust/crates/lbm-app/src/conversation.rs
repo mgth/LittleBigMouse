@@ -68,6 +68,8 @@ pub struct Conversation {
     /// The panels whose last input switch failed, as the agent keeps them: in its state,
     /// since the switch is carried out after the request was answered.
     pub switch_failures: Vec<crate::machines::SwitchFailure>,
+    /// The other sharing tools the agent found running, as its state says.
+    pub sharing: Vec<lbm_ipc::sharing::Running>,
     /// Whether anything has been heard from the agent yet.
     pub heard: bool,
     /// What an `ApplyTopology` reported: the command lines, and whether they were only
@@ -225,6 +227,8 @@ impl Conversation {
         // The agent keeps it: the hook may have said it before this window existed.
         self.shortcut_unavailable = snapshot["ShortcutUnavailable"].as_str().map(str::to_owned);
         self.switch_failures = crate::machines::switch_failures(snapshot);
+        // Absent from an older agent's state, and when there are none.
+        self.sharing = serde_json::from_value(snapshot["InputSharing"].clone()).unwrap_or_default();
         // Through `update`, not written straight onto the state: the rule that ends a
         // live preview when the engine goes down lives there, and it needs the transition.
         let said = lbm_ui::Action::AgentSaid {
@@ -431,6 +435,23 @@ mod tests {
         // The agent no longer says it (switched since, or an older agent): gone.
         agent.said(Message::State(snapshot("Running", true)), &mut state);
         assert!(agent.switch_failures.is_empty());
+    }
+
+    #[test]
+    fn another_sharing_tool_is_known_while_the_state_says_it() {
+        let mut agent = Conversation::after([]);
+        let mut state = lbm_ui::State::default();
+        let mut found = snapshot("Stopped", true);
+        found["InputSharing"] = json!([{
+            "Tool": "Deskflow", "Process": "deskflow-core", "Pid": 40,
+            "Role": "Server", "Connected": true
+        }]);
+        agent.said(Message::State(found), &mut state);
+        assert_eq!(agent.sharing.len(), 1);
+        assert_eq!(agent.sharing[0].tool, lbm_ipc::sharing::Tool::Deskflow);
+        // Gone at the next look, or an older agent that does not say: nothing.
+        agent.said(Message::State(snapshot("Stopped", true)), &mut state);
+        assert!(agent.sharing.is_empty());
     }
 
     #[test]

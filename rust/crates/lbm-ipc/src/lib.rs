@@ -15,6 +15,7 @@ pub mod instance;
 pub mod peer;
 pub mod probe;
 pub mod protocol;
+pub mod sharing;
 pub mod shortcut;
 
 pub mod vcp;

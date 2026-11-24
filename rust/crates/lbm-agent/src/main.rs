@@ -305,6 +305,8 @@ fn run(options: Options) -> ExitCode {
             .with_ddc(std::sync::Arc::new(lbm_agent::vcp::SystemDdc::default()))
             .with_monitor_control(lbm_agent::vcp::Service::default())
             .with_api(calls_rx)
+            // Looked for at the moments it matters, never watched.
+            .with_input_sharing_scan(lbm_agent::input_sharing::scan)
             .with_remote_config(config_dir.clone())
             // Off unless `multi-pc.json` says otherwise; then nothing listens or runs.
             .with_peers(lbm_agent::peers::Service::new(

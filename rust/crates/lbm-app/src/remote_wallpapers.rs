@@ -25,6 +25,10 @@ pub const CAPABILITY: &str = "PeerWallpapers";
 #[derive(Default)]
 struct Fetched {
     revision: u64,
+    /// Fetched from an earlier connection to the agent. Its revision is that agent's
+    /// stamp, and a restarted agent stamps from zero again: the same number may name
+    /// other pictures, so it is asked for again whatever its revision says.
+    stale: bool,
     pictures: HashMap<String, RgbaImage>,
 }
 
@@ -43,12 +47,16 @@ pub struct RemoteWallpapers {
 
 impl RemoteWallpapers {
     /// A new connection: the pictures are kept — the remotes are the same ones until the
-    /// agent says otherwise, and the map does not flicker — and asked for again if their
-    /// revision is not the one known.
+    /// agent says otherwise, and the map does not flicker — but asked for again whatever
+    /// their revision: the agent at the other end may be a new one, whose stamps start
+    /// over and can repeat a number the old one gave other pictures.
     pub fn connected(&mut self, capabilities: &[String]) {
         self.offered = capabilities.iter().any(|c| c == CAPABILITY);
         self.asking.clear();
         self.known.clear();
+        for fetched in self.fetched.values_mut() {
+            fetched.stale = true;
+        }
     }
 
     pub fn disconnected(&mut self) {
@@ -75,7 +83,7 @@ impl RemoteWallpapers {
             // Nothing held any more (revision 0) is no picture, not the old one.
             self.known
                 .get(machine)
-                .is_some_and(|&known| known > 0 || fetched.revision == 0)
+                .is_some_and(|&known| known > 0 || (fetched.revision == 0 && !fetched.stale))
         });
         self.changed |= self.fetched.len() != before;
     }
@@ -94,7 +102,7 @@ impl RemoteWallpapers {
                     && self
                         .fetched
                         .get(*machine)
-                        .is_none_or(|f| f.revision != known)
+                        .is_none_or(|f| f.stale || f.revision != known)
                     && !self.asking.values().any(|m| m == *machine)
             })
             .map(|(machine, _)| (machine.clone(), json!({ "MachineId": machine })))
@@ -118,7 +126,9 @@ impl RemoteWallpapers {
             // Not asked again for this revision: an agent that refuses once would refuse
             // at every frame.
             if let Some(&known) = self.known.get(&machine) {
-                self.fetched.entry(machine).or_default().revision = known;
+                let fetched = self.fetched.entry(machine).or_default();
+                fetched.revision = known;
+                fetched.stale = false;
             }
             return true;
         };
@@ -130,7 +140,14 @@ impl RemoteWallpapers {
             .filter_map(|w| serde_json::from_value::<PeerWallpaper>(w.clone()).ok())
             .filter_map(|w| Some((w.display.clone(), decode(&w)?)))
             .collect();
-        self.fetched.insert(machine, Fetched { revision, pictures });
+        self.fetched.insert(
+            machine,
+            Fetched {
+                revision,
+                stale: false,
+                pictures,
+            },
+        );
         self.changed = true;
         true
     }
@@ -247,6 +264,59 @@ mod tests {
         remotes.heard(&state(2), &[]);
         assert_eq!(remotes.pictures().count(), 0);
         assert!(remotes.take_changed());
+    }
+
+    /// A restarted agent stamps the pictures it receives from one again: its first are
+    /// stamp 1, as the old agent's first were, and a window that reconnects must not take
+    /// them for the ones it holds.
+    #[test]
+    fn pictures_from_an_earlier_agent_connection_are_asked_for_again_under_the_same_stamp() {
+        let mut remotes = RemoteWallpapers::default();
+        remotes.connected(&[CAPABILITY.into()]);
+        remotes.heard(&state(1), &["0a".into()]);
+        remotes.sent(1, "0a".into());
+        let red = json!({ "Revision": 1, "Wallpapers": [
+            { "Display": "eDP-1", "Color": "#FF0000" },
+        ]});
+        assert!(remotes.answered(1, &Ok(red)));
+        remotes.disconnected();
+
+        remotes.connected(&[CAPABILITY.into()]);
+        remotes.heard(&state(1), &["0a".into()]);
+        assert_eq!(
+            remotes.wanted(),
+            [("0a".to_owned(), json!({ "MachineId": "0a" }))],
+            "stamp 1 of another agent is not the pictures in hand"
+        );
+        assert_eq!(remotes.pictures().count(), 1, "kept meanwhile: no flicker");
+        remotes.sent(2, "0a".into());
+        let blue = json!({ "Revision": 1, "Wallpapers": [
+            { "Display": "eDP-1", "Color": "#0000FF" },
+        ]});
+        assert!(remotes.answered(2, &Ok(blue)));
+        let (_, pixels) = remotes.pictures().next().unwrap();
+        assert_eq!(pixels.get_pixel(0, 0).0, [0, 0, 255, 255]);
+        remotes.heard(&state(1), &["0a".into()]);
+        assert!(
+            remotes.wanted().is_empty(),
+            "asked once, not at every frame"
+        );
+    }
+
+    #[test]
+    fn a_new_agent_holding_nothing_takes_the_old_pictures_away() {
+        let mut remotes = RemoteWallpapers::default();
+        remotes.connected(&[CAPABILITY.into()]);
+        remotes.heard(&state(1), &["0a".into()]);
+        remotes.sent(1, "0a".into());
+        let red = json!({ "Revision": 1, "Wallpapers": [
+            { "Display": "eDP-1", "Color": "#FF0000" },
+        ]});
+        assert!(remotes.answered(1, &Ok(red)));
+        remotes.disconnected();
+        remotes.connected(&[CAPABILITY.into()]);
+        remotes.heard(&state(0), &["0a".into()]);
+        assert_eq!(remotes.pictures().count(), 0);
     }
 
     #[test]

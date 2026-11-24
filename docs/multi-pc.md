@@ -58,6 +58,10 @@ screen), Windows as master, the portal and X11 backends as master.
     protocol 1 without a new version, an older master ignores it as an unknown type
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
+  - `InputReset` — remote → master: the remote ended the session of the input stream
+    while the link lives on (its hook could not keep up); the master brings its pointer
+    home (see "The end of a hop"). Added after protocol 1 without a new version, an older
+    master ignores it as an unknown type
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -81,7 +85,8 @@ On the master (lot 6, evdev backend only; the details are in
 `lbm-hook/src/hook/linux/evdev/pipeline.rs`):
 
 - The other machines' zones are **in play only while the input endpoint has a
-  client**. An agent connects to it while it has a remote to relay to, and closes
+  client**. An agent connects to it while it has a remote to relay to and the hook has
+  confirmed zones leading to that remote alone (see "Master side" below), and closes
   that connection when the remote link goes: the hook then brings the pointer home
   and the borders to the remote become walls again. Every other backend never puts
   them in play (`ZonesLayout::set_remote_enterable`).
@@ -94,6 +99,23 @@ On the master (lot 6, evdev backend only; the details are in
 - The rescue shortcut is recognised in the grabbed key stream, with the same hold.
 - One remote: batches carry no destination; the agent merges and drives only the
   selected remote (lot 5a).
+- The master's own cursor is hidden while the pointer is away
+  (`lbm-hook/src/hook/linux/evdev/hider/`): once the `Enter` is queued, and shown
+  again on every way home (crossing back, no client, a write the stream refused, a
+  layout without that machine, the rescue, Stop/pause/suspend/quit). On Wayland, a
+  3×3 transparent layer-shell surface on the overlay layer — input region, no
+  keyboard — goes under the frozen pointer and sets no cursor on `wl_pointer.enter`;
+  once the compositor has configured it, the frozen pointer is moved onto it, 4
+  logical pixels inside the output it left by on both axes. Moved, because a
+  compositor picks the surface under the pointer when the pointer moves, not
+  necessarily when a surface maps under a still one; inside, because the edge it left
+  by is an outer edge of this desktop, where hot corners, screen-edge actions and
+  auto-hidden panels react to a resting pointer. Coming home starts from where it
+  left, not from there. On X11, XFixes hides the cursor. A thread of the hook owns the
+  connection; the routing thread never waits for it. If the hook dies, the
+  compositor (or the X server) drops what it asked for, and the cursor is back. When
+  the display server cannot be reached or lacks layer-shell, one line in the log says
+  so and the cursor stays visible.
 
 On a remote (`lbm-hook/src/remote`):
 
@@ -185,7 +207,7 @@ On a remote (`lbm-hook/src/remote`):
   end of the link closes that connection: the hook releases what is held. So does a
   batch that finds the agent's queue to the hook full: it may have been a release, so
   the connection is closed after what is queued, and the hook ignores what follows
-  until the master's next `Enter`.
+  until the master's next `Enter` — which is why the master is then told `InputReset`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the selected remote with `try_input`.
   **One remote at a time**: batches carry no destination, so exactly one linked remote
@@ -194,6 +216,21 @@ On a remote (`lbm-hook/src/remote`):
   does not take the screens from under the pointer); when there is none, the linked
   remote with the lowest machine id is taken, the merge order, so the same machines give
   the same choice whatever the timing.
+- **Relaying waits for the hook's zones**: the hook makes the other machines' zones
+  enterable while the agent is connected to its input endpoint, and a batch carries no
+  destination, so a zone of a remote no longer selected would send its `Enter`, clicks
+  and keys to the one that is. Every change of the selected remote (to another, another
+  link of the same one, or none) is a new **choice**, numbered anew; the connection to
+  the hook ends at once, and a new one is made only once the agent's loop says the hook's
+  zones are fit for that very choice: every zone the hook holds, and every one sent to it
+  and not yet answered, leads to no machine but that remote. What the hook holds is known
+  from its answers in order — each `Load` the agent sends is answered by `Loaded` or
+  `LoadFailed` — and from its greeting: none, or the fingerprint of the zones the agent
+  would send now. Anything else (a layout from a previous life of the agent, a `Load`
+  another client sent, no hook) is unknown and fit for nothing until the agent's own
+  `Load` is confirmed. The agent never sends zones leading to another machine than the
+  selected remote: a `Load` of the layout built for the previous choice, before the
+  debounced rebuild for the new one, is dropped, and the rebuild sends the right one.
 - **The end of a hop, on the master**: one connection to the hook's input endpoint
   relays to one remote link for its whole life. It ends when the selected remote
   changes or goes, when the hook goes, or when a batch finds the link's queue full (a
@@ -201,6 +238,9 @@ On a remote (`lbm-hook/src/remote`):
   closed (the hook comes home and releases its keyboards) and that link is sent
   `Leave` with a send that waits for room — or ends with the link, whose end the remote
   takes the same way. No connection relays anything before that `Leave` is queued.
+  An `InputReset` from the selected remote ends the hop the same way and a new
+  connection is made at once: the master's hook comes home, releases its keyboards and
+  shows its cursor, and the next crossing sends a fresh `Enter` that the remote takes.
 - **`SelectInput`** is heard only from a paired machine linked as this one's master, and
   only for a display this machine has (its id in `Displays`, a monitor wired here); from
   anyone else it is logged and ignored. The master sends it only to a machine linked as
@@ -273,7 +313,9 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   `IDesktopWallpaper::GetWallpaper` per monitor on Windows; a solid colour is an answer) —
   matches the outputs to its `Displays` by geometry, and draws each picture as the
   desktop does (Fill, Fit, Stretch, Center, Span and Tile, with Plasma's one-axis tiles),
-  no wider than **384 px**. The desktop is behind the agent's `Desktop` trait, so a test
+  no wider than **384 px**. On Linux a display's bounds are logical pixels, so it is drawn
+  at its output's scale, as the window's own preview does: a centred or tiled picture keeps
+  the share of the screen it has there. Windows' bounds are physical already (scale 1). The desktop is behind the agent's `Desktop` trait, so a test
   hands it a fake and never reads the developer's.
 - **Bounds**: a JPEG of at most **96 KiB** per display (quality 80, then 65 and 50, then
   half and a quarter of the size; past that, the average colour), and at most **512 KiB**
@@ -321,7 +363,10 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   never in the `Peers` state or event, which every frontend gets at every change: a
   frontend asks `PeerWallpapers` when the stamp changes.
 - **In the window** (`lbm-app/src/remote_wallpapers.rs`): one request per stamp, the
-  pictures decoded once and uploaded as textures once per change. A screen whose active
+  pictures decoded once and uploaded as textures once per change. The stamps are one
+  agent's: after a new connection to the agent (which may have restarted and stamps from
+  zero again) every remote's pictures are asked for once more whatever their stamp, the
+  old ones shown meanwhile. A screen whose active
   source is a remote's is drawn over that remote's picture of that display; every other
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.

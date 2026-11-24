@@ -41,6 +41,9 @@
 //!   with `try_send` (ipc/input.rs: a full queue sends the pointer home rather
 //!   than wait); stderr must stay a file/journal, never an undrained pipe (the
 //!   C# spawns the daemon with inherited handles — keep it that way);
+//! - no display-server round-trip — hiding the local cursor while the pointer is
+//!   on another machine is asked of the `hider`'s thread through an atomic and an
+//!   eventfd write, and its answer read with a `try_lock`;
 //! - the only permitted wait is the bounded 100 ms `poll()` (and the
 //!   equivalent sleep when no device is left).
 //!
@@ -83,6 +86,9 @@
 //!   the frame emitted to this machine's virtual devices or, in the multi-PC
 //!   mode, written to another machine through the input stream. No device in
 //!   it, which is what lets the tests drive the whole of it;
+//! * `hider` — hiding this machine's cursor while the pointer is on another one: a
+//!   layer-shell surface under the frozen pointer on Wayland, XFixes on X11, owned by
+//!   a thread of its own;
 //! * `keys` — held-key bookkeeping, and the rescue shortcut recognised in the
 //!   keyboards' own stream while they are grabbed;
 //! * `cursor` — the authoritative cursor position the engine is run against;
@@ -94,6 +100,7 @@
 mod cursor;
 mod devices;
 mod frame;
+mod hider;
 mod keys;
 mod pipeline;
 pub(crate) mod probe;

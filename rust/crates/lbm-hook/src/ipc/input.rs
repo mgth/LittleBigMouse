@@ -111,6 +111,16 @@ impl Driver {
             .is_some_and(|client| !client.batches.is_closed())
     }
 
+    /// Which client there is to drive, if any. Two connections never share a value:
+    /// a crossing begun with one client is not continued with its successor, which
+    /// never read the `Enter`.
+    pub fn client(&self) -> Option<u64> {
+        self.client
+            .as_ref()
+            .filter(|client| !client.batches.is_closed())
+            .map(|client| client.id)
+    }
+
     /// Queues one encoded batch without waiting. `false` when the batch will never be
     /// written: no client, a connection that ended, or a queue that is full. A full
     /// queue closes the connection — the stream already lost an event and cannot be

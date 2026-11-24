@@ -57,19 +57,25 @@ impl Screen {
 /// of the nearest one when it is on none (a display just went away). `None` when there
 /// is no monitor at all, and the caller parks in place.
 pub fn parking_spot(cursor: (i32, i32), screens: &[Screen]) -> Option<(i32, i32)> {
-    let mut usable = screens.iter().filter(|s| !s.is_empty());
-    if let Some(on) = usable.clone().find(|s| s.contains(cursor)) {
-        return Some(on.centre());
+    screen_of(cursor, screens).map(|i| screens[i].centre())
+}
+
+/// The index of the monitor `cursor` is on, or of the nearest one when it is on none.
+/// `None` when there is no monitor that is not empty.
+pub fn screen_of(cursor: (i32, i32), screens: &[Screen]) -> Option<usize> {
+    let mut usable = screens.iter().enumerate().filter(|(_, s)| !s.is_empty());
+    if let Some((on, _)) = usable.clone().find(|(_, s)| s.contains(cursor)) {
+        return Some(on);
     }
     // The first of equally near ones, so the same desktop always gives the same spot.
-    let mut best: Option<(&Screen, i64)> = None;
-    for screen in &mut usable {
+    let mut best: Option<(usize, i64)> = None;
+    for (index, screen) in &mut usable {
         let distance = screen.distance_squared(cursor);
         if best.is_none_or(|(_, d)| distance < d) {
-            best = Some((screen, distance));
+            best = Some((index, distance));
         }
     }
-    best.map(|(screen, _)| screen.centre())
+    best.map(|(index, _)| index)
 }
 
 /// The side of the window that hides the pointer, in pixels: one, so that a move of a

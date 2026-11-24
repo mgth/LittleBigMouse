@@ -26,6 +26,15 @@
 //! back: `Leave`, the keyboards are let go, and emission resumes here from where the
 //! engine landed.
 //!
+//! ## The local cursor
+//!
+//! The compositor would go on drawing the frozen pointer, so it is hidden while the
+//! pointer is away ([`super::hider`]): [`Outputs::hide_cursor`] once the `Enter` is
+//! queued, [`Outputs::show_cursor`] every time the pointer comes home, whichever way.
+//! Once the surface that hides it is in place, the frozen pointer is moved onto it
+//! ([`Outputs::cursor_hiding_spot`]), a few pixels inside the edge it left by, and
+//! stays there; coming home starts from where it left, not from there.
+//!
 //! ## Held keys and buttons
 //!
 //! One rule, in both directions: **a release goes where its press went.** Each side
@@ -116,14 +125,27 @@ pub(crate) trait Outputs {
     fn pointer(&mut self, frame: &[InputEvent]);
     /// One frame for the virtual keyboard.
     fn keyboard(&mut self, frame: &[InputEvent]);
+    /// The input stream's client to drive another machine through, if it has one. A
+    /// client that replaced another has another value.
+    fn remote_client(&self) -> Option<u64>;
     /// Whether the input stream has a client to drive another machine through.
-    fn remote_connected(&self) -> bool;
+    fn remote_connected(&self) -> bool {
+        self.remote_client().is_some()
+    }
     /// Queues one encoded batch without waiting; `false` when it will never be sent.
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
     /// Grabs every keyboard that has no key held and is not grabbed yet.
     fn grab_keyboards(&mut self);
     /// Lets every keyboard go.
     fn release_keyboards(&mut self);
+    /// The pointer went to another machine from `from`, where it is frozen: hide this
+    /// machine's cursor.
+    fn hide_cursor(&mut self, from: Point<i32>);
+    /// Where the frozen pointer is to go to be under what hides the cursor, once that
+    /// is in place; `None` until then, and when nothing hides it.
+    fn cursor_hiding_spot(&mut self) -> Option<Point<i32>>;
+    /// The pointer is home: show this machine's cursor.
+    fn show_cursor(&mut self);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,8 +183,14 @@ pub(crate) struct Pipeline {
     home: Point<i32>,
     /// The last pixel sent to the other machine.
     sent: Point<i32>,
+    /// Where the frozen pointer was moved to be under what hides the cursor, while the
+    /// pointer is away.
+    parked: Option<Point<i32>>,
     /// The machine being driven.
     host: String,
+    /// The input stream's client the `Enter` went to: the only one that knows the
+    /// pointer is over there.
+    client: Option<u64>,
     /// Buttons and keys pressed on the other machine and not released there yet.
     remote_held: HeldSet,
     /// The engine still tracks the pointer where it was before it came home, and has
@@ -185,7 +213,9 @@ impl Pipeline {
             side: Side::Local,
             home,
             sent: home,
+            parked: None,
             host: String::new(),
+            client: None,
             remote_held: HeldSet::default(),
             resync: false,
             rescue: RescueKeys::default(),
@@ -210,7 +240,12 @@ impl Pipeline {
     /// virtual pointer. Clamped to the desktop the device spans: nothing emitted here
     /// may land outside it, whatever the virtual cursor is doing.
     pub(super) fn emit_local(&mut self, out: &mut impl Outputs) {
-        let p = self.local_pos();
+        // A frame while the pointer is away — a release of a button pressed here — must
+        // not take it off what hides the cursor.
+        let p = match self.side {
+            Side::Remote => self.parked.unwrap_or(self.home),
+            Side::Local => self.local_pos(),
+        };
         let d = self.env.device;
         let ax = p.x().min(d.right() - 1).max(d.left()) - d.left();
         let ay = p.y().min(d.bottom() - 1).max(d.top()) - d.top();
@@ -225,10 +260,20 @@ impl Pipeline {
         shared: &'static Shared,
         out: &mut impl Outputs,
     ) -> Option<Rect<i32>> {
-        let connected = out.remote_connected();
+        let client = out.remote_client();
+        let connected = client.is_some();
         if self.is_remote() && !connected {
             eprintln!(
                 "[LittleBigMouse.Hook] evdev: the input stream has no client, the pointer comes home"
+            );
+            self.go_home(None, out);
+        } else if self.is_remote() && client != self.client {
+            // The agent closed the stream and opened another between two cycles — it
+            // does after the other machine dropped input. The new client never read
+            // the `Enter`: what it is sent now would be ignored, with the keyboards
+            // still grabbed here. Its `Leave` is one it has nothing to do with.
+            eprintln!(
+                "[LittleBigMouse.Hook] evdev: the input stream has another client, the pointer comes home"
             );
             self.go_home(None, out);
         }
@@ -277,6 +322,17 @@ impl Pipeline {
     pub(super) fn end_cycle(&mut self, shared: &'static Shared, out: &mut impl Outputs) {
         if self.is_remote() {
             out.grab_keyboards();
+            if self.parked.is_none() {
+                if let Some(spot) = out.cursor_hiding_spot() {
+                    eprintln!(
+                        "[LittleBigMouse.Hook] evdev: the frozen pointer moves to ({},{}), onto what hides it",
+                        spot.x(),
+                        spot.y()
+                    );
+                    self.parked = Some(spot);
+                    self.emit_local(out);
+                }
+            }
         }
         self.check_rescue(shared, Instant::now(), out);
     }
@@ -445,6 +501,7 @@ impl Pipeline {
         self.rescue.reset();
         self.side = Side::Remote;
         self.host = host;
+        self.client = out.remote_client();
         self.sent = pixel;
         self.wire.clear();
         self.wire.push(Wire::Enter {
@@ -461,6 +518,8 @@ impl Pipeline {
             "[LittleBigMouse.Hook] evdev: the pointer is on {}",
             self.host
         );
+        self.parked = None;
+        out.hide_cursor(self.home);
         out.grab_keyboards();
         self.local_leftovers(out);
         true
@@ -596,6 +655,8 @@ impl Pipeline {
         self.side = Side::Local;
         self.remote_held.clear();
         self.rescue.reset();
+        self.parked = None;
+        out.show_cursor();
         out.release_keyboards();
         eprintln!("[LittleBigMouse.Hook] evdev: the pointer is back");
     }
@@ -818,7 +879,14 @@ mod tests {
         /// The keyboards are grabbed: asked for, and not let go since.
         grabbed: bool,
         releases: usize,
+        /// Which client the stream has, without a driver.
+        client: u64,
         driver: Option<(Driver, Arc<Outlet>)>,
+        /// Each hide: where from, and how many events had been sent by then.
+        hides: Vec<((i32, i32), usize)>,
+        shows: usize,
+        /// What hides the cursor is in place, under this spot.
+        spot: Option<Point<i32>>,
     }
 
     impl Outputs for Recording {
@@ -830,10 +898,10 @@ mod tests {
             self.keyboard.push(shape(frame));
         }
 
-        fn remote_connected(&self) -> bool {
+        fn remote_client(&self) -> Option<u64> {
             match &self.driver {
-                Some((driver, _)) => driver.connected(),
-                None => self.connected,
+                Some((driver, _)) => driver.client(),
+                None => self.connected.then_some(self.client),
             }
         }
 
@@ -856,6 +924,22 @@ mod tests {
         fn release_keyboards(&mut self) {
             self.grabbed = false;
             self.releases += 1;
+        }
+
+        fn hide_cursor(&mut self, from: Point<i32>) {
+            let sent = match &self.driver {
+                Some(_) => usize::MAX,
+                None => self.sent.len(),
+            };
+            self.hides.push(((from.x(), from.y()), sent));
+        }
+
+        fn cursor_hiding_spot(&mut self) -> Option<Point<i32>> {
+            self.spot
+        }
+
+        fn show_cursor(&mut self) {
+            self.shows += 1;
         }
     }
 
@@ -900,7 +984,11 @@ mod tests {
                     sent: Vec::new(),
                     grabbed: false,
                     releases: 0,
+                    client: 1,
                     driver,
+                    hides: Vec::new(),
+                    shows: 0,
+                    spot: None,
                 },
             };
             // The first cycle takes in the client and the layout.
@@ -1043,6 +1131,7 @@ mod tests {
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
         // Landed on Here's last column, where the engine put it.
         assert_eq!(rig.local_cursor(), (1919, 500));
 
@@ -1075,12 +1164,45 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.releases, 1, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
         assert_eq!(rig.local_cursor(), START, "back where it left");
 
         // And the border is a wall again.
         rig.move_by(300, 0);
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.local_cursor(), (1919, 500));
+    }
+
+    #[test]
+    fn a_client_replaced_while_the_pointer_is_over_there_brings_it_home() {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.type_key(KEY_A, 1);
+        assert!(rig.out.grabbed);
+        // Between two cycles: the stream never looked unconnected.
+        rig.out.client = 2;
+        rig.out.sent.clear();
+        rig.cycle(&[]);
+
+        assert!(!rig.pipe.is_remote());
+        assert!(!rig.out.grabbed, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
+        assert_eq!(rig.local_cursor(), START, "back where it left");
+        assert!(
+            rig.out
+                .sent
+                .iter()
+                .all(|event| matches!(event, Wire::Leave)),
+            "the new client got {:?} without an Enter",
+            rig.out.sent
+        );
+
+        // And crossing again starts afresh with it. The first report after coming
+        // home is where the engine starts tracking again, as on any homecoming.
+        rig.out.sent.clear();
+        rig.move_by(-10, 0);
+        rig.go_over();
+        assert!(matches!(rig.out.sent.first(), Some(Wire::Enter { .. })));
     }
 
     #[test]
@@ -1092,6 +1214,7 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1109,6 +1232,7 @@ mod tests {
 
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1143,6 +1267,7 @@ mod tests {
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
         assert_eq!(rig.local_cursor(), START);
     }
 
@@ -1173,6 +1298,7 @@ mod tests {
             rig.out.sent
         );
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
     }
 
     #[test]
@@ -1283,6 +1409,118 @@ mod tests {
         assert!(rig.out.sent.is_empty());
     }
 
+    // --- the local cursor ----------------------------------------------------
+
+    #[test]
+    fn the_cursor_is_hidden_once_on_crossing_out_after_the_enter_is_queued() {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.move_by(10, 4);
+        rig.move_by(10, 4);
+        // From where the pointer last was here; the Enter was the first thing sent.
+        assert_eq!(rig.out.hides, [(START, 1)]);
+        assert_eq!(rig.out.shows, 0);
+    }
+
+    #[test]
+    fn the_cursor_is_never_hidden_while_the_pointer_stays_here() {
+        let mut rig = Rig::new(true);
+        rig.move_by(-100, 3);
+        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
+        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
+        let mut walled = Rig::new(false);
+        walled.move_by(300, 0);
+        let mut refused = Rig::new(true);
+        refused.out.accepting = false;
+        refused.move_by(30, 0);
+        assert!(!refused.pipe.is_remote(), "an Enter nobody took is a wall");
+        for rig in [&rig, &walled, &refused] {
+            assert!(rig.out.hides.is_empty(), "{:?}", rig.out.hides);
+            assert_eq!(rig.out.shows, 0);
+        }
+    }
+
+    #[test]
+    fn every_way_of_coming_home_shows_the_cursor_once() {
+        type Home = fn(&mut Rig);
+        let ways: [(&str, Home); 6] = [
+            ("crossing back", |rig| rig.move_by(-40, 0)),
+            ("no client", |rig| {
+                rig.out.connected = false;
+                rig.cycle(&[]);
+            }),
+            ("a failed write", |rig| {
+                rig.out.accepting = false;
+                rig.move_by(10, 0);
+            }),
+            ("a layout without the machine", |rig| {
+                let other = LAYOUT.replace(r#"Host="abcd""#, r#"Host="efgh""#);
+                rig.shared
+                    .engine
+                    .lock()
+                    .unwrap()
+                    .load(ZonesLayout::from_xml(&other).unwrap());
+                rig.cycle(&[]);
+            }),
+            ("the rescue", |rig| {
+                for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT, KEY_M] {
+                    rig.type_key(code, 1);
+                }
+                rig.type_key(KEY_M, 2);
+                rig.pipe
+                    .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.out);
+            }),
+            ("the router going away", |rig| {
+                rig.pipe.shut_down(&mut rig.out)
+            }),
+        ];
+        for (way, home) in ways {
+            let mut rig = Rig::new(true);
+            rig.go_over();
+            home(&mut rig);
+            assert!(!rig.pipe.is_remote(), "{way}: home");
+            assert_eq!(rig.out.shows, 1, "{way}: shown once");
+            // Whatever comes after, here, shows nothing more and hides nothing.
+            rig.move_by(-10, 0);
+            rig.pipe.shut_down(&mut rig.out);
+            assert_eq!(rig.out.shows, 1, "{way}: shown once only");
+            assert_eq!(rig.out.hides.len(), 1, "{way}: hidden once, on the way out");
+        }
+    }
+
+    #[test]
+    fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_home_from_where_it_left(
+    ) {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.move_by(5, 0);
+        assert!(rig.out.pointer.is_empty(), "nothing in place yet");
+
+        rig.out.spot = Some(Point::new(1915, 500));
+        rig.cycle(&[]);
+        assert_eq!(rig.local_cursor(), (1915, 500));
+        rig.cycle(&[]);
+        rig.move_by(5, 0);
+        assert_eq!(rig.out.pointer.len(), 1, "moved there once");
+
+        // Home is where it left, not where it hid.
+        rig.pipe.shut_down(&mut rig.out);
+        assert_eq!(rig.local_cursor(), START);
+    }
+
+    #[test]
+    fn a_button_released_here_while_away_is_released_where_the_frozen_pointer_hides() {
+        let mut rig = Rig::new(true);
+        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
+        rig.go_over();
+        rig.out.spot = Some(Point::new(1915, 500));
+        rig.cycle(&[]);
+        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
+        let frame = rig.out.pointer.last().unwrap();
+        assert!(frame.contains(&(1, BTN_LEFT, 0)), "{frame:?}");
+        assert_eq!(rig.local_cursor(), (1915, 500));
+    }
+
     // --- through a real input endpoint ---------------------------------------
 
     /// Injects nothing: on a master the endpoint's injecting side is idle.
@@ -1334,5 +1572,85 @@ mod tests {
         }
         assert_eq!(rig.local_cursor(), START);
         assert_eq!(rig.out.releases, 1);
+        assert_eq!(rig.out.shows, 1);
+    }
+
+    #[tokio::test]
+    async fn through_the_endpoint_a_client_replaced_between_two_cycles_is_sent_an_enter_before_anything_else(
+    ) {
+        let outlet = Arc::new(Outlet::default());
+        let endpoint = crate::testing::endpoint();
+        let _server = crate::ipc::input::start(endpoint.clone(), Box::new(Nowhere), outlet.clone())
+            .expect("binds");
+        let mut first =
+            tokio::time::timeout(Duration::from_secs(5), crate::testing::connect(&endpoint))
+                .await
+                .expect("the endpoint accepts");
+
+        let mut driver = Driver::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !driver.connected() {
+            assert!(Instant::now() < deadline, "the client was never published");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            driver.refresh(&outlet);
+        }
+        let before = driver.client();
+
+        let mut rig = Rig::with_driver(true, Some((driver, outlet.clone())));
+        rig.go_over();
+        let batch = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut first))
+            .await
+            .expect("a batch arrives")
+            .expect("read");
+        assert_eq!(decode(&batch).unwrap(), [Wire::Enter { x: 0, y: 500 }]);
+
+        // The agent's restart: the stream closed and another opened, with no cycle in
+        // between to see it unconnected.
+        drop(first);
+        let mut second =
+            tokio::time::timeout(Duration::from_secs(5), crate::testing::connect(&endpoint))
+                .await
+                .expect("the endpoint accepts again");
+        let mut watcher = Driver::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            watcher.refresh(&outlet);
+            if watcher.client().is_some_and(|id| Some(id) != before) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the successor was never published"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        rig.move_by(11, 0);
+        assert!(!rig.pipe.is_remote(), "the crossing ended with its client");
+        assert!(!rig.out.grabbed, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1);
+
+        // Whatever the successor reads first, it is not input without an `Enter`.
+        rig.go_over();
+        rig.move_by(10, 0);
+        let mut seen = Vec::new();
+        while !seen
+            .iter()
+            .any(|event| matches!(event, Wire::Motion { .. }))
+        {
+            let batch = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut second))
+                .await
+                .expect("a batch arrives")
+                .expect("read");
+            seen.extend(decode(&batch).unwrap());
+        }
+        let first_input = seen
+            .iter()
+            .position(|event| !matches!(event, Wire::Leave))
+            .expect("something besides a Leave");
+        assert!(
+            matches!(seen[first_input], Wire::Enter { .. }),
+            "the successor read {seen:?}"
+        );
     }
 }

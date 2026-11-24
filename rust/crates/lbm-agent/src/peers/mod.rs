@@ -20,7 +20,8 @@
 //!   (`hook_input`); when the link ends, that connection is closed so the hook releases
 //!   what the stream left pressed;
 //! - **this machine is the master**: it keeps the remote's latest screens and shows them
-//!   in the state, and relays the batches its hook writes to the remote's link. **One
+//!   in the state, and relays the batches its hook writes to the remote's link — once the
+//!   agent says the hook's zones lead to that remote alone ([`Service::hook_ready`]). **One
 //!   remote at a time**: the selected remote (`SelectedRemote`) is the only one whose
 //!   screens are merged and the only one the stream goes to — it stays selected while
 //!   its link lives, and when it goes the linked remote with the lowest machine id
@@ -97,6 +98,13 @@ pub struct PeersState {
     /// remote is linked. Absent from the state of an agent older than the rule.
     #[serde(default)]
     pub selected_remote: Option<String>,
+    /// Which choice of the selected remote this state reflects: a new number at every
+    /// change of it (to another remote, another link of the same one, or none), never
+    /// repeated in the life of the process. The agent tags what it tells the manager of
+    /// the hook's zones with it ([`Service::hook_ready`]): a word about an earlier choice
+    /// then says nothing about this one. Not in the API.
+    #[serde(skip)]
+    pub selection: u64,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -314,6 +322,22 @@ impl Service {
             .is_ok()
     }
 
+    /// What the hook's zones are fit for: `Some(selection)` when every zone the hook holds,
+    /// and every one it was sent and has not yet confirmed, leads to no machine but the
+    /// remote selected in the state numbered `selection` ([`PeersState::selection`]);
+    /// `None` when that is not known.
+    ///
+    /// The hook makes the other machines' zones enterable exactly while the manager holds
+    /// a connection to its input endpoint, and a batch carries no destination: the
+    /// manager connects only while this names its current selection, or a crossing into
+    /// the zone of a remote no longer selected would send its `Enter`, clicks and keys to
+    /// the one that is.
+    pub fn hook_ready(&mut self, selection: Option<u64>) {
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::HookReady(selection));
+        }
+    }
+
     /// Turns the mode off for the agent's way out: the peers get `Bye`.
     pub async fn stop(&mut self) {
         if let Some(running) = self.running.take() {
@@ -493,6 +517,7 @@ impl Service {
             listen_address: None,
             error: self.failure.clone(),
             selected_remote: None,
+            selection: 0,
             peers: PeerStore::load(&self.directory)
                 .peers()
                 .iter()
@@ -561,6 +586,7 @@ mod tests {
             listen_address: None,
             error: None,
             selected_remote: Some(selected.to_owned()),
+            selection: 1,
             peers,
         }
     }

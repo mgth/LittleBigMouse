@@ -182,8 +182,13 @@ keyboard hook installed and the window that hides the cursor made.
 - **A timer** of the hook's thread, every 100 ms while the pointer is away only, lets a
   rescue held without autorepeat fire and a client that went be noticed without a move.
   The hook's watchdog, which reinstalls a hook Windows dropped when the cursor moves
-  with no move counted, stands down while the pointer is away: the cursor going onto
-  the hider is this process's doing.
+  with no move counted, still watches while the pointer is away — a dropped hook would
+  leave the mouse moving this machine's cursor while the keyboard drives the other —
+  and only lets pass the cursor being where the master put it itself (onto the hider,
+  back home). Reinstalling unhooks first, which brings the pointer home.
+- **No keyboard hook, no crossing.** Until the keyboard hook is installed, the other
+  machines' borders are walls (`Desk::can_drive`), tried again at most once a second:
+  otherwise a click in a field over there followed by typing would type here.
 - **Lock keys** are read with `GetKeyState` on the hooks' thread as the pointer crosses
   out (`Platform::locks`).
 

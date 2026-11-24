@@ -23,7 +23,7 @@
 //!   low-level hooks of a process below it seeing it (UIPI). See docs/multi-pc-etat.md.
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -65,6 +65,8 @@ const TICK_MS: u32 = 100;
 /// The system side of the master.
 pub(crate) struct WinDesk {
     hider: Hider,
+    /// The last time the keyboard hook was tried for because it was missing.
+    keyboard_tried: Option<Instant>,
 }
 
 impl Desk for WinDesk {
@@ -79,6 +81,7 @@ impl Desk for WinDesk {
     }
 
     fn set_cursor(&mut self, at: Point<i32>) {
+        PLACED.store(pack(at.x(), at.y()), Ordering::Relaxed);
         // SAFETY: no pointer.
         unsafe {
             let _ = SetCursorPos(at.x(), at.y());
@@ -183,6 +186,31 @@ impl Desk for WinDesk {
     fn key_down(&self, vk: u16) -> bool {
         down(vk)
     }
+
+    /// The keyboard hook is there; when it is not, it is tried again, at most once a
+    /// second, from here: the routing thread is the one that owns it.
+    fn can_drive(&mut self) -> bool {
+        if keyboard_hooked() {
+            return true;
+        }
+        let now = Instant::now();
+        if self
+            .keyboard_tried
+            .is_some_and(|at| now.duration_since(at) < KEYBOARD_RETRY)
+        {
+            return false;
+        }
+        self.keyboard_tried = Some(now);
+        set_keyboard_hook(true);
+        keyboard_hooked()
+    }
+}
+
+/// How long the master waits between two tries at the keyboard hook.
+const KEYBOARD_RETRY: std::time::Duration = std::time::Duration::from_secs(1);
+
+fn keyboard_hooked() -> bool {
+    !KEYBOARD.with(Cell::get).0.is_null()
 }
 
 fn down(vk: u16) -> bool {
@@ -192,14 +220,20 @@ fn down(vk: u16) -> bool {
 
 type Master = LlMaster<WinDesk, Driver>;
 
-/// The pointer is on another machine. Read by the hook's watchdog
-/// (`super::spawn_watchdog`), which would otherwise take the cursor moving onto what
-/// hides it, with no move of its own counted, for a hook Windows dropped.
-static AWAY: AtomicBool = AtomicBool::new(false);
+/// Where the master last put the cursor itself, packed; `u64::MAX` before it ever did.
+static PLACED: AtomicU64 = AtomicU64::new(u64::MAX);
 
-/// Whether the pointer is on another machine.
-pub(crate) fn away() -> bool {
-    AWAY.load(Ordering::Relaxed)
+fn pack(x: i32, y: i32) -> u64 {
+    (u64::from(x as u32) << 32) | u64::from(y as u32)
+}
+
+/// Whether the cursor at `(x, y)` is where the master put it — on what hides it, or
+/// back home — rather than where a mouse took it. The hook's watchdog
+/// (`super::spawn_watchdog`) reinstalls a mouse hook Windows dropped when the cursor
+/// moved with no move counted: a move of the master's own is no such sign, a mouse
+/// taking the cursor off the parking spot while the pointer is away is one.
+pub(crate) fn placed_by_master(x: i32, y: i32) -> bool {
+    PLACED.load(Ordering::Relaxed) == pack(x, y) || hider::parked_at() == Some((x, y))
 }
 
 thread_local! {
@@ -219,6 +253,7 @@ fn with<R>(f: impl FnOnce(&mut Master) -> R) -> Option<R> {
             LlMaster::new(
                 WinDesk {
                     hider: Hider::default(),
+                    keyboard_tried: None,
                 },
                 Driver::default(),
             )
@@ -268,7 +303,7 @@ fn set_keyboard_hook(wanted: bool) {
                 KEYBOARD.with(|k| k.set(hook));
             }
             Err(e) => eprintln!(
-                "[LittleBigMouse.Hook] multi-PC: no keyboard hook ({e}): typing stays on this machine"
+                "[LittleBigMouse.Hook] multi-PC: no keyboard hook ({e}): the other machines' borders stay walls"
             ),
         }
     } else if !wanted && installed {
@@ -289,7 +324,6 @@ fn sync_timer() {
             .and_then(|m| m.as_ref().map(LlMaster::is_remote))
     });
     let Some(away) = away else { return };
-    AWAY.store(away, Ordering::Relaxed);
     let timer = TIMER.with(Cell::get);
     if away && timer == 0 {
         // The foreground the pointer left from is judged at the first tick.

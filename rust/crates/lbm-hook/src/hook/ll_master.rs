@@ -114,6 +114,12 @@ pub(crate) trait Desk {
     fn show_cursor(&mut self);
     /// Whether the system still has the key of virtual-key code `vk` down.
     fn key_down(&self, vk: u16) -> bool;
+    /// Whether this machine can drive another one now: the keys can be taken there
+    /// along with the pointer. Not, and the other machines' borders are walls: a
+    /// person who clicks in a field over there and types would type here.
+    fn can_drive(&mut self) -> bool {
+        true
+    }
 }
 
 /// The input stream to the agent: [`Driver`] in the hook.
@@ -472,7 +478,8 @@ impl<D: Desk, L: Link> LlMaster<D, L> {
                 };
             }
         };
-        let enterable = connected && !self.crossing.walled_in();
+        // Only once the cycle found a client: asked of the system only then.
+        let enterable = connected && !self.crossing.walled_in() && self.desk.can_drive();
         engine.layout.set_remote_enterable(enterable);
         self.enterable = enterable;
         {
@@ -729,6 +736,8 @@ mod tests {
         shows: usize,
         keys_down: Vec<u16>,
         locks: Locks,
+        /// The keys cannot be taken over there.
+        no_keyboard: bool,
     }
 
     impl Desk for FakeDesk {
@@ -780,6 +789,9 @@ mod tests {
         }
         fn key_down(&self, vk: u16) -> bool {
             self.keys_down.contains(&vk)
+        }
+        fn can_drive(&mut self) -> bool {
+            !self.no_keyboard
         }
     }
 
@@ -890,6 +902,19 @@ mod tests {
         assert_eq!(rig.nudge(5, 0), None);
         assert_eq!(rig.nudge(40, 0), None);
         assert!(!rig.master.is_remote());
+    }
+
+    #[test]
+    fn without_the_keyboard_the_other_machine_is_behind_a_wall() {
+        let mut rig = Rig::new(true);
+        rig.master.desk.no_keyboard = true;
+        assert_eq!(rig.nudge(40, 0), Some(Verdict::Pass));
+        assert!(!rig.master.is_remote(), "the pointer stays here");
+        assert!(rig.sent().is_empty());
+        // Once the keys can be taken, the border opens.
+        rig.master.desk.no_keyboard = false;
+        rig.nudge(-30, 0);
+        rig.go_over();
     }
 
     #[test]

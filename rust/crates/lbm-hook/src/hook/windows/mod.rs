@@ -87,9 +87,16 @@ pub fn spawn_watchdog(shared: &'static Shared) {
             // We believe we are hooked and want to be, the mouse physically moved since the last
             // check, yet our hook saw nothing: the OS silently dropped it (LowLevelHooksTimeout).
             // Reinstall on the pump thread so crossing heals instead of staying dead until a restart.
-            // Away on another machine, the cursor is put onto what hides it by this
-            // process, with no move of the mouse: that is no dropped hook.
-            if hooked && want && pos != last_pos && moves == last_moves && !master::away() {
+            // A multi-PC master moves the cursor itself (onto what hides it, back
+            // home), with no move of the mouse: that is no dropped hook. Anywhere else
+            // it is one, the pointer being away or not — the mouse would then move this
+            // machine's cursor while the keyboard drives the other.
+            if hooked
+                && want
+                && pos != last_pos
+                && moves == last_moves
+                && !master::placed_by_master(pos.0, pos.1)
+            {
                 eprintln!(
                     "[LittleBigMouse.Hook] watchdog: reinstalling silently-dropped mouse hook"
                 );

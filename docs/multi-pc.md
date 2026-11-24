@@ -183,8 +183,12 @@ On a remote (`lbm-hook/src/remote`):
   and resistance carry over. When that id is already taken — a twin of a panel already
   in the layout (same serial; Linux tells local twins apart with `@{connector}`) — the
   monitor takes its source id instead. Windows names its local monitors otherwise
-  (`{pnp}{serial}_{week}_{year}_{checksum}`), so a Windows master does not get that
-  carry-over.
+  (`{pnp}{serial}_{week}_{year}_{checksum}`): a Windows master names the remote's
+  monitor that way, computed from the EDID the remote sent (`RemoteMonitor::local_id`,
+  `lbm_display::peer::IdForm`), then by its panel key, then by its source id. Through a
+  KVM the remote reads the block Windows reads here, so the panel keeps its id too, even
+  without a serial number. The panel key still decides that a panel seen by both
+  machines at once is one monitor.
 - **One profile file across a KVM switch**: a stored `ActiveSource` naming a source
   the layout does not hold now is ignored (the merge's choice stands), and a save keeps
   the stored sources of a monitor that the layout does not hold now when they remember

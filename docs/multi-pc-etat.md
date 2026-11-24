@@ -465,11 +465,10 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-- Autres outils de partage (PR #814, branche `feat/concurrent-input-sharing-v6`) : la ligne
-  « Autres outils de partage » ci-dessus et sa faiblesse.
-- `feat/mpc-remote-rulers` : les règles graduées sur les écrans de l'esclave (commande
-  `Overlay`, capacité `RemoteOverlay`, requête `PeerOverlay`), voir « Rulers on a
-  remote's screens » dans [`multi-pc.md`](multi-pc.md).
+La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; elle est
+décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les
+écrans de l'esclave (PR #817) le sont aussi, voir « Rulers on a remote's screens » dans
+[`multi-pc.md`](multi-pc.md).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

@@ -206,8 +206,6 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
 - **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
   viendrait après.
-- **État des verrous** (Verr. Maj, Verr. Num) : aucune synchronisation entre machines.
-- **Découverte** : l'adresse de l'esclave se tape à la main. mDNS serait un confort.
 - **Pare-feu Windows** : la règle d'entrée sur le port 24817 a été posée à la main
   pendant les essais ; l'installeur ne la crée pas.
 - **Retour d'erreur vers l'interface** : commutation d'entrée échouée, lien refusé.
@@ -288,6 +286,38 @@ qu'aucun pair n'est lié ou que l'option est coupée.
 - Qui porte le code sous Linux : l'agent n'a pas de connexion Wayland aujourd'hui, le
   hook en a une pour masquer le curseur. Le presse-papiers n'a rien à faire dans le
   chemin de l'entrée ; je le mettrais dans l'agent.
+
+## Fonctionnalités à envisager
+
+Des idées, pas des engagements ; aucune n'est commencée. Dans l'ordre d'utilité estimée.
+
+1. **Verrouiller le pointeur sur une machine** par un raccourci. Pour les jeux et le
+   plein écran, où l'on franchit le bord par accident. La reconnaissance d'un raccourci
+   dans le flux capturé existe déjà pour le raccourci de secours.
+2. **Raccourcis pour sauter d'une machine à l'autre** sans viser un bord, avec retour à
+   la dernière position. Utile quand les écrans ne sont pas côte à côte.
+3. **Synchroniser les verrous** (Verr. Maj, Verr. Num) à l'entrée sur l'esclave.
+4. **Indicateur de machine pilotée** dans le tray et dans l'état de l'agent :
+   aujourd'hui seul le curseur dit où va le clavier.
+5. **Réveil de l'esclave** : Wake-on-LAN à l'approche du bord, et pas de mise en veille
+   de l'écran de l'esclave pendant qu'on le pilote. Le WoL existe déjà dans le dépôt
+   pour les téléviseurs.
+6. **Verrouiller les deux sessions ensemble** : verrouiller le maître verrouille
+   l'esclave. Le déverrouillage à distance dépend du service Windows.
+7. **Touches système vers l'esclave** : choisir si Alt+Tab, la touche Windows et
+   consorts vont à la machine pilotée ou restent au maître.
+
+Moins prioritaires :
+
+- **Découverte automatique** des machines sur le réseau local.
+- **Suivre l'entrée du moniteur** : quand un écran partagé change d'entrée par ses
+  propres boutons, basculer la source active. Seulement si le moniteur le signale par
+  un événement, le projet excluant la scrutation.
+- **Molette et pointeur aux réglages de l'esclave** : vitesse et sens de défilement
+  viennent du maître aujourd'hui.
+
+Écartés : le partage audio et le transfert de fichiers autonome, hors du sujet de
+LittleBigMouse.
 
 ## macOS
 

@@ -1204,8 +1204,11 @@ impl Actor {
             // The remote ended the session of the stream it was being sent: what goes on
             // being sent is ignored there until an `Enter`. The hop ends here too, so that
             // the pointer comes home and the next crossing starts a session afresh.
+            // Only from the path the stream takes now: while it goes through the
+            // remote's service, its agent's word on a session is about none of ours.
             Control::InputReset
                 if live.info.hello.role == Role::Remote
+                    && self.relaying_via.is_none()
                     && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id)) =>
             {
                 eprintln!(
@@ -1238,6 +1241,7 @@ impl Actor {
                 live.blocked = block;
                 if blocked
                     && self.hook.driven()
+                    && self.relaying_via.is_none()
                     && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
                 {
                     eprintln!("[lbm-agent] multi-PC: the pointer comes home");
@@ -1393,8 +1397,10 @@ impl Actor {
             .get(&machine_id)
             .is_some_and(|live| live.id == link_id)
         {
-            // The remote's link it was announced on is gone or was replaced.
+            // The remote's link it was announced on is gone or was replaced; a newer one
+            // was not dialled for while this attempt was under way: it is now.
             tokio::spawn(async move { sender.close("its remote's link ended").await });
+            self.dial_service(&machine_id);
             return;
         }
         self.service_backoff.remove(&machine_id);
@@ -1448,6 +1454,15 @@ impl Actor {
         self.schedule_service_redial(machine_id);
     }
 
+    /// Closes the link with the service of `machine_id`, if there is one, and forgets
+    /// its backoff: its remote's link ended, or the remote was forgotten.
+    fn drop_service(&mut self, machine_id: &str, reason: &'static str) {
+        self.service_backoff.remove(machine_id);
+        if let Some(service) = self.services.remove(machine_id) {
+            tokio::spawn(async move { service.sender.close(reason).await });
+        }
+    }
+
     fn schedule_service_redial(&mut self, machine_id: &str) {
         if !self.links.contains_key(machine_id) {
             return;
@@ -1474,10 +1489,7 @@ impl Actor {
             return;
         }
         let live = self.links.remove(machine_id).expect("checked above");
-        if let Some(service) = self.services.remove(machine_id) {
-            tokio::spawn(async move { service.sender.close("its remote's link ended").await });
-        }
-        self.service_backoff.remove(machine_id);
+        self.drop_service(machine_id, "its remote's link ended");
         let peers = sharing_peers(&self.links);
         self.sharing.unlinked(machine_id, id, &peers);
         eprintln!(
@@ -1602,6 +1614,7 @@ impl Actor {
             let peers = sharing_peers(&self.links);
             self.sharing.unlinked(machine_id, live.id, &peers);
             tokio::spawn(async move { live.sender.close("forgotten").await });
+            self.drop_service(machine_id, "forgotten");
             self.select();
         }
         if stored || waiting {

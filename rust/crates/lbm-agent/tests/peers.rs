@@ -2836,3 +2836,123 @@ async fn a_service_that_ended_the_session_brings_the_masters_pointer_home_for_a_
     }
     assert_eq!(got, enter);
 }
+
+/// The desk linked with the tower and its service, the hook ready and connected:
+/// what the tests below start from.
+#[cfg(unix)]
+struct WithService {
+    _dirs: Vec<tempfile::TempDir>,
+    desk: Node,
+    tower: Identity,
+    tower_link: Link,
+    service_link: Link,
+    hook: tokio::net::UnixStream,
+}
+
+#[cfg(unix)]
+async fn driven_through_the_service() -> WithService {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let (service_dir, service, mut service_listener) =
+        a_remote("tower-service", link::Options::default()).await;
+    let (tower_dir, tower, mut tower_listener) =
+        a_remote_with_service("tower", &service_listener, service.fingerprint()).await;
+    let (desk_dir, hook_listener, endpoint) = a_master_of(&tower, &tower_listener);
+    let mut desk = Node::new(desk_dir.path(), Some(endpoint));
+    desk.turn_on(0, "desk").await;
+    let tower_link = linked_from(&mut tower_listener).await;
+    let mut service_link = linked_from(&mut service_listener).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    desk.hook_ready_for(tower.fingerprint()).await;
+    let (mut hook, _) = tokio::time::timeout(PATIENCE, hook_listener.accept())
+        .await
+        .expect("the agent connects to the hook")
+        .unwrap();
+    let enter = [InputEvent::Enter { x: 5, y: 5 }];
+    write_batch(&mut hook, &encode(&enter)).await.unwrap();
+    assert_eq!(next_input(&mut service_link).await, enter);
+    WithService {
+        _dirs: vec![service_dir, tower_dir, desk_dir],
+        desk,
+        tower,
+        tower_link,
+        service_link,
+        hook,
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_reset_from_the_agent_leaves_the_stream_through_the_service_alone() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let mut with = driven_through_the_service().await;
+    // Late word from the path the stream no longer takes.
+    with.tower_link
+        .sender()
+        .control(&Control::InputReset)
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let motion = [InputEvent::Motion { x: 6, y: 6 }];
+    write_batch(&mut with.hook, &encode(&motion)).await.unwrap();
+    // On the same connection, with no `Leave` before it: the hop goes on.
+    assert_eq!(next_input(&mut with.service_link).await, motion);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn forgetting_a_remote_closes_the_link_with_its_service() {
+    let mut with = driven_through_the_service().await;
+    with.desk
+        .ask(PeerRequest::Forget(with.tower.fingerprint().to_owned()))
+        .await
+        .unwrap();
+    let ended = tokio::time::timeout(PATIENCE, async {
+        loop {
+            match with.service_link.next().await {
+                Some(Event::Closed(_)) | None => return,
+                Some(_) => {}
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the service's link is still open");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_service_reached_for_a_replaced_link_is_dialled_again_for_the_current_one() {
+    let (_service_dir, service, mut service_listener) =
+        a_remote("tower-service", link::Options::default()).await;
+    let (_tower_dir, tower, mut tower_listener) =
+        a_remote_with_service("tower", &service_listener, service.fingerprint()).await;
+    let (desk_dir, _hook_listener, endpoint) = a_master_of(&tower, &tower_listener);
+    let mut desk = Node::new(desk_dir.path(), Some(endpoint));
+    desk.turn_on(0, "desk").await;
+    let tower_link = linked_from(&mut tower_listener).await;
+    // The master's first attempt at the service waits here, unanswered...
+    let first = tokio::time::timeout(PATIENCE, service_listener.next())
+        .await
+        .expect("the master dials the service")
+        .unwrap()
+        .unwrap();
+    // ...while the link with the tower's agent ends and is made again.
+    tower_link.sender().close("again").await;
+    drop(tower_link);
+    let _tower_link = linked_from(&mut tower_listener).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // The first attempt succeeds now, for a link that is gone: the master drops it and
+    // dials again, for the link of the moment.
+    let _ = first.accept().await;
+    let mut service_link = linked_from(&mut service_listener).await;
+    desk.until(|s| linked(s, tower.fingerprint())).await;
+    assert_eq!(service_link.peer().hello.role, Role::Master);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), service_link.next())
+            .await
+            .map_or(true, |event| !matches!(
+                event,
+                Some(Event::Closed(_)) | None
+            )),
+        "the second link with the service was closed too"
+    );
+}

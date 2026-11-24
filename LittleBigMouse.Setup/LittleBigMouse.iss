@@ -367,10 +367,14 @@ begin
       RemoveInputService
     else if InProgramFiles then
       InstallInputService
-    else
+    else begin
+      { Asked for and not installed: a failure for the exit code too. }
+      InputServiceFailure := True;
+      Log('Input service: not installed, the folder is not under Program Files');
       SuppressibleMsgBox('The input service runs with system rights, so it is installed only ' +
                          'in a folder under ' + ExpandConstant('{commonpf}') + '. ' +
                          'It was not installed.', mbInformation, MB_OK, IDOK);
+    end;
   end;
 end;
 

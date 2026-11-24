@@ -436,7 +436,9 @@ place and its physical size.
   while — and only while — rulers are shown.
 - **Never left behind**: they go when the master sends an empty set (rulers off,
   Escape, another mode, the remote leaving the map), when the master's frontend that
-  asked goes (the agent takes down what that connection asked for), when the link ends,
+  asked goes (the agent takes down, on each remote, the rulers that connection wrote
+  last; a window turning its rulers off or closing never takes down those another
+  window wrote since), when the link ends,
   when the mode is turned off on either side, when the remote's screens change (checked
   again; the master sends a new set from the new `Displays`), and when the surfaces
   report a display change. The surfaces and their thread exist only while shown.

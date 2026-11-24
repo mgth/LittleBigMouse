@@ -1872,6 +1872,49 @@ async fn the_rulers_a_frontend_shows_on_a_remote_go_down_when_the_frontend_goes(
 }
 
 #[tokio::test]
+async fn a_window_taking_its_rulers_down_leaves_those_another_window_wrote_since() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start_as(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        None,
+        &[lbm_net::wire::OVERLAY_CAPABILITY],
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let mut link = master.link_the_laptop().await;
+    let mut other = Frontend::connect(&master.api_endpoint).await;
+    let rulers = |by: &str| json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [{"monitor": by}] });
+    let none = json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [] });
+
+    // A shows its rulers, then B shows its own on the same remote.
+    master.frontend.ask(rulers("a")).await;
+    next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    other.ask(rulers("b")).await;
+    let (_, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert_eq!(bands, [json!({"monitor": "b"})]);
+    // A turns its rulers off, then goes: B's stay.
+    let answer = master.frontend.ask(none.clone()).await;
+    assert_eq!(answer["Result"], Value::Null, "{answer}");
+    drop(master.frontend);
+    assert_eq!(
+        next_overlay(&mut link, Duration::from_millis(500)).await,
+        None,
+        "B's rulers are B's to take down"
+    );
+    // B turns them off: down.
+    other.ask(none).await;
+    let (_, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert!(bands.is_empty());
+}
+
+#[tokio::test]
 async fn rulers_for_a_remote_too_old_to_draw_them_are_not_sent_and_the_user_is_told() {
     let tmp = tempfile::tempdir().unwrap();
     let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
@@ -2353,6 +2396,8 @@ fn last_load(fake: &FakeHook) -> (String, Option<lbm_ipc::protocol::Desktop>) {
 /// an agent: what it says on its link is the test's.
 struct Master {
     frontend: Frontend,
+    /// Where another frontend connects.
+    api_endpoint: String,
     fake: FakeHook,
     laptop: lbm_net::identity::Identity,
     listener: lbm_net::link::Listener,
@@ -2439,6 +2484,7 @@ impl Master {
         let alone = frontend.state(|s| s["Engine"] == "Running").await;
         Master {
             frontend,
+            api_endpoint,
             fake,
             laptop,
             listener,

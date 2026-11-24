@@ -70,8 +70,8 @@
 //! <- {"Id": 15, "Result": null}                                // "Bands": [] takes them down
 //! ```
 //!
-//! What a frontend shows with `PeerOverlay` is its own: when its connection ends, the
-//! agent takes down on every remote what that frontend asked for.
+//! The rulers on a remote are the frontend's that wrote them last: only its empty
+//! `Bands` or the end of its connection takes them down.
 
 use std::io;
 

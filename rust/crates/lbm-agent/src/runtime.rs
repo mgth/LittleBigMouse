@@ -89,10 +89,9 @@ pub struct Agent<W> {
     subscribers: Vec<api::Client>,
     /// The connection a live preview belongs to, while one is running.
     previewing_for: Option<api::Client>,
-    /// The frontend whose rulers are shown on remotes (`PeerOverlay`), and those remotes:
-    /// taken down when it goes.
-    overlay_for: Option<api::Client>,
-    overlaid_remotes: std::collections::BTreeSet<String>,
+    /// The rulers shown on remotes (`PeerOverlay`): for each remote, the frontend that
+    /// wrote its rulers last, the only one whose word or departure takes them down.
+    overlay_owners: std::collections::BTreeMap<String, api::Client>,
     /// What the subscribers last saw.
     published: Option<Snapshot>,
     hook_connected: bool,
@@ -201,8 +200,7 @@ impl<W: AgentWorld> Agent<W> {
             calls: None,
             subscribers: Vec::new(),
             previewing_for: None,
-            overlay_for: None,
-            overlaid_remotes: std::collections::BTreeSet::new(),
+            overlay_owners: std::collections::BTreeMap::new(),
             published: None,
             hook_connected: false,
             quitting: false,
@@ -810,8 +808,10 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     /// `PeerOverlay`: the rulers a frontend wants on a remote's screens, handed to the
-    /// manager. The frontend is their owner: when it goes, they go ([`Self::left`]). A
-    /// second frontend asking takes the ownership of everything shown.
+    /// manager. The frontend that wrote a remote's rulers last owns them: only it takes
+    /// them down, by asking for none or by going ([`Self::left`]). Another frontend asking
+    /// for none there is answered and changes nothing — its own rulers were replaced —
+    /// so that a window closing its rulers never takes down those of a window still open.
     fn peer_overlay(
         &mut self,
         client: &api::Client,
@@ -822,14 +822,21 @@ impl<W: AgentWorld> Agent<W> {
             return Err("the multi-PC mode is off".into());
         };
         let shown = !bands.is_empty();
+        if !shown
+            && self
+                .overlay_owners
+                .get(&machine_id)
+                .is_some_and(|owner| !owner.is(client))
+        {
+            return Ok(serde_json::Value::Null);
+        }
         if !peers.overlay(&machine_id, bands) {
             return Err("the multi-PC mode is not running".into());
         }
         if shown {
-            self.overlaid_remotes.insert(machine_id);
-            self.overlay_for = Some(client.clone());
+            self.overlay_owners.insert(machine_id, client.clone());
         } else {
-            self.overlaid_remotes.remove(&machine_id);
+            self.overlay_owners.remove(&machine_id);
         }
         Ok(serde_json::Value::Null)
     }
@@ -1295,18 +1302,21 @@ impl<W: AgentWorld> Agent<W> {
     /// tray reconnecting, must not end somebody else's preview.
     fn left(&mut self, client: &api::Client) {
         self.subscribers.retain(|s| !s.is(client));
-        if self.overlay_for.as_ref().is_some_and(|o| o.is(client)) {
-            self.overlay_for = None;
-            let machines = std::mem::take(&mut self.overlaid_remotes);
-            if !machines.is_empty() {
-                eprintln!(
-                    "[lbm-agent] the frontend showing rulers has gone: taking them down on the remotes"
-                );
-            }
+        let machines: Vec<String> = self
+            .overlay_owners
+            .iter()
+            .filter(|(_, owner)| owner.is(client))
+            .map(|(machine_id, _)| machine_id.clone())
+            .collect();
+        if !machines.is_empty() {
+            eprintln!(
+                "[lbm-agent] the frontend showing rulers has gone: taking them down on the remotes"
+            );
+        }
+        for machine_id in machines {
+            self.overlay_owners.remove(&machine_id);
             if let Some(peers) = &mut self.peers {
-                for machine_id in machines {
-                    peers.overlay(&machine_id, Vec::new());
-                }
+                peers.overlay(&machine_id, Vec::new());
             }
         }
         if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {

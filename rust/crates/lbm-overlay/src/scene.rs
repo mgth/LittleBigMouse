@@ -175,6 +175,7 @@ pub struct Binding {
     screen: Pixels,
     side: Side,
     guide: bool,
+    passive: bool,
 }
 /// For each band, the previous surface with the same binding, each one used at most once.
 /// A band without one needs a new surface; previous surfaces left out are released.
@@ -204,6 +205,11 @@ pub struct Band {
     pub content: Content,
     #[serde(default)]
     pub selected: Option<usize>,
+    /// Drawn for the eye only: the pointer and the keyboard go through it to whatever is
+    /// beneath. What a process with no editor to hand gestures to shows (the rulers a
+    /// master asks a remote machine to draw, docs/multi-pc.md).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub passive: bool,
 }
 impl Band {
     pub fn binding(&self) -> Binding {
@@ -212,7 +218,13 @@ impl Band {
             screen: self.screen,
             side: self.side,
             guide: matches!(self.content, Content::Guide { .. }),
+            passive: self.passive,
         }
+    }
+    /// Whether the band takes the pointer and the keyboard: never a reference line, which
+    /// lies over another band, nor a passive band.
+    pub fn interactive(&self) -> bool {
+        !self.passive && !matches!(self.content, Content::Guide { .. })
     }
     pub fn axis_pixels(&self) -> i32 {
         if self.side.vertical() {
@@ -385,6 +397,7 @@ pub fn from_layout(
             };
             bands.push(Band {
                 selected: None,
+                passive: false,
                 monitor: monitor.id.clone(),
                 connector: source
                     .interface_path

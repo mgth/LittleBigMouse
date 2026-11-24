@@ -2313,3 +2313,348 @@ async fn a_remote_whose_injection_is_blocked_brings_the_pointer_home_and_the_sta
     desk.until(|s| !linked(s, laptop.fingerprint()) && blocked(s).is_none())
         .await;
 }
+
+/// Rulers on a remote's screens: what this machine's painter was asked to do.
+mod rulers {
+    use super::*;
+    use lbm_agent::peers::overlay::{Painter, Shown};
+    use lbm_overlay::scene::{Band, Content, Pixels, Side};
+    use lbm_overlay::standalone::OnError;
+    use tokio::sync::mpsc;
+
+    #[derive(Debug, PartialEq)]
+    pub enum Drawn {
+        Show(Vec<Band>),
+        Update(Vec<Band>),
+        Hide,
+    }
+
+    struct Recorded(mpsc::UnboundedSender<Drawn>);
+    impl Shown for Recorded {
+        fn update(&self, bands: Vec<Band>) {
+            let _ = self.0.send(Drawn::Update(bands));
+        }
+    }
+    impl Drop for Recorded {
+        fn drop(&mut self) {
+            let _ = self.0.send(Drawn::Hide);
+        }
+    }
+
+    /// A painter that draws nothing and says what it was asked, with the way to report
+    /// a failure of what it shows, as a display change would.
+    pub fn recorder() -> (
+        Painter,
+        mpsc::UnboundedReceiver<Drawn>,
+        mpsc::UnboundedReceiver<OnError>,
+    ) {
+        let (drawn, drawn_rx) = mpsc::unbounded_channel();
+        let (errors, errors_rx) = mpsc::unbounded_channel();
+        let painter = Painter::new(move |bands, on_error: OnError| {
+            let _ = drawn.send(Drawn::Show(bands));
+            let _ = errors.send(on_error);
+            Ok(Box::new(Recorded(drawn.clone())) as Box<dyn Shown>)
+        });
+        (painter, drawn_rx, errors_rx)
+    }
+
+    pub async fn next(drawn: &mut mpsc::UnboundedReceiver<Drawn>) -> Drawn {
+        tokio::time::timeout(PATIENCE, drawn.recv())
+            .await
+            .expect("drawn in time")
+            .expect("the painter")
+    }
+
+    pub fn ruler(display: &PeerDisplay, zero_mm: f64) -> Value {
+        let screen = Pixels {
+            x: display.x,
+            y: display.y,
+            width: display.width,
+            height: display.height,
+        };
+        serde_json::to_value(Band {
+            monitor: display.id.clone(),
+            connector: display.connector.clone(),
+            screen,
+            rect: Pixels {
+                height: 100,
+                ..screen
+            },
+            side: Side::Top,
+            scale: 1.0,
+            axis_mm: display.width_mm,
+            cross_pixels_per_mm: 3.6,
+            content: Content::Ruler {
+                zero_mm,
+                measured_mm: 600.0,
+            },
+            selected: None,
+            passive: false,
+        })
+        .unwrap()
+    }
+
+    /// A tower linked to a test master that announces nothing special, the tower's
+    /// rulers recorded.
+    pub async fn tower_and_master(
+        tower_dir: &Path,
+    ) -> (
+        Node,
+        Link,
+        mpsc::UnboundedReceiver<Drawn>,
+        mpsc::UnboundedReceiver<OnError>,
+    ) {
+        let master_dir = tempfile::tempdir().unwrap();
+        let master = Identity::load_or_create(master_dir.path()).unwrap();
+        pair(tower_dir, master.fingerprint(), "", Role::Master);
+        let mut tower = Node::new(tower_dir, None);
+        let (painter, drawn, errors) = recorder();
+        tower.service.set_overlay_painter(painter);
+        tower
+            .service
+            .local_displays(vec![display("A", 0), display("B", 1920)]);
+        let state = tower.turn_on(0, "tower").await;
+        let link = master_connects(&master, &state.listen_address.unwrap())
+            .await
+            .accept()
+            .await
+            .unwrap();
+        assert!(
+            link.peer()
+                .hello
+                .capabilities
+                .iter()
+                .any(|c| c == lbm_net::wire::OVERLAY_CAPABILITY),
+            "the tower says it draws rulers"
+        );
+        tower.until(|s| linked(s, master.fingerprint())).await;
+        (tower, link, drawn, errors)
+    }
+
+    pub async fn overlay(link: &Link, revision: u64, bands: Vec<Value>) {
+        link.sender()
+            .control(&Control::Overlay { revision, bands })
+            .await
+            .unwrap();
+    }
+
+    /// The next `Overlay` a remote is sent.
+    pub async fn next_overlay(link: &mut Link) -> (u64, Vec<Value>) {
+        loop {
+            if let Control::Overlay { revision, bands } = next_control(link).await {
+                return (revision, bands);
+            }
+        }
+    }
+
+    /// The next `OverlayFailed` the master is sent.
+    pub async fn failure(link: &mut Link) -> (u64, String) {
+        loop {
+            match next_control(link).await {
+                Control::OverlayFailed { revision, error } => return (revision, error),
+                Control::Displays { .. } | Control::Wallpapers { .. } => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_masters_rulers_are_drawn_checked_and_taken_down_with_its_link() {
+    use rulers::*;
+    let tower_dir = tempfile::tempdir().unwrap();
+    let (_tower, mut link, mut drawn, _errors) = tower_and_master(tower_dir.path()).await;
+
+    overlay(&link, 1, vec![ruler(&display("A", 0), 0.0)]).await;
+    let Drawn::Show(bands) = next(&mut drawn).await else {
+        panic!("shown");
+    };
+    assert_eq!(bands.len(), 1);
+    assert_eq!(bands[0].connector, "A-connector");
+
+    // A drag moves the zero: the same surfaces, redrawn.
+    overlay(
+        &link,
+        3,
+        vec![
+            ruler(&display("A", 0), 12.0),
+            ruler(&display("B", 1920), 12.0),
+        ],
+    )
+    .await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Update(b) if b.len() == 2));
+    // An older one that overtook nothing is ignored.
+    overlay(&link, 2, vec![ruler(&display("A", 0), 5.0)]).await;
+    // A ruler for a screen as the master wrongly believes it is: refused, taken down,
+    // and the master told.
+    overlay(&link, 4, vec![ruler(&display("B", 2560), 0.0)]).await;
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+    let (revision, error) = failure(&mut link).await;
+    assert_eq!(revision, 4);
+    assert!(error.contains("screens changed"), "{error}");
+
+    // Shown again, then the link drops: nothing is left on the screens.
+    overlay(&link, 5, vec![ruler(&display("A", 0), 0.0)]).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    drop(link);
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+}
+
+#[tokio::test]
+async fn a_remotes_rulers_go_when_its_screens_change_or_the_mode_is_turned_off() {
+    use rulers::*;
+    let tower_dir = tempfile::tempdir().unwrap();
+    let (mut tower, mut link, mut drawn, mut errors) = tower_and_master(tower_dir.path()).await;
+
+    overlay(&link, 1, vec![ruler(&display("B", 1920), 0.0)]).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    // B moves: its ruler no longer falls where it should.
+    tower
+        .service
+        .local_displays(vec![display("A", 0), display("B", 2560)]);
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+    let (_, error) = failure(&mut link).await;
+    assert!(error.contains("B-connector"), "{error}");
+
+    // The surfaces themselves fail (a display change they saw first): the master is told.
+    overlay(&link, 2, vec![ruler(&display("B", 2560), 0.0)]).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    let _first = errors.recv().await.unwrap();
+    let on_error = errors.recv().await.unwrap();
+    on_error("Displays changed while showing overlays.".into());
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+    let (revision, error) = failure(&mut link).await;
+    assert_eq!(
+        (revision, error.as_str()),
+        (2, "Displays changed while showing overlays.")
+    );
+
+    // Shown again, then the mode is turned off.
+    overlay(&link, 3, vec![ruler(&display("A", 0), 0.0)]).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    tower
+        .ask(PeerRequest::Set {
+            enabled: false,
+            port: None,
+            name: None,
+            pointer_lock_shortcut: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+}
+
+#[tokio::test]
+async fn only_a_master_draws_on_another_machine() {
+    use rulers::*;
+    // The desk is the master of the laptop: the laptop's word is no order to the desk.
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    let (painter, mut drawn, _errors) = recorder();
+    desk.service.set_overlay_painter(painter);
+    desk.service.local_displays(vec![display("A", 0)]);
+    desk.turn_on(0, "desk").await;
+    let laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    overlay(&laptop_link, 1, vec![ruler(&display("A", 0), 0.0)]).await;
+    let quiet = tokio::time::timeout(Duration::from_millis(300), drawn.recv()).await;
+    assert!(quiet.is_err(), "nothing drawn: {quiet:?}");
+}
+
+#[tokio::test]
+async fn a_master_shows_a_remotes_failure_of_its_latest_rulers_only() {
+    use rulers::*;
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello {
+            capabilities: vec![lbm_net::wire::OVERLAY_CAPABILITY.into()],
+            ..Hello::new("laptop", "0", Role::Remote)
+        },
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    assert!(desk
+        .service
+        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 0.0)]));
+    let (first, bands) = next_overlay(&mut laptop_link).await;
+    assert_eq!(bands.len(), 1);
+    desk.service
+        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 9.0)]);
+    let (latest, _) = next_overlay(&mut laptop_link).await;
+    assert!(latest > first);
+
+    // The first one failed, but the latest is what is asked for now: nothing to say.
+    let failed = |revision| Control::OverlayFailed {
+        revision,
+        error: "Screen bounds changed.".into(),
+    };
+    laptop_link.sender().control(&failed(first)).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let state = desk.state().await;
+    assert_eq!(
+        peer(&state, laptop.fingerprint()).unwrap().overlay_error,
+        None
+    );
+    // The latest failed: the user is told, until the rulers are asked for again.
+    laptop_link.sender().control(&failed(latest)).await.unwrap();
+    let told = desk
+        .until(|s| peer(s, laptop.fingerprint()).is_some_and(|p| p.overlay_error.is_some()))
+        .await;
+    assert_eq!(
+        peer(&told, laptop.fingerprint())
+            .unwrap()
+            .overlay_error
+            .as_deref(),
+        Some("Screen bounds changed.")
+    );
+    desk.service.overlay(laptop.fingerprint(), Vec::new());
+    let (_, bands) = next_overlay(&mut laptop_link).await;
+    assert!(bands.is_empty());
+    desk.until(|s| peer(s, laptop.fingerprint()).is_some_and(|p| p.overlay_error.is_none()))
+        .await;
+}

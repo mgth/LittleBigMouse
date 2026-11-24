@@ -34,6 +34,7 @@
 mod actor;
 pub mod hook_input;
 pub mod local;
+pub mod overlay;
 pub mod settings;
 pub mod wallpapers;
 
@@ -81,6 +82,11 @@ pub struct PeerEntry {
     /// Additive: absent from an older agent's state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<LinkProblem>,
+    /// Why this remote does not show the rulers this machine's editor asked it to show
+    /// (`PeerOverlay`); absent while it shows them, or when none were asked for.
+    /// Additive: absent from an older agent's state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay_error: Option<String>,
     /// A remote linked to this machine says Windows drops the input this machine sends
     /// it, and why (`Control::InjectionBlocked`). Kept
     /// until it says otherwise or the link ends. Additive: absent when none.
@@ -417,6 +423,8 @@ pub struct Service {
     notices_rx: Option<mpsc::UnboundedReceiver<Notice>>,
     /// What this machine's hook last said it reads ([`Service::hook_reads_locks`]).
     hook_reads_locks: bool,
+    /// What draws the rulers a master of this machine asks for.
+    painter: overlay::Painter,
 }
 
 impl Service {
@@ -435,6 +443,7 @@ impl Service {
             notices,
             notices_rx: Some(notices_rx),
             hook_reads_locks: false,
+            painter: overlay::Painter::default(),
         };
         if service.settings.enabled {
             service.start(None);
@@ -560,6 +569,29 @@ impl Service {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::HookReady(selection));
         }
+    }
+
+    /// What draws the rulers a master of this machine asks for, from the next start of
+    /// the manager on: for tests, which must not draw on the screens of the machine
+    /// running them.
+    pub fn set_overlay_painter(&mut self, painter: overlay::Painter) {
+        self.painter = painter;
+    }
+
+    /// The rulers this machine's editor wants on the screens of its remote `machine_id`
+    /// (`PeerOverlay`): `lbm_overlay::scene::Band`s in that remote's desktop pixels;
+    /// none takes them down. Whether the manager runs to be told.
+    pub fn overlay(&mut self, machine_id: &str, bands: Vec<Value>) -> bool {
+        let Some(running) = &self.running else {
+            return false;
+        };
+        running
+            .commands
+            .send(Command::Overlay {
+                machine_id: machine_id.to_owned(),
+                bands,
+            })
+            .is_ok()
     }
 
     /// Turns the mode off for the agent's way out: the peers get `Bye`.
@@ -741,6 +773,7 @@ impl Service {
                 .unwrap_or_default(),
             displays: self.displays.clone(),
             notices: self.notices.clone(),
+            painter: self.painter.clone(),
         };
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (started, started_rx) = oneshot::channel();
@@ -793,6 +826,7 @@ impl Service {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: None,
+                    overlay_error: None,
                     injection_blocked: None,
                 })
                 .collect(),
@@ -837,6 +871,7 @@ mod tests {
             role,
             state,
             problem: None,
+            overlay_error: None,
             injection_blocked: None,
         }
     }

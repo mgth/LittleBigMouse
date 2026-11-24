@@ -56,22 +56,26 @@ pub fn relaunch_arguments(
 /// The options whose value is a path.
 const PATH_OPTIONS: &[&str] = &["--config-dir", "--data-dir", "--hook", "--ui"];
 
-/// `args` with every relative path option resolved against `launch_dir`.
+/// `args` with every path option that is not absolute made absolute, here, in the
+/// directory this agent was launched from.
 ///
 /// The relaunch does not start where this agent was started: `relaunch` gives
 /// `ShellExecuteW` the executable's own directory, so a relative `--config-dir profiles`
 /// forwarded as typed would name another directory in the elevated agent — another
-/// profile, read and written under the installation directory. Resolving here keeps
-/// the meaning the user gave it; absolute paths and every other argument pass unchanged.
-pub fn anchor_path_arguments(
-    args: impl IntoIterator<Item = String>,
-    launch_dir: &Path,
-) -> Vec<String> {
+/// profile, read and written under the installation directory. `std::path::absolute`
+/// rather than a join onto the current directory: under Windows it also resolves the
+/// drive-relative form (`C:profiles`), which a join keeps relative to whatever the
+/// current directory of that drive is in the elevated process. Absolute paths and every
+/// other argument pass unchanged; a path that cannot be resolved is forwarded as typed.
+pub fn anchor_path_arguments(args: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut anchored = Vec::new();
     let mut takes_path = false;
     for arg in args {
-        let arg = if takes_path && Path::new(&arg).is_relative() {
-            launch_dir.join(&arg).to_string_lossy().into_owned()
+        let path = Path::new(&arg);
+        let arg = if takes_path && !path.is_absolute() {
+            std::path::absolute(path)
+                .map(|absolute| absolute.to_string_lossy().into_owned())
+                .unwrap_or(arg)
         } else {
             arg
         };
@@ -280,9 +284,9 @@ mod tests {
 
     #[test]
     fn a_relative_path_option_keeps_its_meaning_across_the_relaunch() {
-        // Distinct launch and executable directories: the relaunch starts in the
-        // executable's, so a path left relative would move.
-        let launch = std::env::temp_dir().join("launch");
+        // Resolved in the launching process, so the relaunch's own working directory
+        // (the executable's) no longer matters.
+        let launch = std::env::current_dir().unwrap();
         let absolute = std::env::temp_dir().join("elsewhere").join("data");
         let args = [
             "--config-dir",
@@ -290,7 +294,7 @@ mod tests {
             "--data-dir",
             absolute.to_str().unwrap(),
             "--hook",
-            "bin/hook.exe",
+            "hook.exe",
             "--ui",
             "app.exe",
             "--fake-hook",
@@ -299,14 +303,14 @@ mod tests {
         .map(str::to_owned);
         let at = |relative: &str| launch.join(relative).to_string_lossy().into_owned();
         assert_eq!(
-            anchor_path_arguments(args, &launch),
+            anchor_path_arguments(args),
             [
                 "--config-dir".to_owned(),
                 at("profiles"),
                 "--data-dir".to_owned(),
                 absolute.to_string_lossy().into_owned(),
                 "--hook".to_owned(),
-                at("bin/hook.exe"),
+                at("hook.exe"),
                 "--ui".to_owned(),
                 at("app.exe"),
                 "--fake-hook".to_owned(),
@@ -317,14 +321,27 @@ mod tests {
 
     #[test]
     fn only_the_value_of_a_path_option_is_resolved() {
-        let launch = std::env::temp_dir();
         let args = ["--no-tray", "profiles", "--config-dir"].map(str::to_owned);
         // A bare word is no path option's value, and an option missing its value is
         // left for the argument parser to refuse.
         assert_eq!(
-            anchor_path_arguments(args, &launch),
+            anchor_path_arguments(args),
             ["--no-tray", "profiles", "--config-dir"]
         );
+    }
+
+    /// `C:profiles` is relative to the current directory *of drive C*: joined onto the
+    /// launch directory it stayed drive-relative, and the elevated agent read it from
+    /// the installation directory (seen in review, under Wine).
+    #[cfg(windows)]
+    #[test]
+    fn a_drive_relative_path_option_is_made_absolute() {
+        let args = ["--config-dir", "C:profiles"].map(str::to_owned);
+        let anchored = anchor_path_arguments(args);
+        let resolved = Path::new(&anchored[1]);
+        assert!(resolved.is_absolute(), "{resolved:?} is still relative");
+        assert!(anchored[1].starts_with(r"C:\"), "{resolved:?} left drive C");
+        assert_eq!(resolved.file_name().unwrap(), "profiles");
     }
 
     #[test]

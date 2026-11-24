@@ -447,9 +447,8 @@ fn relaunch_elevated(config_dir: Option<&std::path::Path>) -> bool {
     }
     // Resolved before forwarding: the elevated agent starts in this executable's
     // directory, not in the one this agent was launched from.
-    let launch_dir = std::env::current_dir().unwrap_or_default();
     let arguments = elevation::relaunch_arguments(
-        elevation::anchor_path_arguments(std::env::args().skip(1), &launch_dir),
+        elevation::anchor_path_arguments(std::env::args().skip(1)),
         std::env::vars().filter(|(name, _)| {
             elevation::is_diagnostic_variable(std::ffi::OsStr::new(name.as_str()))
         }),

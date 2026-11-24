@@ -357,6 +357,8 @@ begin
   if CurUninstallStep = usPostUninstall then begin
     DelTree(ExpandConstant('{commonappdata}\LittleBigMouse\service'), True, True, True);
     RegDeleteKeyIncludingSubkeys(HKLM64, 'SOFTWARE\LittleBigMouse\InputService');
+    { The service writes its offer there, and nothing else of ours lives under it yet. }
+    RegDeleteKeyIfEmpty(HKLM64, 'SOFTWARE\LittleBigMouse');
   end;
 end;
 

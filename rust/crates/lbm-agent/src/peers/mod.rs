@@ -244,13 +244,17 @@ pub enum Notice {
         from: String,
         display: String,
         value: u16,
+        /// The master's number for the request, to give back with the answer.
+        request: Option<u64>,
     },
     /// A remote of this machine says how the `SelectInput` this machine sent it went
     /// (`Control::InputSwitched`): `error` is why it could not, `None` when it did.
+    /// `request` is the number this machine gave the request.
     InputSwitched {
         from: String,
         display: String,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     },
 }
@@ -395,7 +399,13 @@ impl Service {
     /// how it went with `InputSwitched` ([`Notice::InputSwitched`]); an older one says
     /// nothing, and what it shows next is the display change that follows. Whether it
     /// could be handed to the manager.
-    pub fn select_input(&mut self, machine_id: &str, display: &str, value: u16) -> bool {
+    pub fn select_input(
+        &mut self,
+        machine_id: &str,
+        display: &str,
+        value: u16,
+        request: Option<u64>,
+    ) -> bool {
         let Some(running) = &self.running else {
             return false;
         };
@@ -405,18 +415,20 @@ impl Service {
                 machine_id: machine_id.to_owned(),
                 display: display.to_owned(),
                 value,
+                request,
             })
             .is_ok()
     }
 
     /// Tells this machine's master `machine_id` how its `SelectInput` for `display` and
-    /// `value` went (`Control::InputSwitched`): `error` is why it failed. Whether it
-    /// could be handed to the manager.
+    /// `value`, numbered `request`, went (`Control::InputSwitched`): `error` is why it
+    /// failed. Whether it could be handed to the manager.
     pub fn input_switched(
         &mut self,
         machine_id: &str,
         display: &str,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     ) -> bool {
         let Some(running) = &self.running else {
@@ -428,6 +440,7 @@ impl Service {
                 machine_id: machine_id.to_owned(),
                 display: display.to_owned(),
                 value,
+                request,
                 error,
             })
             .is_ok()

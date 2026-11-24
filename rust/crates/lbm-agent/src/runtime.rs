@@ -68,6 +68,7 @@ enum VcpEvent {
         from: String,
         display: String,
         value: u16,
+        request: Option<u64>,
         result: Result<bool, String>,
     },
 }
@@ -295,9 +296,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.shortcut_unavailable.as_deref(),
                 self.world.rescue_shortcut().as_deref(),
             ),
-            input_switch_failures: self
-                .input_failures
-                .current(|monitor| self.world.has_monitor(monitor)),
+            input_switch_failures: self.input_failures.current(),
         }
     }
 
@@ -311,6 +310,11 @@ impl<W: AgentWorld> Agent<W> {
 
     /// Sends the state to the subscribers when it changed since they last saw it.
     fn publish(&mut self) {
+        // A panel gone from the layout takes what was said of it along: plugged back,
+        // it starts with nothing.
+        let world = &self.world;
+        self.input_failures
+            .retain(|monitor| world.has_monitor(monitor));
         let snapshot = self.snapshot();
         if self.published.as_ref() == Some(&snapshot) {
             return;
@@ -905,7 +909,7 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     fn input_switched(&mut self, switch: InputSwitch, outcome: Outcome) {
-        self.input_failures.switched(&switch, &outcome);
+        let request = self.input_failures.switched(&switch, &outcome);
         let (monitor, value) = (&switch.monitor, switch.value);
         match outcome {
             Outcome::AlreadyShown => {
@@ -920,7 +924,7 @@ impl<W: AgentWorld> Agent<W> {
                 let sent = self
                     .peers
                     .as_mut()
-                    .is_some_and(|p| p.select_input(&ask.machine_id, &ask.display, value));
+                    .is_some_and(|p| p.select_input(&ask.machine_id, &ask.display, value, request));
                 if !sent {
                     self.switch_given_up(&switch, &format!("{why}; the multi-PC mode is off"));
                 }
@@ -948,12 +952,12 @@ impl<W: AgentWorld> Agent<W> {
     }
 
     /// This machine's master asks for one of its monitors to be switched.
-    fn select_input(&mut self, from: String, display: String, value: u16) {
+    fn select_input(&mut self, from: String, display: String, value: u16, request: Option<u64>) {
         let target = match self.world.select_input_target(&display) {
             Ok(target) => target,
             Err(error) => {
                 eprintln!("[lbm-agent] {from} asked to switch {display}: {error}");
-                self.tell_master_switched(&from, &display, value, Some(error));
+                self.tell_master_switched(&from, &display, value, request, Some(error));
                 return;
             }
         };
@@ -968,6 +972,7 @@ impl<W: AgentWorld> Agent<W> {
                 from,
                 display,
                 value,
+                request,
                 result,
             });
         });
@@ -980,6 +985,7 @@ impl<W: AgentWorld> Agent<W> {
         from: String,
         display: String,
         value: u16,
+        request: Option<u64>,
         result: Result<bool, String>,
     ) {
         let error = match result {
@@ -998,7 +1004,7 @@ impl<W: AgentWorld> Agent<W> {
                 Some(error)
             }
         };
-        self.tell_master_switched(&from, &display, value, error);
+        self.tell_master_switched(&from, &display, value, request, error);
     }
 
     fn tell_master_switched(
@@ -1006,10 +1012,11 @@ impl<W: AgentWorld> Agent<W> {
         from: &str,
         display: &str,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     ) {
         if let Some(peers) = &mut self.peers {
-            peers.input_switched(from, display, value, error);
+            peers.input_switched(from, display, value, request, error);
         }
     }
 
@@ -1019,10 +1026,11 @@ impl<W: AgentWorld> Agent<W> {
         from: String,
         display: String,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     ) {
         let failed = error.clone();
-        match self.input_failures.answered(&from, &display, value, error) {
+        match self.input_failures.answered(&from, request, error) {
             Some(switch) => {
                 eprintln!(
                     "[lbm-agent] {} could not be switched to input {value:#04x}: {from} could not either: {}",
@@ -1461,11 +1469,11 @@ impl<W: AgentWorld> Agent<W> {
                 } => {
                     match notice {
                         Some(Notice::Peers(state)) => self.peers_changed(state),
-                        Some(Notice::SelectInput { from, display, value }) => {
-                            self.select_input(from, display, value)
+                        Some(Notice::SelectInput { from, display, value, request }) => {
+                            self.select_input(from, display, value, request)
                         }
-                        Some(Notice::InputSwitched { from, display, value, error }) => {
-                            self.remote_switched(from, display, value, error)
+                        Some(Notice::InputSwitched { from, display, value, request, error }) => {
+                            self.remote_switched(from, display, value, request, error)
                         }
                         None => peer_notices = None,
                     }
@@ -1484,8 +1492,8 @@ impl<W: AgentWorld> Agent<W> {
                         Some(VcpEvent::Switched { switch, outcome }) => {
                             self.input_switched(*switch, outcome)
                         }
-                        Some(VcpEvent::Selected { from, display, value, result }) => {
-                            self.selected(from, display, value, result)
+                        Some(VcpEvent::Selected { from, display, value, request, result }) => {
+                            self.selected(from, display, value, request, result)
                         }
                         None => vcp_events = None,
                     }

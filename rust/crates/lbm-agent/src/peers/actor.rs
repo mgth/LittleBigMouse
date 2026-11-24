@@ -72,12 +72,14 @@ pub(super) enum Command {
         machine_id: String,
         display: String,
         value: u16,
+        request: Option<u64>,
     },
     /// `InputSwitched` to this machine's master `machine_id`.
     InputSwitched {
         machine_id: String,
         display: String,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     },
     /// Close everything and end; answered once done.
@@ -425,13 +427,15 @@ impl Actor {
                 machine_id,
                 display,
                 value,
-            } => self.select_input(&machine_id, display, value),
+                request,
+            } => self.select_input(&machine_id, display, value, request),
             Command::InputSwitched {
                 machine_id,
                 display,
                 value,
+                request,
                 error,
-            } => self.input_switched(&machine_id, display, value, error),
+            } => self.input_switched(&machine_id, display, value, request, error),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -883,7 +887,11 @@ impl Actor {
             }
             // Only this machine's master may switch its monitors: a remote of this
             // machine has no say over them, and an unpaired machine never gets a link.
-            Control::SelectInput { display, value } if live.info.hello.role == Role::Master => {
+            Control::SelectInput {
+                display,
+                value,
+                request,
+            } if live.info.hello.role == Role::Master => {
                 eprintln!(
                     "[lbm-agent] multi-PC: {} asks for input {value:#04x} on {display}",
                     live.info.hello.name
@@ -892,18 +900,21 @@ impl Actor {
                     from: machine_id.to_owned(),
                     display,
                     value,
+                    request,
                 });
             }
             // How a switch this machine asked of its remote went.
             Control::InputSwitched {
                 display,
                 value,
+                request,
                 error,
             } if live.info.hello.role == Role::Remote => {
                 let _ = self.notices.send(Notice::InputSwitched {
                     from: machine_id.to_owned(),
                     display,
                     value,
+                    request,
                     error,
                 });
             }
@@ -1023,7 +1034,13 @@ impl Actor {
 
     /// Sends `SelectInput` to `machine_id`, if it is linked as a remote of this machine.
     /// Queued in a task of its own, as `Displays` is.
-    fn select_input(&mut self, machine_id: &str, display: String, value: u16) {
+    fn select_input(
+        &mut self,
+        machine_id: &str,
+        display: String,
+        value: u16,
+        request: Option<u64>,
+    ) {
         let Some(live) = self
             .links
             .get(machine_id)
@@ -1035,7 +1052,11 @@ impl Actor {
             return;
         };
         let sender = live.sender.clone();
-        let message = Control::SelectInput { display, value };
+        let message = Control::SelectInput {
+            display,
+            value,
+            request,
+        };
         tokio::spawn(async move {
             let _ = sender.control(&message).await;
         });
@@ -1048,6 +1069,7 @@ impl Actor {
         machine_id: &str,
         display: String,
         value: u16,
+        request: Option<u64>,
         error: Option<String>,
     ) {
         let Some(live) = self
@@ -1061,6 +1083,7 @@ impl Actor {
         let message = Control::InputSwitched {
             display,
             value,
+            request,
             error,
         };
         tokio::spawn(async move {

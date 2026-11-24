@@ -166,6 +166,7 @@ async fn control_and_input_frames_arrive_in_order_interleaved() {
             let message = Control::SelectInput {
                 display: format!("DP-{i}"),
                 value: i as u16,
+                request: Some(i as u64),
             };
             to_remote.control(&message).await.unwrap();
             expected.push(Event::Control(message));

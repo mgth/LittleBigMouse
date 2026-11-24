@@ -298,33 +298,42 @@ pub struct Failure {
 }
 
 /// The switches that failed, one per panel, until the panel is switched or leaves the
-/// layout; and those asked of a remote, until it answers.
+/// layout; and the latest one asked of a remote for each panel, until it answers.
 #[derive(Debug, Default)]
 pub struct Failures {
     failed: BTreeMap<String, Failure>,
-    /// By the machine asked and its id of the panel: the switch, and why this machine
-    /// could not make it.
-    asked: HashMap<(String, String), (InputSwitch, String)>,
+    /// By request number: the machine asked, the switch, and why this machine could not
+    /// make it. One per panel — a newer attempt replaces the request before it, whose
+    /// answer is then no news.
+    asked: HashMap<u64, (String, InputSwitch, String)>,
+    last_request: u64,
 }
 
 impl Failures {
     /// How a switch went on this machine's side. A switch asked of a remote is settled
     /// by its answer ([`Failures::answered`]); until then, what was said of the panel
-    /// stays.
-    pub fn switched(&mut self, switch: &InputSwitch, outcome: &Outcome) {
+    /// stays. For one asked of a remote, the number to send with the request.
+    pub fn switched(&mut self, switch: &InputSwitch, outcome: &Outcome) -> Option<u64> {
+        // Whatever was asked before about this panel is overtaken by this attempt.
+        self.asked
+            .retain(|_, (_, asked, _)| asked.monitor != switch.monitor);
         match outcome {
             Outcome::AlreadyShown | Outcome::Written => {
                 self.failed.remove(&switch.monitor);
-                self.asked
-                    .retain(|_, (asked, _)| asked.monitor != switch.monitor);
+                None
             }
             Outcome::Ask(ask, why) => {
+                self.last_request += 1;
                 self.asked.insert(
-                    (ask.machine_id.clone(), ask.display.clone()),
-                    (switch.clone(), why.clone()),
+                    self.last_request,
+                    (ask.machine_id.clone(), switch.clone(), why.clone()),
                 );
+                Some(self.last_request)
             }
-            Outcome::Failed(why) => self.failed(switch, why),
+            Outcome::Failed(why) => {
+                self.failed(switch, why);
+                None
+            }
         }
     }
 
@@ -343,26 +352,25 @@ impl Failures {
         );
     }
 
-    /// What the remote `from` answered about switching its `display` to `value`:
-    /// `error` is why it could not. The switch it answered for, when it failed — `None`
-    /// when it worked, or when nothing was asked of it (an answer to an older request
-    /// is not news about the latest).
+    /// What the remote `from` answered to the request numbered `request`: `error` is why
+    /// it could not. The switch it answered for, when it failed — `None` when it worked,
+    /// or when the answer is not to the latest request about that panel (a retry is not
+    /// settled by the answer to the attempt before it), or carries no number.
     pub fn answered(
         &mut self,
         from: &str,
-        display: &str,
-        value: u16,
+        request: Option<u64>,
         error: Option<String>,
     ) -> Option<InputSwitch> {
-        let key = (from.to_owned(), display.to_owned());
+        let request = request?;
         if self
             .asked
-            .get(&key)
-            .is_none_or(|(switch, _)| switch.value != value)
+            .get(&request)
+            .is_none_or(|(machine, _, _)| machine != from)
         {
             return None;
         }
-        let (switch, why) = self.asked.remove(&key).expect("checked above");
+        let (_, switch, why) = self.asked.remove(&request).expect("checked above");
         let Some(remote_error) = error else {
             self.failed.remove(&switch.monitor);
             return None;
@@ -381,13 +389,17 @@ impl Failures {
         Some(switch)
     }
 
-    /// The failures of the panels `exists` still knows, by monitor id.
-    pub fn current(&self, exists: impl Fn(&str) -> bool) -> Vec<Failure> {
-        self.failed
-            .values()
-            .filter(|failure| exists(&failure.monitor))
-            .cloned()
-            .collect()
+    /// Forgets every panel `exists` no longer knows: its failure, and what was asked
+    /// about it. A panel unplugged and plugged back starts with nothing said of it.
+    pub fn retain(&mut self, exists: impl Fn(&str) -> bool) {
+        self.failed.retain(|monitor, _| exists(monitor));
+        self.asked
+            .retain(|_, (_, switch, _)| exists(&switch.monitor));
+    }
+
+    /// The failures, by monitor id.
+    pub fn current(&self) -> Vec<Failure> {
+        self.failed.values().cloned().collect()
     }
 }
 
@@ -670,6 +682,13 @@ mod tests {
         }
     }
 
+    /// Asks `switch` of the laptop; the request's number.
+    fn asked(failures: &mut Failures, switch: &InputSwitch) -> u64 {
+        failures
+            .switched(switch, &Outcome::Ask(ask(), "no answer on DP-1".into()))
+            .expect("a number for the request")
+    }
+
     #[test]
     fn a_failed_switch_is_kept_until_the_panel_is_switched() {
         let mut failures = Failures::default();
@@ -678,7 +697,7 @@ mod tests {
             &switch,
             &Outcome::Failed("DDC/CI: no answer (code -3)".into()),
         );
-        let shown = failures.current(|_| true);
+        let shown = failures.current();
         assert_eq!(shown.len(), 1);
         assert_eq!(shown[0].monitor, "DEL4065_ABC123");
         assert_eq!(shown[0].value, HDMI);
@@ -686,39 +705,48 @@ mod tests {
         assert_eq!(shown[0].remote, None);
         // Another panel failing is said beside it, not instead.
         failures.failed(&switch_of("SAM0F00_XYZ", DP), "no DDC/CI link");
-        assert_eq!(failures.current(|_| true).len(), 2);
+        assert_eq!(failures.current().len(), 2);
 
         // The panel switched at the next try: what was said of it goes.
         failures.switched(&switch, &Outcome::Written);
-        let shown = failures.current(|_| true);
+        let shown = failures.current();
         assert_eq!(shown.len(), 1);
         assert_eq!(shown[0].monitor, "SAM0F00_XYZ");
         failures.switched(&switch_of("SAM0F00_XYZ", DP), &Outcome::AlreadyShown);
-        assert!(failures.current(|_| true).is_empty());
+        assert!(failures.current().is_empty());
     }
 
     #[test]
-    fn a_panel_that_left_the_layout_has_no_failure_to_show() {
+    fn a_panel_that_leaves_the_layout_is_forgotten_and_comes_back_with_nothing_said() {
         let mut failures = Failures::default();
         failures.failed(&switch_of("DEL4065_ABC123", HDMI), "no answer");
-        assert!(failures.current(|m| m != "DEL4065_ABC123").is_empty());
-        // Back in the layout and still not switched: still said.
-        assert_eq!(failures.current(|_| true).len(), 1);
+        let pending = asked(&mut failures, &switch_of("SAM0F00_XYZ", DP));
+        // Both panels unplugged.
+        failures.retain(|_| false);
+        assert!(failures.current().is_empty());
+        // Plugged back with the same ids: nothing is said of them, and an answer to
+        // what was asked before they left is no news.
+        failures.retain(|_| true);
+        assert!(failures.current().is_empty());
+        assert_eq!(
+            failures.answered(LAPTOP, Some(pending), Some("late".into())),
+            None
+        );
+        assert!(failures.current().is_empty());
     }
 
     #[test]
     fn a_switch_asked_of_a_remote_fails_or_clears_on_its_answer() {
         let mut failures = Failures::default();
         let switch = switch_of("DEL4065_ABC123", HDMI);
-        failures.switched(&switch, &Outcome::Ask(ask(), "no answer on DP-1".into()));
-        assert!(failures.current(|_| true).is_empty(), "nothing failed yet");
+        let first = asked(&mut failures, &switch);
+        assert!(failures.current().is_empty(), "nothing failed yet");
 
         // The remote could not either: both reasons are said, and the switch is given
         // back for the caller to give up.
-        let given_up =
-            failures.answered(LAPTOP, "HDMI-1", HDMI, Some("ddcutil: code -3021".into()));
+        let given_up = failures.answered(LAPTOP, Some(first), Some("ddcutil: code -3021".into()));
         assert_eq!(given_up.as_ref(), Some(&switch));
-        let shown = failures.current(|_| true);
+        let shown = failures.current();
         assert_eq!(shown.len(), 1);
         assert_eq!(shown[0].error, "no answer on DP-1");
         assert_eq!(shown[0].remote.as_deref(), Some(LAPTOP));
@@ -728,51 +756,92 @@ mod tests {
         );
         // The same answer twice is not news.
         assert_eq!(
-            failures.answered(LAPTOP, "HDMI-1", HDMI, Some("again".into())),
+            failures.answered(LAPTOP, Some(first), Some("again".into())),
             None
         );
 
         // Asked again, and this time the remote did it: the failure goes.
-        failures.switched(&switch, &Outcome::Ask(ask(), "no answer on DP-1".into()));
-        assert_eq!(failures.answered(LAPTOP, "HDMI-1", HDMI, None), None);
-        assert!(failures.current(|_| true).is_empty());
+        let second = asked(&mut failures, &switch);
+        assert_ne!(second, first);
+        assert_eq!(failures.answered(LAPTOP, Some(second), None), None);
+        assert!(failures.current().is_empty());
+    }
+
+    /// Two attempts at the same input out at once: the first one's failure, arriving
+    /// first, is not the retry's, and the retry's success is not lost.
+    #[test]
+    fn a_retry_is_settled_by_its_own_answer_and_not_the_one_before() {
+        let mut failures = Failures::default();
+        let switch = switch_of("DEL4065_ABC123", HDMI);
+        let first = asked(&mut failures, &switch);
+        let retry = asked(&mut failures, &switch);
+        assert_eq!(
+            failures.answered(LAPTOP, Some(first), Some("busy".into())),
+            None
+        );
+        assert!(
+            failures.current().is_empty(),
+            "the stale failure is not shown"
+        );
+        assert_eq!(failures.answered(LAPTOP, Some(retry), None), None);
+        assert!(failures.current().is_empty());
+
+        // Failed earlier, retried twice: success of the latest clears it even when the
+        // earlier retry's failure comes after.
+        failures.failed(&switch, "no answer");
+        let first = asked(&mut failures, &switch);
+        let retry = asked(&mut failures, &switch);
+        assert_eq!(failures.answered(LAPTOP, Some(retry), None), None);
+        assert!(failures.current().is_empty());
+        assert_eq!(
+            failures.answered(LAPTOP, Some(first), Some("busy".into())),
+            None
+        );
+        assert!(failures.current().is_empty());
     }
 
     #[test]
-    fn an_answer_about_another_value_or_display_is_ignored() {
+    fn an_answer_from_another_machine_or_without_a_number_is_ignored() {
         let mut failures = Failures::default();
-        failures.switched(
-            &switch_of("DEL4065_ABC123", HDMI),
-            &Outcome::Ask(ask(), "why".into()),
-        );
+        let request = asked(&mut failures, &switch_of("DEL4065_ABC123", HDMI));
         assert_eq!(
-            failures.answered(LAPTOP, "HDMI-1", DP, Some("old".into())),
+            failures.answered("someone", Some(request), Some("x".into())),
             None
         );
+        assert_eq!(failures.answered(LAPTOP, None, Some("x".into())), None);
         assert_eq!(
-            failures.answered(LAPTOP, "DP-2", HDMI, Some("other".into())),
+            failures.answered(LAPTOP, Some(request + 1), Some("x".into())),
             None
         );
-        assert_eq!(
-            failures.answered("someone", "HDMI-1", HDMI, Some("x".into())),
-            None
-        );
-        assert!(failures.current(|_| true).is_empty());
+        assert!(failures.current().is_empty());
         // The real answer still lands.
         assert!(failures
-            .answered(LAPTOP, "HDMI-1", HDMI, Some("no".into()))
+            .answered(LAPTOP, Some(request), Some("no".into()))
             .is_some());
+    }
+
+    #[test]
+    fn a_local_attempt_overtakes_what_was_asked_of_the_remote() {
+        let mut failures = Failures::default();
+        let switch = switch_of("DEL4065_ABC123", HDMI);
+        let request = asked(&mut failures, &switch);
+        failures.switched(&switch, &Outcome::Written);
+        assert_eq!(
+            failures.answered(LAPTOP, Some(request), Some("late".into())),
+            None
+        );
+        assert!(failures.current().is_empty());
     }
 
     #[test]
     fn a_failure_reads_as_the_api_documents_it() {
         let mut failures = Failures::default();
-        failures.switched(
+        let request = failures.switched(
             &switch_of("DEL4065_ABC123", HDMI),
             &Outcome::Ask(ask(), "here".into()),
         );
-        failures.answered(LAPTOP, "HDMI-1", HDMI, Some("there".into()));
-        let json = serde_json::to_value(failures.current(|_| true)).unwrap();
+        failures.answered(LAPTOP, request, Some("there".into()));
+        let json = serde_json::to_value(failures.current()).unwrap();
         assert_eq!(
             json,
             serde_json::json!([{
@@ -785,7 +854,7 @@ mod tests {
             }])
         );
         failures.failed(&switch_of("DEL4065_ABC123", HDMI), "here");
-        let json = serde_json::to_value(failures.current(|_| true)).unwrap();
+        let json = serde_json::to_value(failures.current()).unwrap();
         assert!(json[0].get("Remote").is_none(), "{json}");
     }
 }

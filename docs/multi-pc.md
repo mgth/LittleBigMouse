@@ -56,14 +56,17 @@ screen), Windows as master, the portal and X11 backends as master.
     master, at link-up, after every display change and when the remote's desktop says
     its wallpaper changed (see "Wallpapers"); added after
     protocol 1 without a new version, an older master ignores it as an unknown type
-  - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
-    (see "Input switching")
+  - `SelectInput { Display, Value, Request? }` — either way: write VCP 0x60 on that
+    display (see "Input switching"); `Request` numbers it for the answer, a retry of the
+    same value being otherwise indistinguishable from the attempt before it (added
+    after protocol 1, absent from an older master)
   - `InputReset` — remote → master: the remote ended the session of the input stream
     while the link lives on (its hook could not keep up); the master brings its pointer
     home (see "The end of a hop"). Added after protocol 1 without a new version, an older
     master ignores it as an unknown type
-  - `InputSwitched { Display, Value, Error? }` — remote → master: how the `SelectInput`
-    for that display and value went, `Error` saying why it failed (see "Input
+  - `InputSwitched { Display, Value, Request?, Error? }` — remote → master: how the
+    `SelectInput` numbered `Request` went, `Error` saying why it failed; the master
+    heeds only the answer to its latest request for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
@@ -442,8 +445,9 @@ What lot 8 does (`lbm-agent/src/input_switch.rs`, `vcp.rs`):
   `InputSwitchFailures: [{ Monitor, Source, Value, Error, Remote?, RemoteError? }]` —
   why this machine could not (DDC/CI's words), and, when a remote was asked, which one
   and why it could not either. In the state rather than an event because the switch is
-  carried out after `SetActiveSource` is answered; a panel's entry goes when it is
-  switched or leaves the layout. The window shows it on the panel's badge and under its
+  carried out after `SetActiveSource` is answered; a panel's entry, and what was asked
+  about it, goes when it is switched or leaves the layout (plugged back, it starts with
+  nothing said). The window shows it on the panel's badge and under its
   switch. A remote that sends no `InputSwitched` (an older one) leaves nothing to show.
 
 ## Lots

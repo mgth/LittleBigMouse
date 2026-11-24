@@ -554,6 +554,7 @@ async fn select_input(node: &mut Node, within: Duration) -> Option<(String, Stri
                 from,
                 display,
                 value,
+                ..
             } = node.notices.recv().await.expect("notices")
             {
                 return (from, display, value);
@@ -582,6 +583,7 @@ async fn only_this_machines_master_may_switch_its_monitors() {
         .control(&Control::SelectInput {
             display: "DEL4065_ABC123".into(),
             value: 0x11,
+            request: Some(4),
         })
         .await
         .unwrap();
@@ -629,6 +631,7 @@ async fn only_this_machines_master_may_switch_its_monitors() {
         .control(&Control::SelectInput {
             display: "DP-1".into(),
             value: 0x0f,
+            request: None,
         })
         .await
         .unwrap();
@@ -640,12 +643,13 @@ async fn only_this_machines_master_may_switch_its_monitors() {
     // The other way round is the desk's to ask: the laptop is told.
     assert!(desk
         .service
-        .select_input(laptop.fingerprint(), "HDMI-1", 0x11));
+        .select_input(laptop.fingerprint(), "HDMI-1", 0x11, Some(9)));
     assert_eq!(
         next_control(&mut laptop_link).await,
         Control::SelectInput {
             display: "HDMI-1".into(),
-            value: 0x11
+            value: 0x11,
+            request: Some(9),
         }
     );
     drop(link);
@@ -670,6 +674,7 @@ async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
         master.fingerprint(),
         "DP-1",
         0x11,
+        Some(4),
         Some("DDC/CI write failed".into())
     ));
     loop {
@@ -677,9 +682,10 @@ async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
             Control::InputSwitched {
                 display,
                 value,
+                request,
                 error,
             } => {
-                assert_eq!((display.as_str(), value), ("DP-1", 0x11));
+                assert_eq!((display.as_str(), value, request), ("DP-1", 0x11, Some(4)));
                 assert_eq!(error.as_deref(), Some("DDC/CI write failed"));
                 break;
             }
@@ -723,6 +729,7 @@ async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
         .control(&Control::InputSwitched {
             display: "HDMI-1".into(),
             value: 0x0f,
+            request: Some(2),
             error: None,
         })
         .await
@@ -733,10 +740,11 @@ async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
                 from,
                 display,
                 value,
+                request,
                 error,
             } = desk.notices.recv().await.expect("notices")
             {
-                return (from, display, value, error);
+                return (from, display, value, request, error);
             }
         }
     })
@@ -748,6 +756,7 @@ async fn a_switch_asked_of_a_remote_is_answered_back_to_its_master() {
             laptop.fingerprint().to_owned(),
             "HDMI-1".to_owned(),
             0x0f,
+            Some(2),
             None
         )
     );

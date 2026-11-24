@@ -2039,3 +2039,173 @@ async fn a_remote_strips_the_lock_keys_for_a_hook_that_has_not_said_it_reads_the
         encode(&[InputEvent::Leave, enter, locks])
     );
 }
+
+/// The next `InjectionBlocked` on `link` within `within`, skipping everything else.
+async fn next_block(
+    link: &mut Link,
+    within: Duration,
+) -> Option<Option<lbm_ipc::peer::InjectionBlock>> {
+    tokio::time::timeout(within, async {
+        loop {
+            match link.next().await {
+                Some(Event::Control(Control::InjectionBlocked { block })) => return block,
+                Some(Event::Control(_) | Event::Input(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+#[tokio::test]
+async fn a_remote_says_its_injection_is_blocked_only_to_a_master_that_hears_it() {
+    use lbm_ipc::peer::{InjectionBlock, INJECTION_BLOCKED_CAPABILITY};
+    let osk = || {
+        Some(InjectionBlock {
+            process: "osk.exe".into(),
+        })
+    };
+    for hears in [false, true] {
+        let master_dir = tempfile::tempdir().unwrap();
+        let master = Identity::load_or_create(master_dir.path()).unwrap();
+        let tower_dir = tempfile::tempdir().unwrap();
+        pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+        let mut tower = Node::new(tower_dir.path(), None);
+        let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+        let mut hello = Hello::new("test master", "0", Role::Master);
+        if hears {
+            hello.capabilities = vec![INJECTION_BLOCKED_CAPABILITY.to_owned()];
+        }
+        let mut link = link::connect(&address, &master, hello, link::Options::default())
+            .await
+            .unwrap()
+            .accept()
+            .await
+            .unwrap();
+        assert!(
+            link.peer()
+                .hello
+                .capabilities
+                .iter()
+                .any(|c| c == INJECTION_BLOCKED_CAPABILITY),
+            "the remote says it tells"
+        );
+        tower.until(|s| linked(s, master.fingerprint())).await;
+
+        // The tower's hook says the on-screen keyboard took the focus, then let it go.
+        tower.service.injection_blocked(osk());
+        tower.service.injection_blocked(None);
+        if hears {
+            assert_eq!(next_block(&mut link, PATIENCE).await, Some(osk()));
+            assert_eq!(
+                next_block(&mut link, PATIENCE).await,
+                Some(None),
+                "in the order said"
+            );
+        } else {
+            assert_eq!(
+                next_block(&mut link, Duration::from_millis(500)).await,
+                None,
+                "an older master is told nothing"
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_whose_injection_is_blocked_brings_the_pointer_home_and_the_state_says_why() {
+    use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+    use lbm_ipc::peer::InjectionBlock;
+    let osk = || {
+        Some(InjectionBlock {
+            process: "osk.exe".into(),
+        })
+    };
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    assert!(
+        laptop_link
+            .peer()
+            .hello
+            .capabilities
+            .iter()
+            .any(|c| c == lbm_ipc::peer::INJECTION_BLOCKED_CAPABILITY),
+        "the master says it hears of blocks"
+    );
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+    let blocked = |s: &PeersState| {
+        peer(s, laptop.fingerprint()).and_then(|p| p.injection_blocked.clone())
+    };
+
+    // A block said while the pointer is home is shown, and brings nothing home.
+    let mut hook = accept().await;
+    laptop_link
+        .sender()
+        .control(&Control::InjectionBlocked { block: osk() })
+        .await
+        .unwrap();
+    desk.until(|s| blocked(s) == osk()).await;
+    laptop_link
+        .sender()
+        .control(&Control::InjectionBlocked { block: None })
+        .await
+        .unwrap();
+    desk.until(|s| blocked(s).is_none()).await;
+
+    // The pointer crosses; the laptop's hook says Windows drops what it injects.
+    let crossing = [InputEvent::Enter { x: 10, y: 10 }];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, crossing);
+    laptop_link
+        .sender()
+        .control(&Control::InjectionBlocked { block: osk() })
+        .await
+        .unwrap();
+
+    // The pointer comes home rather than stay frozen there: the hook's connection ends
+    // and the laptop is told `Leave`. The state says why, for the page and the tray.
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the connection ends")
+            .is_err(),
+        "the hook's connection is closed"
+    );
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    let state = desk.until(|s| blocked(s) == osk()).await;
+    assert_eq!(
+        lbm_agent::peers::blocked_remotes(&state),
+        [lbm_agent::peers::BlockedRemote {
+            name: "laptop".into(),
+            process: "osk.exe".into(),
+        }]
+    );
+
+    // The link ends: nothing is left to say about it.
+    drop(laptop_link);
+    desk.until(|s| !linked(s, laptop.fingerprint()) && blocked(s).is_none())
+        .await;
+}

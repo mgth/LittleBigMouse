@@ -42,6 +42,7 @@ fn laptop(pending: bool) -> Peer {
         displays: 2,
         problem: None,
         driven: false,
+        injection_blocked: None,
     }
 }
 

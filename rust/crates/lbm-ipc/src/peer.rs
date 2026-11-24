@@ -93,3 +93,23 @@ pub struct PeerWallpaper {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
 }
+
+/// The capability (`lbm_net::wire::Hello::capabilities`) of a node that tells, and
+/// hears, when Windows keeps a remote's injected input from reaching its desktop
+/// ([`InjectionBlock`]). A remote says it only to a master that announced it; an older
+/// master would ignore the message anyway, but the remote would be talking to nobody.
+pub const INJECTION_BLOCKED_CAPABILITY: &str = "InjectionBlocked";
+
+/// Why a remote's injected input does not reach its desktop: the window in the
+/// foreground belongs to a process of a higher integrity level than the hook's (an
+/// elevated program, the on-screen keyboard, Task Manager), and UIPI drops everything
+/// a lower one injects while it has the focus — the pointer's motion included
+/// (docs/multi-pc-etat.md, "Fenêtres élevées"). Only Windows has this.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct InjectionBlock {
+    /// The file name of the process whose window has the focus (`osk.exe`); empty when
+    /// it could not be read.
+    #[serde(default)]
+    pub process: String,
+}

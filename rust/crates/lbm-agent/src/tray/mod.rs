@@ -149,6 +149,12 @@ impl TrayModel {
         if state["PointerLocked"] == true {
             self.state = format!("{} · pointer locked", self.state);
         }
+        // Multi-PC: a remote where Windows drops what this machine sends. Its pointer
+        // stood still and this one came back: the user deserves to know why.
+        for remote in state["InjectionBlocked"].as_array().into_iter().flatten() {
+            let name = remote["Name"].as_str().unwrap_or("a remote");
+            self.state = format!("{} · {}", self.state, injection_blocked(name));
+        }
     }
 
     pub fn icon(&self) -> TrayIcon {
@@ -197,6 +203,14 @@ pub async fn follow(
             return;
         }
     }
+}
+
+/// What the user is told about a remote where Windows drops the input this machine sends.
+pub fn injection_blocked(name: &str) -> String {
+    format!(
+        "Windows blocks the mouse and keyboard on {name}: an elevated window has the focus \
+         (turn on \"Start with elevated privileges\" there)"
+    )
 }
 
 #[cfg(test)]
@@ -298,6 +312,23 @@ mod tests {
         tray.show(&json!({ "Engine": "Running", "PointerLocked": true }));
         assert_eq!(tray.state(), "Running · pointer locked");
         tray.show(&json!({ "Engine": "Running", "PointerLocked": false }));
+        assert_eq!(tray.state(), "Running");
+    }
+
+    #[test]
+    fn the_words_say_where_windows_blocks_the_input() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running",
+            "InjectionBlocked": [{ "Name": "vm124", "Process": "osk.exe" }] }));
+        assert_eq!(
+            tray.state(),
+            "Running · Windows blocks the mouse and keyboard on vm124: an elevated window \
+             has the focus (turn on \"Start with elevated privileges\" there)"
+        );
+        // No longer blocked, and an older agent's state, say nothing about it.
+        tray.show(&json!({ "Engine": "Running", "InjectionBlocked": [] }));
+        assert_eq!(tray.state(), "Running");
+        tray.show(&json!({ "Engine": "Running" }));
         assert_eq!(tray.state(), "Running");
     }
 

@@ -40,6 +40,23 @@ pub struct Peer {
     pub problem: Option<String>,
     /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
     pub driven: bool,
+    /// Windows drops the input this machine sends it: an elevated window has the focus
+    /// there, here the name of its process (empty when unknown). `None` when it is not
+    /// blocked, or does not say.
+    pub injection_blocked: Option<String>,
+}
+
+/// What the page says of a remote where Windows drops the input this machine sends.
+pub fn injection_blocked(name: &str, process: &str) -> String {
+    let window = if process.is_empty() {
+        "an elevated window".to_owned()
+    } else {
+        format!("an elevated window ({process})")
+    };
+    format!(
+        "Windows blocks the mouse and keyboard on {name}: {window} has the focus. \
+         Turn on \"Start with elevated privileges\" on {name}."
+    )
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -421,6 +438,12 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
     if let Some(problem) = &peer.problem {
         ui.colored_label(ui.visuals().error_fg_color, problem);
     }
+    if let Some(process) = peer.injection_blocked.as_deref().filter(|_| peer.connected) {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            injection_blocked(name, process),
+        );
+    }
     if peer.pending {
         ui.label("Check that the other machine shows this fingerprint:");
         printed_fingerprint(ui, &format!("Fingerprint of {name}"), &peer.machine_id);
@@ -528,6 +551,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_blocked_remote_is_named_with_the_window_and_the_way_out() {
+        assert_eq!(
+            injection_blocked("vm124", "osk.exe"),
+            "Windows blocks the mouse and keyboard on vm124: an elevated window (osk.exe) \
+             has the focus. Turn on \"Start with elevated privileges\" on vm124."
+        );
+        assert!(injection_blocked("vm124", "").contains(": an elevated window has the focus."));
+    }
+
+    #[test]
     fn the_page_says_where_the_mouse_and_keyboard_are() {
         let laptop = Peer {
             machine_id: "aa".into(),
@@ -539,6 +572,7 @@ mod tests {
             displays: 1,
             driven: false,
             problem: None,
+            injection_blocked: None,
         };
         let mut state = State {
             enabled: true,

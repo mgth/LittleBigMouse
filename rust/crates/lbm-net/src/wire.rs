@@ -133,6 +133,16 @@ pub enum Control {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Remote → master: Windows drops what the remote injects from now on (`block`
+    /// set), or no longer does (`None`) — see [`lbm_ipc::peer::InjectionBlock`]. Sent
+    /// only to a master that announced [`lbm_ipc::peer::INJECTION_BLOCKED_CAPABILITY`].
+    /// A block said while that master drives the remote ends its crossing: the pointer
+    /// comes home rather than stay frozen there. Added after protocol 1 without a new
+    /// version.
+    InjectionBlocked {
+        #[serde(default)]
+        block: Option<lbm_ipc::peer::InjectionBlock>,
+    },
     Ping,
     Pong,
     /// The sender is closing the link on purpose.
@@ -374,6 +384,31 @@ mod tests {
                 request: None
             }
         );
+    }
+
+    #[test]
+    fn an_injection_block_names_the_process_and_its_end_is_a_null() {
+        let blocked = Control::InjectionBlocked {
+            block: Some(lbm_ipc::peer::InjectionBlock {
+                process: "osk.exe".into(),
+            }),
+        };
+        let bytes = encode_control(&blocked).unwrap();
+        let text = std::str::from_utf8(&bytes[5..]).unwrap();
+        assert_eq!(
+            text,
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe"}}"#
+        );
+        assert_eq!(serde_json::from_str::<Control>(text).unwrap(), blocked);
+        let unblocked: Control =
+            serde_json::from_str(r#"{"Type":"InjectionBlocked","Block":null}"#).unwrap();
+        assert_eq!(unblocked, Control::InjectionBlocked { block: None });
+        // A newer remote may say more about the block.
+        let newer: Control = serde_json::from_str(
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe","Level":12288}}"#,
+        )
+        .unwrap();
+        assert_eq!(newer, blocked);
     }
 
     #[tokio::test]

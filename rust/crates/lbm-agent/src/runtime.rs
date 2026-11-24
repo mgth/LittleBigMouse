@@ -45,7 +45,7 @@ fn hook_event(message: Event) -> HookEvent {
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
         Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
         // The peers' state carries it; the reconciler has nothing to do about it.
-        Event::PointerLocked { .. } => HookEvent::Unknown,
+        Event::PointerLocked { .. } | Event::InjectionBlocked { .. } => HookEvent::Unknown,
         // The handshake never comes through here: the connection answers it and
         // reports what it learned as `HookSignal::Greeted`. An event this version does
         // not know is one it has nothing to do about.
@@ -158,6 +158,9 @@ pub struct Agent<W> {
     /// The name of the remote that receives the input now (`PeersState::driven`), for
     /// the state; `None` when this machine does.
     driven_machine: Option<String>,
+    /// The remotes that say Windows drops what this machine sends them
+    /// (`PeerEntry::injection_blocked`), for the state.
+    injection_blocked: Vec<crate::peers::BlockedRemote>,
     /// The pointer is locked on the machine it is on (`PeersState::pointer_locked`).
     pointer_locked: bool,
     /// The pointer lock's shortcut the hook is to watch for: the one of the settings
@@ -227,6 +230,7 @@ impl<W: AgentWorld> Agent<W> {
             input_failures: Default::default(),
             has_master: false,
             driven_machine: None,
+            injection_blocked: Vec::new(),
             pointer_locked: false,
             pointer_lock: String::new(),
             pointer_lock_sent: None,
@@ -320,6 +324,7 @@ impl<W: AgentWorld> Agent<W> {
             ),
             input_switch_failures: self.input_failures.current(),
             driven_machine: self.driven_machine.clone(),
+            injection_blocked: self.injection_blocked.clone(),
             pointer_locked: self.pointer_locked,
         }
     }
@@ -1115,6 +1120,7 @@ impl<W: AgentWorld> Agent<W> {
                     .find(|p| &p.peer.machine_id == driven)
                     .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
             });
+        self.injection_blocked = crate::peers::blocked_remotes(&state);
         self.pointer_locked = state.enabled && state.pointer_locked;
         self.pointer_lock = if state.enabled {
             state.pointer_lock_shortcut.clone()
@@ -1691,6 +1697,11 @@ impl<W: AgentWorld> Agent<W> {
                                 self.tell_peers_the_hook_zones();
                             }
                             Event::PointerLocked { locked } => self.hook_locked(*locked),
+                            Event::InjectionBlocked { block } => {
+                                if let Some(peers) = &mut self.peers {
+                                    peers.injection_blocked(block.clone());
+                                }
+                            }
                             // The hook's routing went down, and its lock with it.
                             Event::Stopped | Event::Paused | Event::Suspended => {
                                 self.hook_locked(false);
@@ -1710,9 +1721,11 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.pointer_lock_sent = None;
                         self.hook_locked(false);
-                        // The next hook says again what it reads.
+                        // The next hook says again what it reads, and what it cannot
+                        // inject: this one's word died with it.
                         if let Some(peers) = &mut self.peers {
                             peers.hook_reads_locks(false);
+                            peers.injection_blocked(None);
                         }
                         self.hook_zones_unknown();
                         Input::Hook(HookEvent::Dead)

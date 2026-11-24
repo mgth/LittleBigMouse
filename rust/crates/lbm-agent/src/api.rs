@@ -392,6 +392,12 @@ pub struct Snapshot {
     /// this one — by the multi-PC pointer lock's shortcut. Additive.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The linked remotes where Windows drops the input this machine sends (multi-PC
+    /// mode, this machine their master): an elevated window has the focus there and
+    /// their agent is not elevated. By the name each goes by here. Additive; absent
+    /// when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub injection_blocked: Vec<crate::peers::BlockedRemote>,
 }
 
 /// An answer to request `id`.

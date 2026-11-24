@@ -83,6 +83,11 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             driven,
             displays: displays.len(),
             problem: link_problem(&entry["Problem"]),
+            // Said by the remote while linked; absent from an older agent's state.
+            injection_blocked: entry
+                .get("InjectionBlocked")
+                .filter(|block| block.is_object())
+                .map(|block| text(block, "Process")),
         });
     }
     // Byte order of the fingerprints, as `Layout::hosts` sorts them: the order the agent
@@ -574,6 +579,39 @@ mod tests {
         let mut none = state(peers);
         none["SelectedRemote"] = Value::Null;
         assert!(read(&none).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn a_blocked_remote_says_so_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut blocked = state(
+            json!([{"MachineId": "0a", "Name": "vm124", "Connected": true,
+            "Role": "Remote", "State": "Paired", "Displays": [display("eDP-1")]}]),
+        );
+        assert!(machines.heard(&blocked));
+        assert_eq!(
+            read(&blocked).unwrap().0.peers[0].injection_blocked,
+            None,
+            "an older agent says nothing"
+        );
+        blocked["Peers"][0]["InjectionBlocked"] = json!({"Process": "osk.exe"});
+        assert_eq!(
+            read(&blocked).unwrap().0.peers[0].injection_blocked.as_deref(),
+            Some("osk.exe")
+        );
+        assert!(
+            !machines.heard(&blocked),
+            "a block is no reason to rebuild the map"
+        );
+        blocked["Peers"][0]["InjectionBlocked"] = json!({});
+        assert_eq!(
+            read(&blocked).unwrap().0.peers[0].injection_blocked.as_deref(),
+            Some(""),
+            "a process that could not be read is still a block"
+        );
+        blocked["Peers"][0]["InjectionBlocked"] = Value::Null;
+        assert_eq!(read(&blocked).unwrap().0.peers[0].injection_blocked, None);
     }
 
     #[test]

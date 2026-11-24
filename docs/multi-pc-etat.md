@@ -271,7 +271,7 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 - **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
-  dans les deux sens ; fichiers codés, jamais essayés sur du vrai matériel ;
+  dans les deux sens ; les fichiers (PR #822) passent aussi ;
   glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
 - ~~**Pare-feu Windows**~~ : fait (PR #811). L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
@@ -295,7 +295,7 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 ## Presse-papiers partagé
 
 Palier 1 (**texte et image**, dans les deux sens) codé : PR #821. Palier 3 (**fichiers**)
-codé : PR « presse-papiers, palier 3 ». Glisser-déposer étudié, non codé.
+codé : PR #822. Les trois passent sur la paire réelle. Glisser-déposer étudié, non codé.
 Le contrat est dans [`multi-pc.md`](multi-pc.md), « Shared clipboard ». Ce qui suit dit
 ce qui a été tranché, et ce qui n'a jamais tourné.
 
@@ -349,7 +349,7 @@ pris en charge, l'état le dit. GNOME n'a ni l'un ni l'autre.
 | 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
 | 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
 | 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | Pas commencé ; l'en-tête de `HTML Format` (décalages) est à reconstruire |
-| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Codé (PR « palier 3 »), jamais essayé en vrai |
+| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Codé (PR #822), fonctionne sur la paire réelle (essai du 2026-11-24) |
 | 4 | Glisser-déposer entre machines | — | — | Étudié, non codé : voir plus bas |
 
 Le texte brut d'une source qui n'offre que du HTML n'est pas proposé : la plupart des
@@ -391,8 +391,10 @@ Le contrat est dans `multi-pc.md`. Ce qui a décidé de la forme :
   rapatriement, prévient l'autre machine (`ClipboardAbort`) et supprime ce qui avait été
   écrit. L'application qui attendait reçoit un échec. Il n'y a pas de bouton Annuler.
 
-Jamais tourné sur du vrai matériel : ni Dolphin, ni l'explorateur, ni Klipper. Les essais
-sont deux agents en boucle locale (dossier, sous-dossier, fichier de plus d'une plage,
+**Essayé le 2026-11-24 sur la paire du mainteneur** (KDE Plasma 6.8.3 Wayland ↔
+Windows 11 vm124, `f1c04196`) : **les fichiers passent.** Non relevé : le sens ou les
+deux, les applications, la taille, ni si le premier collage a échoué avant l'arrivée des
+fichiers. Avant cela, les essais étaient deux agents en boucle locale (dossier, sous-dossier, fichier de plus d'une plage,
 fichier vide, second collage servi sans nouveau transfert, borne, nom hors du dossier
 refusé, émetteur parti en plein transfert) et les conversions `CF_HDROP` ↔ chemins et
 `text/uri-list` ↔ chemins.

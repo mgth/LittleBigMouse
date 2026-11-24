@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::shared::Shared;
 use lbm_ipc::protocol::Event;
 
-/// The multi-PC master's crossing rules, shared by every backend that can be one.
+// The multi-PC master's crossing rules, shared by every backend that can be one.
 pub(crate) mod crossing;
 pub mod focus_restore;
 /// Platform-neutral core of the per-report hot path (dedup, non-blocking route),

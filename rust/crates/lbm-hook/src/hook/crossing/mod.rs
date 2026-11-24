@@ -3,9 +3,78 @@
 //! A master drives another machine through the input stream while the pointer is
 //! there. What it does then — which side a release goes to, when the keyboards are
 //! grabbed, when the pointer comes home, the rescue watched for in the grabbed stream —
-//! does not depend on how the platform reads its devices. Those rules live here, so
-//! that every master (evdev on Linux today, the Windows hook and the portal later)
-//! applies the same ones and is tested against the same ones.
+//! does not depend on how the platform reads its devices. Those rules live here, in
+//! [`Crossing`], so that every master (evdev on Linux today, the Windows hook and the
+//! portal later) applies the same ones and is tested against the same ones. A master
+//! routes each report through the engine, [`locate`]s where it left the pointer, and
+//! hands that to [`Crossing::dispatch`]; the rules act only through what the master
+//! provides as a [`Platform`].
+//!
+//! # Crossing
+//!
+//! Crossing out: `Enter` first, at the landing pixel; then nothing more to this
+//! machine's pointer, and the keyboards are grabbed so that typing follows the pointer.
+//! Crossing back: `Leave`, the keyboards are let go, and emission resumes here from
+//! where the engine landed.
+//!
+//! ## The local cursor
+//!
+//! The platform would go on drawing the frozen pointer, so it is hidden while the
+//! pointer is away: [`Platform::hide_cursor`] once the `Enter` is queued,
+//! [`Platform::show_cursor`] every time the pointer comes home, whichever way. Once
+//! what hides it is in place, the frozen pointer is moved onto it
+//! ([`Platform::cursor_hiding_spot`]) and stays there; coming home starts from where it
+//! left, not from there.
+//!
+//! ## Held keys and buttons
+//!
+//! One rule, in both directions: **a release goes where its press went.** Each side
+//! then sees a press and its release, never one without the other, whatever the
+//! pointer did in between.
+//!
+//! * A button or key pressed here and held across the border is released here: a
+//!   drag that reaches the border ends at the border when the button comes up, and the
+//!   other machine never sees a release it had no press for. Its own motion meanwhile
+//!   goes on over there, buttonless. Dragging across machines is not supported
+//!   (docs/multi-pc.md), and this is the form of "not supported" that leaves nothing
+//!   stuck.
+//! * Pressed over there and released after coming home: `Leave` released it over there
+//!   (the remote's session releases everything the stream left pressed), and the
+//!   release that comes later is handed to this machine, which has nothing to release.
+//! * A keyboard is grabbed only once none of its keys is held
+//!   ([`Platform::grab_keyboards`]): a key held while crossing went to this machine,
+//!   and its release has to go there too.
+//! * Key autorepeat is forwarded as a repeated press, which the remote turns into its
+//!   own repeat; button repeats do not exist and are dropped.
+//!
+//! ## Coming home
+//!
+//! When a hop of the input stream ends, the pointer is home (docs/multi-pc.md): the
+//! pointer goes back to the last position it had here ([`Platform::return_pointer`]),
+//! the keyboards are let go and the routing forgets it was elsewhere. That happens when
+//! the client goes away or is replaced by another, when a batch cannot be queued (no
+//! client, a connection that closed, or a full queue — which also closes the
+//! connection, [`crate::ipc::input::Driver::send`]), when a reloaded layout no longer
+//! has the machine the pointer is on, when the rescue shortcut fires, and when the
+//! master goes away, which is how Stop, pause, suspend, the rescue's unhook and quit
+//! all end ([`Crossing::shut_down`]). Without a client, the other machines' zones are
+//! not in play and their borders are walls. `Leave` is sent whenever it can be; when it
+//! cannot, the connection is closing, and its end means the same thing to the remote.
+//!
+//! ## The rescue
+//!
+//! With the keyboards grabbed the desktop's own shortcut never fires. The configured
+//! shortcut is therefore watched for in the grabbed stream ([`keys::RescueKeys`]), with
+//! the same hold, and fires the same `daemon::rescue_fired` after bringing the pointer
+//! home. Its final key is kept back while it is held, so the other machine never sees
+//! it; given up early, it is forwarded late, in order.
+//!
+//! ## One remote
+//!
+//! Batches carry no destination: the agent relays them to the one remote it drives. A
+//! layout with zones of two machines is routed over both by the engine, but crossing
+//! from one to the other is treated as leaving the one being driven, and the pointer
+//! comes home.
 
 // Only the evdev backend is a master so far: on Windows nothing calls into this yet,
 // and it is compiled there all the same, so that it stays platform-neutral.

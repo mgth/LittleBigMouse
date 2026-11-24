@@ -12,41 +12,30 @@
 //! endpoint has a client, the agent — the other machines' (`ZonesLayout::
 //! set_remote_enterable`, set every cycle from [`Outputs::remote_connected`]). The
 //! virtual cursor is authoritative, so after each routed report its position alone
-//! says where the report goes: a position on this machine is emitted to the virtual
-//! pointer exactly as it always was; a position in another machine's zone is
-//! translated to that machine's own desktop pixels and written to the agent as an
-//! `lbm_ipc::input` batch. Another machine's desktop lies outside this one's (each is
-//! offset to the right of everything else), so the cursor's extent grows to cover them
-//! while they are in play, and what is emitted here is clamped to this desktop and,
-//! while the pointer is away, frozen where it left: the local cursor stays where it
-//! was, at [`Pipeline::local_pos`].
+//! says where the report goes ([`crossing::locate`]): a position on this machine is
+//! emitted to the virtual pointer exactly as it always was; a position in another
+//! machine's zone is translated to that machine's own desktop pixels and written to the
+//! agent as an `lbm_ipc::input` batch. Another machine's desktop lies outside this
+//! one's (each is offset to the right of everything else), so the cursor's extent grows
+//! to cover them while they are in play, and what is emitted here is clamped to this
+//! desktop and, while the pointer is away, frozen where it left: the local cursor stays
+//! where it was, at [`Pipeline::local_pos`].
 //!
-//! Crossing out: `Enter` first, at the landing pixel; then nothing more to the virtual
-//! pointer, and the keyboards are grabbed so that typing follows the pointer. Crossing
-//! back: `Leave`, the keyboards are let go, and emission resumes here from where the
-//! engine landed.
+//! What follows from where the pointer is — the `Enter` and the `Leave`, the
+//! keyboards' grab, where a held key or button is released, coming home, the rescue,
+//! hiding the local cursor — is the platform-neutral [`crossing::Crossing`]'s. This
+//! pipeline is one master among those it serves: it lends the rules, through
+//! [`crossing::Platform`], its virtual cursor, the frame being composed and its
+//! outputs. Putting the pointer back home also has the engine forget where it was
+//! (`MouseEngine::begin_touch`) before it routes again, at the next chance to take its
+//! lock without waiting.
 //!
-//! ## The local cursor
+//! ## What the rules rely on here
 //!
-//! The compositor would go on drawing the frozen pointer, so it is hidden while the
-//! pointer is away ([`super::hider`]): [`Outputs::hide_cursor`] once the `Enter` is
-//! queued, [`Outputs::show_cursor`] every time the pointer comes home, whichever way.
-//! Once the surface that hides it is in place, the frozen pointer is moved onto it
-//! ([`Outputs::cursor_hiding_spot`]), a few pixels inside the edge it left by, and
-//! stays there; coming home starts from where it left, not from there.
-//!
-//! ## Held keys and buttons
-//!
-//! One rule, in both directions: **a release goes where its press went.** Each side
-//! then sees a press and its release, never one without the other, whatever the
-//! pointer did in between.
-//!
-//! * A button or key pressed here and held across the border is released here: a
-//!   drag that reaches the border ends at the border when the button comes up, and the
-//!   other machine never sees a release it had no press for. Its own motion meanwhile
-//!   goes on over there, buttonless. Dragging across machines is not supported
-//!   (docs/multi-pc.md), and this is the form of "not supported" that leaves nothing
-//!   stuck.
+//! * The frame's buttons and keys are sorted by evdev type and code: mouse buttons
+//!   (`BTN_LEFT..=BTN_TASK`) and keyboard usages go to the rules; tablet tools and
+//!   joystick buttons stay here, meaning nothing over there; wheels go over in 120ths
+//!   of a detent, and scancodes (`EV_MSC`) describe this machine's keyboard.
 //! * Pressed over there and released after coming home: `Leave` released it over there
 //!   (the remote's session releases everything the stream left pressed), and the
 //!   release that comes later is handed to this machine's virtual device, which drops a
@@ -59,38 +48,10 @@
 //!   release from another device). Until the user lets go, that keyboard keeps typing
 //!   on this machine; the next cycle after, it is grabbed. A press that lands in the
 //!   instant between the last read and the grab is the one case this does not cover.
-//! * Key autorepeat is forwarded as a repeated press, which the remote turns into its
-//!   own repeat; button repeats do not exist and are dropped.
-//!
-//! ## Coming home
-//!
-//! When a hop of the input stream ends, the pointer is home (docs/multi-pc.md): the
-//! virtual cursor goes back to the last position it had here, the keyboards are let go
-//! and the engine forgets it was elsewhere. That happens when the client goes away,
-//! when a batch cannot be queued (no client, a connection that closed, or a full queue
-//! — which also closes the connection, [`crate::ipc::input::Driver::send`]), when a
-//! reloaded layout no longer has the machine the pointer is on, when the rescue
-//! shortcut fires, and when the router goes away, which is how Stop, pause, suspend,
-//! the rescue's unhook and quit all end ([`Pipeline::shut_down`]). Without a client,
-//! the other machines' zones are not in play and their borders are walls. `Leave` is
-//! sent whenever it can be; when it cannot, the connection is closing, and its end
-//! means the same thing to the remote.
-//!
-//! ## The rescue
-//!
-//! With the keyboards grabbed the portal's global shortcut never fires: the compositor
-//! sees no key. The configured shortcut is therefore watched for in the grabbed stream
-//! ([`crate::hook::crossing::keys::RescueKeys`]), with the same hold, and fires the same
-//! `daemon::rescue_fired` after bringing the pointer home. Its final key is kept back
-//! while it is held, so the other machine never sees it; given up early, it is
-//! forwarded late, in order.
-//!
-//! ## One remote
-//!
-//! Batches carry no destination: the agent relays them to the one remote it drives. A
-//! layout with zones of two machines is routed over both by the engine, but crossing
-//! from one to the other is treated as leaving the one being driven, and the pointer
-//! comes home.
+//! * With the keyboards grabbed the portal's global shortcut never fires: the
+//!   compositor sees no key. That is why the rules watch for the rescue in the grabbed
+//!   stream.
+//! * The local cursor is hidden by [`super::hider`].
 //!
 //! ## Cost
 //!

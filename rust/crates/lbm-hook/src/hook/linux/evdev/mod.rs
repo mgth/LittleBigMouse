@@ -84,8 +84,9 @@
 //! * `uinput` — the two virtual devices this process creates;
 //! * `pipeline` — what a frame becomes once read: the engine run over it, and
 //!   the frame emitted to this machine's virtual devices or, in the multi-PC
-//!   mode, written to another machine through the input stream. No device in
-//!   it, which is what lets the tests drive the whole of it;
+//!   mode, written to another machine through the input stream, by the rules of
+//!   `hook::crossing`. No device in it, which is what lets the tests
+//!   drive the whole of it;
 //! * `hider` — hiding this machine's cursor while the pointer is on another one: a
 //!   layer-shell surface under the frozen pointer on Wayland, XFixes on X11, owned by
 //!   a thread of its own;

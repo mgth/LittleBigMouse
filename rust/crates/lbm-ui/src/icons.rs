@@ -63,16 +63,25 @@ pub fn button(
     enabled: bool,
 ) -> egui::Response {
     ui.add_enabled(enabled, |ui: &mut egui::Ui| {
+        // `add_enabled` hands over the row's own `Ui`: what `steady_at_rest` changes in
+        // its style is put back before returning, or it would reach the next button.
+        let style = ui.style().clone();
         let id = ui.make_persistent_id(("tool-icon", label));
         let mut button = egui::Button::new((egui::Atom::custom(id, vec2(16.0, 16.0)), label))
-            .frame_when_inactive(false)
             .wrap_mode(egui::TextWrapMode::Extend);
         if let Some(on) = selected {
-            button = button.selected(on).frame_when_inactive(on);
+            button = button.selected(on);
+            if on {
+                button = button.frame_when_inactive(true);
+            } else {
+                button = super::theme::steady_at_rest(ui, button);
+            }
         } else if matches!(icon, Icon::Save) && ui.is_enabled() {
             button = button
                 .fill(super::theme::SELECTED)
                 .frame_when_inactive(true);
+        } else {
+            button = super::theme::steady_at_rest(ui, button);
         }
         let response = button.atom_ui(ui);
         if let Some(rect) = response.rect(id) {
@@ -85,6 +94,7 @@ pub fn button(
             };
             paint(ui.painter(), rect, icon, color);
         }
+        ui.set_style(style);
         response.response
     })
 }
@@ -166,15 +176,23 @@ fn pictogram_button(
     framed: bool,
 ) -> egui::Response {
     ui.add_enabled(enabled, |ui: &mut egui::Ui| {
+        // Put back what `steady_at_rest` changes in the row's style (see `button`).
+        let style = ui.style().clone();
         let id = ui.next_auto_id().with("pictogram");
         let mut button = egui::Button::new((egui::Atom::custom(id, vec2(14.0, 14.0)), text));
         if let Some(on) = selected {
-            button = button.selected(on).frame_when_inactive(framed || on);
+            button = button.selected(on);
+            if framed || on {
+                button = button.frame_when_inactive(true);
+            } else {
+                button = super::theme::steady_at_rest(ui, button);
+            }
         }
         let response = button.atom_ui(ui);
         if let Some(rect) = response.rect(id) {
             paint(ui.painter(), rect, icon, tone(ui, selected == Some(true)));
         }
+        ui.set_style(style);
         response.response
     })
 }

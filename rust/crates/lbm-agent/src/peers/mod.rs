@@ -234,6 +234,13 @@ pub struct PeersState {
     /// Said by the hook; absent from the state of an older agent.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The machine id of the master whose mouse and keyboard drive this machine now —
+    /// its stream crossed onto this machine and has not left — or `None`. The other
+    /// end of [`Self::driven`]: by the `Enter` and `Leave` of that stream as they reach
+    /// the hook, the end of the stream (its link, or its session here) counting as a
+    /// `Leave`. Absent from the state of an older agent, which means "nobody".
+    #[serde(default)]
+    pub driven_by: Option<String>,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -249,6 +256,16 @@ pub struct RemoteScreens {
 }
 
 impl PeersState {
+    /// The machine ids of the paired machines linked now, either role; none while the
+    /// mode is off.
+    pub fn linked(&self) -> Vec<String> {
+        self.peers
+            .iter()
+            .filter(|p| self.enabled && p.state == PeerState::Paired && p.peer.connected)
+            .map(|p| p.peer.machine_id.clone())
+            .collect()
+    }
+
     /// The screens the layout is to hold besides this machine's: those of the selected
     /// remote ([`PeersState::selected_remote`]), a paired machine linked as a remote of
     /// this one. One remote at a time: the input stream carries no destination, so a
@@ -751,6 +768,7 @@ impl Service {
             selected_remote: None,
             selection: 0,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut
@@ -831,10 +849,23 @@ mod tests {
             selected_remote: Some(selected.to_owned()),
             selection: 1,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: String::new(),
             pointer_locked: false,
             peers,
         }
+    }
+
+    #[test]
+    fn the_linked_machines_are_the_paired_connected_ones_of_either_role() {
+        let peers = vec![
+            entry("a", Role::Master, PeerState::Paired, true),
+            entry("b", Role::Remote, PeerState::Paired, false),
+            entry("c", Role::Remote, PeerState::Pending, true),
+            entry("d", Role::Remote, PeerState::Paired, true),
+        ];
+        assert_eq!(state(true, "d", peers.clone()).linked(), ["a", "d"]);
+        assert!(state(false, "d", peers).linked().is_empty());
     }
 
     fn ids(remotes: &[RemoteScreens]) -> Vec<&str> {

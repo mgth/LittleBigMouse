@@ -43,6 +43,7 @@ fn laptop(pending: bool) -> Peer {
         problem: None,
         driven: false,
         injection_blocked: None,
+        drives: false,
     }
 }
 
@@ -50,6 +51,7 @@ struct Shown {
     state: Option<State>,
     draft: Panel,
     did: Option<Did>,
+    sharing: Vec<lbm_ipc::sharing::Running>,
 }
 
 fn page(state: Option<State>) -> Harness<'static, Shown> {
@@ -65,6 +67,7 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
                     &mut page.draft,
                     false,
                     None,
+                    &page.sharing,
                 ) {
                     page.did = Some(did);
                 }
@@ -73,8 +76,36 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
                 state,
                 draft: Panel::default(),
                 did: None,
+                sharing: Vec::new(),
             },
         )
+}
+
+/// The case of 2026-11-24: a Deskflow server left running moved the pointer to another
+/// machine with the engine stopped. The page says so, in the words the tray uses, and
+/// says nothing when the agent found none.
+#[test]
+fn the_page_says_another_sharing_tool_runs() {
+    let warning = "Deskflow is also running and can move the mouse to other machines, \
+                   and it is connected to one now";
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    assert!(h.query_by_label(warning).is_none());
+
+    h.state_mut().sharing = vec![lbm_ipc::sharing::Running {
+        tool: lbm_ipc::sharing::Tool::Deskflow,
+        process: "deskflow-core".into(),
+        pid: 40,
+        role: Some(lbm_ipc::sharing::Role::Server),
+        window: false,
+        connected: Some(true),
+    }];
+    h.run();
+    assert!(h.query_by_label(warning).is_some());
+    // Before the agent has said anything about the machines, too.
+    h.state_mut().state = None;
+    h.run();
+    assert!(h.query_by_label(warning).is_some());
 }
 
 #[test]
@@ -195,6 +226,25 @@ fn a_paired_machine_says_what_it_is_and_can_be_forgotten() {
     h.get_by_label("Forget laptop").click();
     h.run();
     assert_eq!(h.state().did, Some(Did::Forget(LAPTOP.into())));
+}
+
+#[test]
+fn a_driven_machine_shows_its_master_on_the_page() {
+    let desk = Peer {
+        machine_id: "dd".into(),
+        name: "desk".into(),
+        role: Role::Master,
+        displays: 0,
+        drives: true,
+        ..laptop(false)
+    };
+    let mut h = page(Some(state(vec![desk])));
+    h.run();
+    assert!(h.query_by_label("Drives this machine").is_some());
+    assert!(h
+        .query_by_label("Driven by desk: its mouse and keyboard are on this machine")
+        .is_some());
+    assert!(h.query_by_label("Has the mouse and keyboard").is_none());
 }
 
 #[test]

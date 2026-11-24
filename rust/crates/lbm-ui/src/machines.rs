@@ -44,6 +44,9 @@ pub struct Peer {
     /// there, here the name of its process (empty when unknown). `None` when it is not
     /// blocked, or does not say.
     pub injection_blocked: Option<String>,
+    /// Its mouse and keyboard drive this machine now: its pointer crossed onto it (it
+    /// is this machine's master).
+    pub drives: bool,
 }
 
 /// What the page says of a remote where Windows drops the input this machine sends.
@@ -148,20 +151,22 @@ fn printed_fingerprint(ui: &mut egui::Ui, whose: &str, machine_id: &str) {
 }
 
 /// Which machine the mouse and keyboard go to, in words: said once a remote is linked,
-/// the only time it can be anything but this machine.
+/// the only time it can be anything but this machine — or, on a machine a master
+/// drives, while that master's pointer is on it.
 pub fn input_goes_to(state: &State) -> Option<String> {
     if !state.enabled {
         return None;
     }
+    if let Some(master) = state.peers.iter().find(|peer| peer.drives) {
+        return Some(format!(
+            "Driven by {}: its mouse and keyboard are on this machine",
+            named(master)
+        ));
+    }
     if let Some(peer) = state.peers.iter().find(|peer| peer.driven) {
-        let name = if peer.name.is_empty() {
-            "an unnamed machine"
-        } else {
-            peer.name.as_str()
-        };
         return Some(locked(
             state,
-            format!("The mouse and keyboard are on {name}"),
+            format!("The mouse and keyboard are on {}", named(peer)),
         ));
     }
     state
@@ -174,6 +179,15 @@ pub fn input_goes_to(state: &State) -> Option<String> {
                 "The mouse and keyboard are on this machine".to_owned(),
             )
         })
+}
+
+/// What `peer` is called in a sentence.
+fn named(peer: &Peer) -> &str {
+    if peer.name.is_empty() {
+        "an unnamed machine"
+    } else {
+        peer.name.as_str()
+    }
 }
 
 /// `words`, and that the pointer stays there when it is locked.
@@ -267,9 +281,33 @@ fn lock_shortcut(
     chosen
 }
 
+/// The other sharing tools running on this machine (`InputSharing` in the agent's
+/// state), in words: they move the pointer to other machines whatever LittleBigMouse
+/// does, which looks like LittleBigMouse misbehaving unless it is said.
+pub fn other_sharing(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
+    for warning in lbm_ipc::sharing::warnings(running) {
+        ui.colored_label(ui.visuals().warn_fg_color, warning);
+    }
+}
+
+/// The bottom bar's word for the same: the tools' names, the sentences on hover.
+pub fn sharing_status(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
+    let tools = lbm_ipc::sharing::tools(running);
+    if tools.is_empty() {
+        return;
+    }
+    let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+    crate::theme::status(
+        ui,
+        &format!("{} also running", names.join(" and ")),
+        crate::theme::AMBER,
+    )
+    .on_hover_text(lbm_ipc::sharing::warnings(running).join("\n"));
+}
+
 /// The Machines page. `rescue` is the rescue shortcut, which the pointer lock's may not
 /// be; `busy` greys the controls while a request is out; `error` is the last request the
-/// agent refused.
+/// agent refused; `sharing` the other sharing tools the agent found running.
 pub fn panel(
     ui: &mut egui::Ui,
     state: Option<&State>,
@@ -277,12 +315,14 @@ pub fn panel(
     draft: &mut Panel,
     busy: bool,
     error: Option<&str>,
+    sharing: &[lbm_ipc::sharing::Running],
 ) -> Option<Did> {
     let mut did = None;
     crate::options::note(
         ui,
         "One mouse and keyboard for several computers · applied at once",
     );
+    other_sharing(ui, sharing);
     let Some(state) = state else {
         ui.label("Asking the agent…");
         return None;
@@ -414,6 +454,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
         crate::theme::status(ui, status, colour);
         if peer.driven {
             crate::theme::status(ui, "Has the mouse and keyboard", crate::theme::ACCENT);
+        }
+        if peer.drives {
+            crate::theme::status(ui, "Drives this machine", crate::theme::ACCENT);
         }
     });
     let role = match (peer.role, peer.pending) {
@@ -571,6 +614,7 @@ mod tests {
             pending: false,
             displays: 1,
             driven: false,
+            drives: false,
             problem: None,
             injection_blocked: None,
         };
@@ -607,6 +651,42 @@ mod tests {
         assert_eq!(input_goes_to(&state), None);
         state.enabled = false;
         state.peers.clear();
+        assert_eq!(input_goes_to(&state), None);
+    }
+
+    #[test]
+    fn a_driven_machine_says_which_master_drives_it() {
+        let desk = Peer {
+            machine_id: "dd".into(),
+            name: "desk".into(),
+            address: String::new(),
+            connected: true,
+            role: Role::Master,
+            pending: false,
+            displays: 0,
+            driven: false,
+            drives: false,
+            problem: None,
+            injection_blocked: None,
+        };
+        let mut state = State {
+            enabled: true,
+            peers: vec![desk],
+            ..State::default()
+        };
+        // A master linked, its pointer at home: nothing to say, as before.
+        assert_eq!(input_goes_to(&state), None);
+        state.peers[0].drives = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by desk: its mouse and keyboard are on this machine")
+        );
+        state.peers[0].name.clear();
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by an unnamed machine: its mouse and keyboard are on this machine")
+        );
+        state.enabled = false;
         assert_eq!(input_goes_to(&state), None);
     }
 

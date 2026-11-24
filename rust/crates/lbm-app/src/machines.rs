@@ -45,6 +45,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         .map(|selected| selected.as_str().unwrap_or_default());
     // The remote the pointer is on; an agent older than the indicator says nothing.
     let driven = value["Driven"].as_str();
+    // The master whose pointer is on this machine; an agent older than that says nothing.
+    let driven_by = value["DrivenBy"].as_str();
     for entry in value["Peers"].as_array().into_iter().flatten() {
         let machine_id = text(entry, "MachineId");
         if machine_id.is_empty() {
@@ -73,6 +75,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             });
         }
         let driven = driven == Some(machine_id.as_str()) && !pending;
+        let drives = driven_by == Some(machine_id.as_str()) && !pending;
         peers.push(Peer {
             machine_id,
             name: text(entry, "Name"),
@@ -81,6 +84,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             role,
             pending,
             driven,
+            drives,
             displays: displays.len(),
             problem: link_problem(&entry["Problem"]),
             // Said by the remote while linked; absent from an older agent's state.
@@ -643,6 +647,42 @@ mod tests {
         assert_eq!(read.pointer_lock_shortcut, "Ctrl+Alt+L");
         assert!(read.pointer_locked);
         assert!(!machines.heard(&driven), "nor is the lock");
+    }
+
+    #[test]
+    fn the_master_driving_this_machine_is_marked_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut driven = state(json!([
+            {"MachineId": "dd", "Name": "desk", "Connected": true,
+             "Role": "Master", "State": "Paired"},
+            {"MachineId": "ee", "Name": "other", "Connected": true,
+             "Role": "Master", "State": "Paired"},
+        ]));
+        machines.heard(&driven);
+        let drives = |value: &Value| -> Vec<bool> {
+            read(value)
+                .unwrap()
+                .0
+                .peers
+                .iter()
+                .map(|p| p.drives)
+                .collect()
+        };
+        assert_eq!(
+            drives(&driven),
+            [false, false],
+            "an older agent says nothing"
+        );
+        driven["DrivenBy"] = json!("dd");
+        assert_eq!(drives(&driven), [true, false]);
+        assert!(
+            !read(&driven).unwrap().0.peers[0].driven,
+            "it drives, not driven"
+        );
+        assert!(!machines.heard(&driven), "being driven rebuilds no map");
+        driven["DrivenBy"] = Value::Null;
+        assert_eq!(drives(&driven), [false, false]);
     }
 
     #[test]

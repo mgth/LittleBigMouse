@@ -163,6 +163,9 @@ pub struct Agent<W> {
     injection_blocked: Vec<crate::peers::BlockedRemote>,
     /// The pointer is locked on the machine it is on (`PeersState::pointer_locked`).
     pointer_locked: bool,
+    /// The name of the master that drives this machine now (`PeersState::driven_by`),
+    /// for the state; `None` when none does.
+    driven_by: Option<String>,
     /// The pointer lock's shortcut the hook is to watch for: the one of the settings
     /// while the mode is on, none otherwise.
     pointer_lock: String,
@@ -178,6 +181,16 @@ pub struct Agent<W> {
     hook_zones: crate::hook_zones::HookZones,
     /// What the multi-PC manager was last told of the hook's zones.
     told_hook_ready: Option<Option<u64>>,
+    /// The other sharing tools found at the last look (`InputSharing` in the state).
+    input_sharing: Vec<lbm_ipc::sharing::Running>,
+    /// How to look for them: [`crate::input_sharing::scan`] in `main`, nothing in a test
+    /// that did not ask (a test must not report the machine it runs on).
+    scan_input_sharing: fn() -> Vec<lbm_ipc::sharing::Running>,
+    /// The multi-PC mode was on in the last `Peers` state: turning it on is a moment
+    /// to look for the other tools.
+    multi_pc_on: bool,
+    /// The machines linked in the last `Peers` state: a new one is a moment to look.
+    linked: Vec<String>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -231,12 +244,39 @@ impl<W: AgentWorld> Agent<W> {
             has_master: false,
             driven_machine: None,
             injection_blocked: Vec::new(),
+            driven_by: None,
             pointer_locked: false,
             pointer_lock: String::new(),
             pointer_lock_sent: None,
             selection_seen: None,
             hook_zones: crate::hook_zones::HookZones::new(),
             told_hook_ready: None,
+            input_sharing: Vec::new(),
+            scan_input_sharing: Vec::new,
+            multi_pc_on: false,
+            linked: Vec::new(),
+        }
+    }
+
+    /// Looks for the other sharing tools with `scan` at the moments it matters
+    /// ([`crate::input_sharing`]).
+    pub fn with_input_sharing_scan(mut self, scan: fn() -> Vec<lbm_ipc::sharing::Running>) -> Self {
+        self.scan_input_sharing = scan;
+        self
+    }
+
+    /// One look for the other sharing tools, for the state. `why` is for the log, which
+    /// says only what changed.
+    fn look_for_input_sharing(&mut self, why: &str) {
+        let found = (self.scan_input_sharing)();
+        if found != self.input_sharing {
+            if found.is_empty() {
+                eprintln!("[lbm-agent] no other sharing tool runs any more ({why})");
+            }
+            for warning in lbm_ipc::sharing::warnings(&found) {
+                eprintln!("[lbm-agent] {warning} ({why})");
+            }
+            self.input_sharing = found;
         }
     }
 
@@ -325,7 +365,9 @@ impl<W: AgentWorld> Agent<W> {
             input_switch_failures: self.input_failures.current(),
             driven_machine: self.driven_machine.clone(),
             injection_blocked: self.injection_blocked.clone(),
+            driven_by: self.driven_by.clone(),
             pointer_locked: self.pointer_locked,
+            input_sharing: self.input_sharing.clone(),
         }
     }
 
@@ -572,6 +614,8 @@ impl<W: AgentWorld> Agent<W> {
                 }
             }
             Request::Subscribe => {
+                // A window opening is where a user who wonders who moves the mouse looks.
+                self.look_for_input_sharing("a frontend subscribed");
                 let snapshot = serde_json::to_value(self.snapshot()).map_err(|e| e.to_string());
                 self.subscribers.push(client.clone());
                 snapshot
@@ -1108,18 +1152,31 @@ impl<W: AgentWorld> Agent<W> {
                     && p.peer.connected
             });
         let master_linked = has_master && !self.has_master;
+        let linked = state.linked();
+        let moment = crate::input_sharing::moment(
+            (self.multi_pc_on, &self.linked),
+            (state.enabled, &linked),
+        );
+        self.multi_pc_on = state.enabled;
+        self.linked = linked;
+        if let Some(why) = moment {
+            self.look_for_input_sharing(why);
+        }
         self.has_master = has_master;
-        self.driven_machine = state
-            .driven
-            .as_ref()
-            .filter(|_| state.enabled)
-            .map(|driven| {
-                state
-                    .peers
-                    .iter()
-                    .find(|p| &p.peer.machine_id == driven)
-                    .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
-            });
+        let named = |machine_id: &Option<String>| {
+            machine_id
+                .as_ref()
+                .filter(|_| state.enabled)
+                .map(|machine_id| {
+                    state
+                        .peers
+                        .iter()
+                        .find(|p| &p.peer.machine_id == machine_id)
+                        .map_or_else(|| machine_id.clone(), |p| p.peer.name.clone())
+                })
+        };
+        self.driven_machine = named(&state.driven);
+        self.driven_by = named(&state.driven_by);
         self.injection_blocked = crate::peers::blocked_remotes(&state);
         self.pointer_locked = state.enabled && state.pointer_locked;
         self.pointer_lock = if state.enabled {
@@ -1828,6 +1885,7 @@ impl<W: AgentWorld> Agent<W> {
     fn apply(&mut self, effect: Effect) {
         match effect {
             Effect::Start => {
+                self.look_for_input_sharing("the engine starts");
                 // The zones of now: never those of the moment the Start was decided.
                 if let Some((zones, foreign)) = self.world.zones() {
                     // The topology prologue — never for a foreign layout, which must not

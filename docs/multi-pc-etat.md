@@ -320,7 +320,7 @@ qu'aucun pair n'est lié ou que l'option est coupée.
 
 Des idées, pas des engagements ; aucune n'est commencée. Dans l'ordre d'utilité estimée.
 
-1. **Verrouiller le pointeur sur une machine** par un raccourci *(codé, branche des petites fonctions, voir « Travaux en cours »)*. Pour les jeux et le
+1. **Verrouiller le pointeur sur une machine** par un raccourci *(codé, PR #813, voir « Travaux en cours »)*. Pour les jeux et le
    plein écran, où l'on franchit le bord par accident. La reconnaissance d'un raccourci
    dans le flux capturé existe déjà pour le raccourci de secours.
 2. **Raccourcis pour sauter d'une machine à l'autre** sans viser un bord, avec retour à
@@ -402,7 +402,7 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | `claude/multi-pc-small-features-v6-98ec02`, 4 commits, pas poussée | Tests et clippy verts. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
+| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte ; tests et clippy verts. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
 | Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | PR #811 | Ouverte. Injection dans une fenêtre élevée vérifiée sur la vm124. Un cas de revue reste à valider : avec un `--config-dir` relatif à un lecteur (`C:profiles`), le processus relancé élevé pouvait lire un autre dossier que celui du lancement ; correctif poussé (4875c8db), pas encore revu ni essayé sur la VM ; la configuration SignPath (signature de `lbm-agent.exe`) reste à mettre à jour à la main |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)

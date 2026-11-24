@@ -8,10 +8,14 @@
 //!   ends, or a batch finds the queue full, the connection is closed ([`Sink::release`]):
 //!   that is how the hook learns to release whatever the stream left pressed. The hook
 //!   ignores a new connection's batches until an `Enter`; after a full queue the master
-//!   is told so (`InputReset`, sent by the link's task). A connection that ends for
-//!   any other cause — the hook gone, a write that failed or took too long — ends the
-//!   session the same way: every link's task hears of it ([`Sink::lost`]), and the one
-//!   whose master was in a session says `InputReset`.
+//!   is told so (`InputReset`, sent by the link's task). A batch the hook did not get
+//!   ends the session the same way: one dropped for want of a connection, or one of a
+//!   connection that ended for any other cause (the hook gone, a write that failed or
+//!   took too long). Every batch is numbered when queued, and every link's task hears
+//!   the number of the latest batch so lost ([`Sink::lost`]); the one whose master's
+//!   session it belongs to says `InputReset`. A batch that crosses (an `Enter`) tries
+//!   to connect at once, even within [`RETRY_AFTER`] of a failure: a hook that
+//!   restarted is reached by the next crossing, not one a second later.
 //! - **Master**: while a remote is linked ([`HookInput::set_target`]), the connection is
 //!   kept, and every batch the hook writes to it is relayed to that remote's link with
 //!   `try_input`, never a wait. A connection relays to one link for its whole life.
@@ -31,6 +35,8 @@
 //! that case yet.
 
 use std::io;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
@@ -57,24 +63,42 @@ const RETRY_AFTER: Duration = Duration::from_secs(1);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(1);
 
 enum Message {
-    Batch(Vec<u8>),
+    Batch {
+        /// Its number, from [`Sink::try_batch`].
+        number: u64,
+        bytes: Vec<u8>,
+        /// It carries an `Enter`: a connection is tried at once if there is none.
+        crosses: bool,
+    },
     Release,
 }
 
 /// Where the network side hands batches to the hook, and the end of a stream.
 pub struct Sink {
     messages: mpsc::Sender<Message>,
-    /// Marked changed every time the connection ends by no doing of the network side
-    /// (not a [`Sink::release`]): whatever session the hook had is over.
-    lost: watch::Receiver<()>,
+    /// The number the last batch queued was given, by any sink.
+    numbered: Arc<AtomicU64>,
+    /// The number of the latest batch the hook did not get, or got on a connection
+    /// that ended since by no doing of the network side (not a [`Sink::release`]).
+    lost: watch::Receiver<u64>,
 }
 
 impl Sink {
-    /// Queues a batch for the hook if there is room. When there is none the batch is
-    /// lost, and the caller must end the stream ([`Sink::release`]): what follows it
-    /// cannot be injected as if it had not been.
-    pub fn try_batch(&self, batch: Vec<u8>) -> bool {
-        self.messages.try_send(Message::Batch(batch)).is_ok()
+    /// Queues a batch for the hook if there is room, and returns the number it was
+    /// given: numbers grow in the order batches are queued. When there is no room the
+    /// batch is lost, and the caller must end the stream ([`Sink::release`]): what
+    /// follows it cannot be injected as if it had not been. `crosses`: the batch
+    /// carries an `Enter`.
+    pub fn try_batch(&self, batch: Vec<u8>, crosses: bool) -> Option<u64> {
+        let number = self.numbered.fetch_add(1, Ordering::Relaxed) + 1;
+        self.messages
+            .try_send(Message::Batch {
+                number,
+                bytes: batch,
+                crosses,
+            })
+            .ok()
+            .map(|()| number)
     }
 
     /// The stream ended: closes the connection after the batches already queued, so
@@ -84,22 +108,25 @@ impl Sink {
         let _ = self.messages.send(Message::Release).await;
     }
 
-    /// Resolves when the connection to the hook has ended by no doing of this side
-    /// since the last time it did (or since this sink was made): the hook went, or a
-    /// write to it failed or took too long. The batches delivered before are the hook's
-    /// no more: a new connection's are ignored until an `Enter`. Never resolves once
-    /// the connection's task is gone.
-    pub async fn lost(&mut self) {
+    /// Resolves when a batch was lost since the last time it did (or since this sink
+    /// was made), with the number of the latest one: dropped for want of a connection,
+    /// or written on a connection that ended since by no doing of this side (the hook
+    /// went, a write failed or took too long). Every batch up to that number is the
+    /// hook's no more: a new connection's are ignored until an `Enter`. Never resolves
+    /// once the connection's task is gone.
+    pub async fn lost(&mut self) -> u64 {
         if self.lost.changed().await.is_err() {
             std::future::pending::<()>().await;
         }
+        *self.lost.borrow_and_update()
     }
 }
 
 /// The connection's task, and its two inputs.
 pub struct HookInput {
     messages: mpsc::Sender<Message>,
-    lost: watch::Sender<()>,
+    numbered: Arc<AtomicU64>,
+    lost: watch::Sender<u64>,
     target: watch::Sender<Option<LinkSender>>,
 }
 
@@ -109,10 +136,11 @@ impl HookInput {
     pub fn spawn(endpoint: Option<String>) -> HookInput {
         let (messages, inbox) = mpsc::channel(QUEUE);
         let (target, targets) = watch::channel(None);
-        let (lost, _) = watch::channel(());
+        let (lost, _) = watch::channel(0);
         tokio::spawn(run(endpoint, inbox, targets, lost.clone()));
         HookInput {
             messages,
+            numbered: Arc::default(),
             lost,
             target,
         }
@@ -122,6 +150,7 @@ impl HookInput {
     pub fn sink(&self) -> Sink {
         Sink {
             messages: self.messages.clone(),
+            numbered: self.numbered.clone(),
             lost: self.lost.subscribe(),
         }
     }
@@ -147,6 +176,8 @@ struct Connection {
     lost: oneshot::Receiver<()>,
     /// The link the hook's batches go to, for the whole life of this connection.
     relaying_to: Option<LinkSender>,
+    /// The number of the last batch written to it (0: none).
+    written: u64,
 }
 
 impl Drop for Connection {
@@ -160,16 +191,23 @@ async fn run(
     endpoint: Option<String>,
     mut inbox: mpsc::Receiver<Message>,
     mut targets: watch::Receiver<Option<LinkSender>>,
-    lost: watch::Sender<()>,
+    lost: watch::Sender<u64>,
 ) {
-    // The connection ended by no doing of the network side: the session the hook had,
-    // if any, is over, and the links' tasks are told so.
-    let lose = |connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>| {
-        if connection.is_some() {
-            close(connection, leaving);
-            lost.send_replace(());
-        }
+    // Batches up to `number` did not reach the hook, or not for good: the links' tasks
+    // are told, and the one whose session they belong to ends it.
+    let tell = |number: u64| {
+        lost.send_modify(|latest| *latest = (*latest).max(number));
     };
+    // The connection ended by no doing of the network side: what was written to it is
+    // the hook's no more.
+    let lose =
+        |connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>, number: u64| {
+            if let Some(open) = connection {
+                let number = number.max(open.written);
+                close(connection, leaving);
+                tell(number);
+            }
+        };
     let mut connection: Option<Connection> = None;
     let mut retry_at: Option<Instant> = None;
     // The `Leave` of the last hop being queued on its link; no new connection relays
@@ -196,19 +234,26 @@ async fn run(
                     return;
                 }
                 Some(Message::Release) => close(&mut connection, &mut leaving),
-                Some(Message::Batch(batch)) => {
-                    let may_try = retry_at.is_none_or(|at| Instant::now() >= at);
+                Some(Message::Batch { number, bytes, crosses }) => {
+                    // A crossing is worth an attempt at any time: one a second at most.
+                    let may_try = crosses || retry_at.is_none_or(|at| Instant::now() >= at);
                     if connection.is_none() && may_try {
                         let target = relay_target(&targets, &leaving);
                         connection = open(endpoint.as_deref(), target, &mut retry_at).await;
                     }
                     if let Some(open) = &mut connection {
                         let written =
-                            tokio::time::timeout(WRITE_TIMEOUT, write_batch(&mut open.writer, &batch)).await;
-                        if !matches!(written, Ok(Ok(()))) {
-                            lose(&mut connection, &mut leaving);
+                            tokio::time::timeout(WRITE_TIMEOUT, write_batch(&mut open.writer, &bytes)).await;
+                        if matches!(written, Ok(Ok(()))) {
+                            open.written = number;
+                        } else {
+                            lose(&mut connection, &mut leaving, number);
                             retry_at = Some(Instant::now() + RETRY_AFTER);
                         }
+                    } else {
+                        // Dropped: never queued for later, input replayed late is input
+                        // nobody typed. A session it belonged to is over.
+                        tell(number);
                     }
                 }
             },
@@ -218,7 +263,7 @@ async fn run(
                     None => std::future::pending().await,
                 }
             } => {
-                lose(&mut connection, &mut leaving);
+                lose(&mut connection, &mut leaving, 0);
                 retry_at = Some(Instant::now() + RETRY_AFTER);
             }
             _ = async {
@@ -234,7 +279,7 @@ async fn run(
                     // Another remote, or none: this hop of the stream is over, and the
                     // next connection, if any, relays to the new one from its start.
                     // A machine that is also a remote loses its own session with it.
-                    lose(&mut connection, &mut leaving);
+                    lose(&mut connection, &mut leaving, 0);
                     retry_at = None;
                 }
             }
@@ -291,6 +336,7 @@ async fn open(
                 reading,
                 lost: lost_rx,
                 relaying_to: target,
+                written: 0,
             })
         }
         _ => {

@@ -59,9 +59,9 @@ screen), Windows as master, the portal and X11 backends as master.
   - `SelectInput { Display, Value }` — either way: write VCP 0x60 on that display
     (see "Input switching")
   - `InputReset` — remote → master: the remote ended the session of the input stream
-    while the link lives on (its hook could not keep up, or its connection to the hook
-    ended: the hook restarted, crashed, or failed to read in time); the master brings its
-    pointer home (see "The end of a hop"). Added after protocol 1 without a new version, an older
+    while the link lives on (its hook could not keep up, its connection to the hook
+    ended — the hook restarted, crashed, or failed to read in time — or a crossing found
+    no hook to take it); the master brings its pointer home (see "The end of a hop"). Added after protocol 1 without a new version, an older
     master ignores it as an unknown type
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
@@ -209,13 +209,18 @@ On a remote (`lbm-hook/src/remote`):
   batch that finds the agent's queue to the hook full: it may have been a release, so
   the connection is closed after what is queued, and the hook ignores what follows
   until the master's next `Enter` — which is why the master is then told `InputReset`.
-  The same holds when the connection ends by no doing of the link — the hook went, or a
-  write to it failed or took longer than a second: every link's task hears of it, and
-  the one whose master was **in a session** (a batch delivered since that master's last
-  `Leave` and since the last `InputReset`) says `InputReset`, once. Nothing is said out
-  of a session, at the end of the link, or while the hook stays away. The agent
-  connects to the hook again at the first batch after a second; a crossing made sooner
-  finds no connection and is dropped.
+  The same holds for any batch the hook did not get: dropped for want of a connection,
+  or written on a connection that ended since by no doing of the link (the hook went,
+  a write failed or took longer than a second). Batches are numbered as they are
+  queued, and every link's task hears the number of the latest one lost; the one whose
+  master's **session** it belongs to says `InputReset`, once. A session starts at the
+  first batch queued after the master's `Leave` — after an `InputReset`, only at its
+  next `Enter` — and ends at its `Leave` or that `InputReset`. Nothing is said for a loss
+  out of a session or at the end of the link, and what the master sends before it
+  hears the `InputReset` opens no session. After losing its hook the agent tries again
+  at the first batch a second later, except for a batch that carries an `Enter`: that
+  one tries at once, so a hook that restarted takes the next crossing; while no hook is
+  there, each crossing is answered by one `InputReset`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the selected remote with `try_input`.
   **One remote at a time**: batches carry no destination, so exactly one linked remote

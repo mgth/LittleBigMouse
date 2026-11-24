@@ -1119,23 +1119,26 @@ async fn forward(
     // Only a master's batches are injected: a remote has no business driving this
     // machine's pointer.
     let injecting = their_role == Role::Master;
-    // A session of this master's is under way in the hook: a batch was delivered since
-    // the master's last `Leave` and since the last end of the session here.
-    let mut injected = false;
+    // The session of this master's under way in the hook: the number of its first
+    // batch queued, until the master's `Leave` or the end of the session here.
+    let mut session: Option<u64> = None;
+    // `InputReset` was said: what the master sends before it hears of it opens no
+    // session, only its next crossing (or its `Leave`) does.
+    let mut reset_said = false;
     let reason = loop {
         let event = tokio::select! {
-            // A loss is heard before the next batch: one that came before a crossing
-            // ended no session of that crossing's.
-            biased;
-            () = hook.lost() => {
-                // The hook's connection ended by no doing of this link's (the hook went,
-                // or a write to it failed or took too long): the session is over there,
-                // and the next connection's batches are ignored until an `Enter`. The
-                // master is told, as after a full queue below.
-                if injected {
-                    injected = false;
+            lost = hook.lost() => {
+                // A batch of the session never reached the hook, or reached it on a
+                // connection that ended since by no doing of this link's (the hook
+                // went, a write failed or took too long): the session is over there,
+                // and what follows is ignored until an `Enter`. The master is told, as
+                // after a full queue below. Batches lost before the session began say
+                // nothing of it.
+                if session.is_some_and(|first| lost >= first) {
+                    session = None;
+                    reset_said = true;
                     eprintln!(
-                        "[lbm-agent] multi-PC: the hook's connection ended in a session: \
+                        "[lbm-agent] multi-PC: the hook lost input of the session: \
                          the master is told"
                     );
                     reset(&link);
@@ -1146,18 +1149,26 @@ async fn forward(
         };
         match event {
             Some(Event::Input(batch)) if injecting => {
-                let leaves = ends_with_leave(&batch);
-                if hook.try_batch(batch) {
-                    injected = !leaves;
-                } else if injected {
+                let (crosses, leaves) = session_edges(&batch);
+                if let Some(number) = hook.try_batch(batch, crosses) {
+                    if leaves {
+                        session = None;
+                        reset_said = false;
+                    } else if crosses || !reset_said {
+                        reset_said = false;
+                        session.get_or_insert(number);
+                    }
+                } else if session.is_some() || crosses {
                     // The hook is not keeping up and this batch is lost: it may have been
-                    // a release. The stream ends here instead, so the hook releases what
-                    // it holds; what follows reaches it as a new stream, ignored until
-                    // the master's next `Enter`. The master is told, or it would go on
-                    // sending into that void, its pointer and keyboards held here, until
-                    // the user crossed home and back.
-                    hook.release().await;
-                    injected = false;
+                    // a release, or the crossing itself. The stream ends here instead, so
+                    // the hook releases what it holds; what follows reaches it as a new
+                    // stream, ignored until the master's next `Enter`. The master is
+                    // told, or it would go on sending into that void, its pointer and
+                    // keyboards held here, until the user crossed home and back.
+                    if session.take().is_some() {
+                        hook.release().await;
+                    }
+                    reset_said = true;
                     reset(&link);
                 }
             }
@@ -1174,7 +1185,7 @@ async fn forward(
         }
     };
     // The stream is over: the hook releases whatever it left pressed.
-    if injected {
+    if session.is_some() {
         hook.release().await;
     }
     let _ = internal.send(Internal::Closed {
@@ -1194,16 +1205,19 @@ fn reset(link: &LinkSender) {
     });
 }
 
-/// Whether `batch` ends the master's session: the pointer went home with it, and the
-/// hook let go of everything (its last `Enter` or `Leave` is a `Leave`).
-fn ends_with_leave(batch: &[u8]) -> bool {
-    lbm_ipc::input::decode(batch).is_ok_and(|events| {
-        events
-            .iter()
-            .rev()
-            .find(|event| matches!(event, InputEvent::Enter { .. } | InputEvent::Leave))
-            == Some(&InputEvent::Leave)
-    })
+/// Whether `batch` crosses (carries an `Enter`), and whether it ends the master's
+/// session: the pointer went home with it and the hook let go of everything (its last
+/// `Enter` or `Leave` is a `Leave`).
+fn session_edges(batch: &[u8]) -> (bool, bool) {
+    let Ok(events) = lbm_ipc::input::decode(batch) else {
+        return (false, false);
+    };
+    let edges = events
+        .iter()
+        .filter(|event| matches!(event, InputEvent::Enter { .. } | InputEvent::Leave));
+    let crosses = edges.clone().any(|event| *event != InputEvent::Leave);
+    let leaves = edges.clone().next_back() == Some(&InputEvent::Leave);
+    (crosses, leaves)
 }
 
 /// `host`, `host:port`, `[v6]` or `[v6]:port`, with the protocol's port when none is

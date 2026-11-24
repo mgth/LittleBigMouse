@@ -42,8 +42,9 @@ Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est ch
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
 reste reconnu pendant que le clavier est capturé. Le hook de l'esclave qui perd seul
-sa connexion à son agent en pleine session y est soumis aussi : l'agent de l'esclave dit
-`InputReset` et le maître ramène son pointeur.
+sa connexion à son agent en pleine session y est soumis aussi, comme une traversée qui
+ne trouve pas de hook chez l'esclave : l'agent de l'esclave dit `InputReset` et le
+maître ramène son pointeur.
 
 ## Ce qui a été essayé pour de bon
 
@@ -75,11 +76,6 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 ## Faiblesses connues
 
-- **Traversée dans la seconde qui suit la perte du hook de l'esclave.** Après la perte
-  de sa connexion au hook, l'agent de l'esclave attend une seconde avant de s'y
-  reconnecter ; un `Enter` arrivé entre-temps est jeté sans `InputReset`, et le maître
-  reste de l'autre côté jusqu'à ce que l'utilisateur revienne et retraverse. De même
-  pour une traversée pendant que le hook de l'esclave est absent.
 - La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
   hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
   mauvais. Le corriger demande un identifiant de layout dans la réponse.

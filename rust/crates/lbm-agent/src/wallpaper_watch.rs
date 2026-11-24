@@ -174,12 +174,14 @@ fn places(
     std::collections::BTreeSet<std::path::PathBuf>,
     std::collections::BTreeSet<std::ffi::OsString>,
 ) {
-    /// More hops than any real chain; a loop of links ends here.
-    const HOPS: usize = 8;
     let (mut dirs, mut names) =
         crate::watch::events::watched(std::slice::from_ref(&file.to_path_buf()));
+    // Every link met, so that a loop of them ends the walk — and nothing else does: a
+    // count of hops would give up on a long chain, and drop the one directory that
+    // matters while its last target is missing.
+    let mut met = std::collections::BTreeSet::new();
     let mut at = file.to_path_buf();
-    for _ in 0..HOPS {
+    while met.insert(at.clone()) {
         let Ok(to) = std::fs::read_link(&at) else {
             break;
         };
@@ -538,6 +540,42 @@ mod tests {
                 said(&mut received).await,
                 "the target appearing was not seen"
             );
+        }
+
+        /// However many links lie between the configuration and its file, each in a
+        /// directory of its own; and links that only lead to each other end the walk.
+        #[tokio::test]
+        async fn a_long_chain_of_links_is_followed_to_its_end_and_a_loop_of_them_ends() {
+            let config = tempfile::tempdir().unwrap();
+            let file = config.path().join(PLASMA_CONFIG);
+            let stops: Vec<_> = (0..12).map(|_| tempfile::tempdir().unwrap()).collect();
+            let mut link = file.clone();
+            for stop in &stops {
+                let next = stop.path().join("appletsrc");
+                std::os::unix::fs::symlink(&next, &link).unwrap();
+                link = next;
+            }
+            let real = link;
+            std::fs::write(&real, "[Containments][1]\n").unwrap();
+            let (changes, mut received) = channel();
+            let _watching = watch_file(&file, changes).expect("no inotify watch to test with");
+
+            std::fs::remove_file(&real).unwrap();
+            assert!(said(&mut received).await, "the target going was not seen");
+            while received.try_recv().is_ok() {}
+            std::fs::write(&real, "[Containments][1][Wallpaper]\nImage=back\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "the target coming back was not seen"
+            );
+
+            let around = tempfile::tempdir().unwrap();
+            let (one, other) = (around.path().join("one"), around.path().join("other"));
+            std::os::unix::fs::symlink(&other, &one).unwrap();
+            std::os::unix::fs::symlink(&one, &other).unwrap();
+            let (dirs, names) = places(&one);
+            assert_eq!(dirs.len(), 1, "{dirs:?}");
+            assert_eq!(names.len(), 2, "{names:?}");
         }
 
         #[tokio::test]

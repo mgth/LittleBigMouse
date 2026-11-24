@@ -4,9 +4,11 @@ pub mod input;
 pub mod linux;
 pub mod raster;
 pub mod scene;
+pub mod standalone;
 #[cfg(windows)]
 mod windows;
 pub use scene::{Band, Mode};
+pub use standalone::Standalone;
 
 pub trait Backend {
     fn present(&mut self, bands: &[Band]) -> Result<(), String>;

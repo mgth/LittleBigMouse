@@ -205,6 +205,8 @@ struct App {
     desktop_textures: HashMap<String, egui::TextureHandle>,
     /// The remotes' wallpapers, as their agents drew them (multi-PC).
     remote_wallpapers: lbm_app::remote_wallpapers::RemoteWallpapers,
+    /// The rulers sent to the remotes' screens while "Rulers on screens" is on.
+    remote_rulers: lbm_app::remote_rulers::RemoteRulers,
     /// Their textures, uploaded once per change, by `remote_wallpapers::key_of`.
     remote_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
@@ -617,6 +619,7 @@ impl App {
             desktop_wallpaper: Default::default(),
             desktop_textures: HashMap::new(),
             remote_wallpapers: Default::default(),
+            remote_rulers: Default::default(),
             remote_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
@@ -678,6 +681,7 @@ impl App {
                 // The `Peers` event is a change; what there is now has to be asked.
                 self.machines.connected(&capabilities);
                 self.remote_wallpapers.connected(&capabilities);
+                self.remote_rulers.connected(&capabilities);
                 self.switching = None;
                 if self.machines.offered {
                     self.machines_request("Peers", serde_json::json!({}));
@@ -701,6 +705,7 @@ impl App {
                 self.agent_keeps_intrinsic_size = false;
                 self.machines.disconnected();
                 self.remote_wallpapers.disconnected();
+                self.remote_rulers.disconnected();
                 self.switching = None;
                 self.held_pending.clear();
                 self.state = lbm_ui::State::default();
@@ -1022,6 +1027,7 @@ impl App {
             .map(|r| r.machine_id.clone())
             .collect();
         self.remote_wallpapers.heard(state, &on_the_map);
+        self.remote_rulers.heard(state);
     }
 
     /// The machine the selected monitor is showing, when it is not this one.
@@ -1343,6 +1349,9 @@ impl App {
         }
         if let Message::Answer { id, result } = &message {
             if self.remote_wallpapers.answered(*id, result) {
+                return;
+            }
+            if self.remote_rulers.answered(*id, result) {
                 return;
             }
             if let Some(changed) = self.machines.answered(*id, result) {
@@ -2483,6 +2492,11 @@ impl App {
         if let Some(error) = &self.screen_overlay_error {
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
+        if self.screen_overlay_mode == mode && mode == Mode::Rulers {
+            if let Some(error) = self.remote_rulers.error() {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+            }
+        }
         ui.add_space(5.0);
     }
 
@@ -2616,6 +2630,7 @@ impl App {
                 }
             }
             self.screen_overlay.clear();
+            self.sync_remote_rulers(None);
             return;
         }
         // Limit CPU rasterization during pointer gestures. Hiding above is immediate.
@@ -2665,6 +2680,33 @@ impl App {
             self.screen_overlay.clear();
             self.screen_overlay_mode = Mode::Off;
             self.screen_overlay_error = Some(error);
+            self.sync_remote_rulers(None);
+            return;
+        }
+        // The remotes' screens get theirs from the same layout, in their own pixels.
+        let remote = (self.screen_overlay_mode == Mode::Rulers)
+            .then(|| lbm_app::remote_rulers::wanted(&drawn, self.selected.as_deref()));
+        self.sync_remote_rulers(remote);
+    }
+
+    /// Asks the agent to show `wanted` on the remotes' screens, and nothing else: only
+    /// what changed is sent. `None` takes everything down.
+    fn sync_remote_rulers(&mut self, wanted: Option<lbm_app::remote_rulers::Wanted>) {
+        let changes = match wanted {
+            Some((wanted, errors)) => self.remote_rulers.changes(wanted, errors),
+            None => self.remote_rulers.clear(),
+        };
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        for (machine, extra) in changes {
+            let id = self.next_id;
+            self.next_id += 1;
+            self.remote_rulers.sent(id, machine);
+            if requests.send((id, "PeerOverlay", extra)).is_err() {
+                self.remote_rulers
+                    .answered(id, &Err("the agent stopped listening".into()));
+            }
         }
     }
 

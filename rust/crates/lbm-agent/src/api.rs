@@ -65,7 +65,13 @@
 //! <- {"Id": 14, "Result": {"MachineId": "…", "Revision": 3,     // its WallpaperRevision
 //!                          "Wallpapers": [{"Display": "eDP-1", "Image": "<base64 JPEG>"},
 //!                                         {"Display": "HDMI-1", "Color": "#203040"}]}}
+//! -> {"Id": 15, "Method": "PeerOverlay", "MachineId": "…",     // capability PeerOverlay
+//!     "Bands": [{… lbm_overlay::scene::Band, in that remote's desktop pixels …}]}
+//! <- {"Id": 15, "Result": null}                                // "Bands": [] takes them down
 //! ```
+//!
+//! What a frontend shows with `PeerOverlay` is its own: when its connection ends, the
+//! agent takes down on every remote what that frontend asked for.
 
 use std::io;
 
@@ -95,7 +101,9 @@ pub const PROTOCOL: u32 = 3;
 ///   monitor, theirs included.
 /// - `PeerWallpapers`: the request of that name, and `WallpaperRevision` on every machine
 ///   of the `Peers` state: what a remote's screens show, for the master's map.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers"];
+/// - `PeerOverlay`: the request of that name — the rulers the editor shows, drawn on a
+///   remote's screens too — and `OverlayError` on a machine of the `Peers` state.
+pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers", "PeerOverlay"];
 
 //==================//
 // The contract     //
@@ -330,6 +338,16 @@ pub enum Request {
     PeerWallpapers {
         #[serde(rename = "MachineId")]
         machine_id: String,
+    },
+    /// The rulers to draw on the screens of a remote of this machine (`PeerOverlay`):
+    /// `lbm_overlay::scene::Band`s in that remote's own desktop pixels, which the remote
+    /// checks against its screens; none takes them down. Owned by the frontend that asked:
+    /// taken down when it goes.
+    PeerOverlay {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+        #[serde(rename = "Bands", default)]
+        bands: Vec<Value>,
     },
 }
 

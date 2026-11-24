@@ -449,7 +449,10 @@ sees it.
 - **Per system.** Wayland: `ext-data-control-v1` on a connection of the agent's own
   (KWin 6 has it, GNOME has neither it nor `wlr-data-control`, and the state then says
   so). Windows: a message-only window with `AddClipboardFormatListener`; `WM_RENDERFORMAT`
-  waits up to 60 s for the content, the reading application waiting with it. X11 and the
+  waits up to 25 s for the content (Windows itself gives up at 30 s), the reading
+  application waiting with it. A content handed over whole: a Qt application under
+  Wayland gives up after one second without data, so a large picture over a slow network
+  may fail to paste. X11 and the
   primary selection are not shared.
 
 ## A panel both machines know

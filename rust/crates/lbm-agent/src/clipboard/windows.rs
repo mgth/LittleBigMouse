@@ -6,7 +6,8 @@
 //!
 //! `WM_RENDERFORMAT` must be answered before the window procedure returns, while the
 //! application that reads waits in `GetClipboardData`: this thread waits there for the
-//! content to cross, up to [`RENDER_PATIENCE`], and does nothing else meanwhile.
+//! content to cross, up to [`RENDER_PATIENCE`] (Windows gives up at 30 s), and does nothing
+//! else meanwhile.
 //!
 //! An offer held here is kept out of the clipboard history and the cloud clipboard
 //! (`CanIncludeInClipboardHistory`, `CanUploadToCloudClipboard` at 0): the history would
@@ -45,8 +46,11 @@ const LOG: &str = "[lbm-agent] clipboard (Windows)";
 const CLASS_NAME: PCWSTR = w!("LittleBigMouseAgentClipboard");
 /// A command waits in the channel.
 const WM_COMMAND_WAITING: u32 = WM_APP + 1;
-/// How long an application reading another machine's clipboard is kept waiting.
-const RENDER_PATIENCE: Duration = Duration::from_secs(60);
+/// How long an application reading another machine's clipboard is kept waiting. Windows
+/// itself gives up on `WM_RENDERFORMAT` after 30 s and the reader gets nothing (Raymond
+/// Chen, The Old New Thing, 2022-06-09): waiting longer would only keep this thread from
+/// the next request.
+const RENDER_PATIENCE: Duration = Duration::from_secs(25);
 /// `OpenClipboard` fails while another application has it open, which lasts
 /// milliseconds: tried this many times, this far apart.
 const OPEN_TRIES: u32 = 10;

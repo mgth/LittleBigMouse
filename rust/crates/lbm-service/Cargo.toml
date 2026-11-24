@@ -39,3 +39,5 @@ features = [
 
 [dev-dependencies]
 tempfile.workspace = true
+# The trial master (examples/master_trial.rs).
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

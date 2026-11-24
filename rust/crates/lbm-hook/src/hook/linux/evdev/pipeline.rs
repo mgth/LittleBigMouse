@@ -69,6 +69,7 @@ use crate::engine::MouseEngine;
 use crate::geometry::{Point, Rect};
 use crate::hook::hot_path::{count_event, route_move_then, Routed};
 use crate::shared::Shared;
+use lbm_ipc::input::Locks;
 
 use super::cursor::EvdevCursor;
 use super::frame::PumpBuffers;
@@ -92,6 +93,10 @@ pub(crate) trait Outputs {
     }
     /// See [`crossing::Platform::send_remote`].
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
+    /// See [`crossing::Platform::locks`].
+    fn locks(&self) -> Locks {
+        Locks::default()
+    }
     /// See [`crossing::Platform::grab_keyboards`].
     fn grab_keyboards(&mut self);
     /// See [`crossing::Platform::release_keyboards`].
@@ -140,6 +145,10 @@ impl<O: Outputs> Platform for Machine<'_, O> {
 
     fn send_remote(&mut self, batch: Vec<u8>) -> bool {
         self.out.send_remote(batch)
+    }
+
+    fn locks(&self) -> Locks {
+        self.out.locks()
     }
 
     fn grab_keyboards(&mut self) {

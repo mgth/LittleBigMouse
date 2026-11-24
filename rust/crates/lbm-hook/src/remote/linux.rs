@@ -24,10 +24,10 @@ use std::sync::TryLockError;
 use std::time::{Duration, Instant};
 
 use evdev::uinput::VirtualDevice;
-use evdev::{AbsoluteAxisCode, EventType, InputEvent, LedCode, RelativeAxisCode};
+use evdev::{AbsoluteAxisCode, EventType, InputEvent, RelativeAxisCode};
 
 use crate::geometry::Rect;
-use crate::hook::linux::evdev::{probe, uinput};
+use crate::hook::linux::evdev::{leds, probe, uinput};
 use crate::shared::Shared;
 
 use super::coordinates::desktop_relative;
@@ -362,41 +362,17 @@ impl Gate {
     }
 }
 
-/// This machine's lock keys, as the LEDs of its keyboards show them: the compositor (or
-/// the X server) lights them on every keyboard from its one keyboard state, which is
-/// the state a tap of the virtual keyboard toggles. Read when a master asks, at a
-/// crossing: the devices are listed then, not watched. A lock no keyboard has a LED
-/// for is unknown, and left alone.
+/// This machine's lock keys, as the LEDs of its keyboards show them (see
+/// [`leds`]): the state a tap of the virtual keyboard toggles. Read when a master
+/// asks, at a crossing: the devices are listed then, not watched. A lock no keyboard
+/// has a LED for is unknown, and left alone.
 fn keyboard_locks() -> lbm_ipc::input::Locks {
-    let keyboards = evdev::enumerate().filter_map(|(_, device)| {
+    leds::locks_of(evdev::enumerate().filter_map(|(_, device)| {
         if device.name().is_some_and(uinput::is_ours) {
             return None;
         }
-        let supported = device.supported_leds()?;
-        let lit = device.get_led_state().ok()?;
-        let led = |code: LedCode| supported.contains(code).then(|| lit.contains(code));
-        Some([
-            led(LedCode::LED_CAPSL),
-            led(LedCode::LED_NUML),
-            led(LedCode::LED_SCROLLL),
-        ])
-    });
-    locks_of(keyboards)
-}
-
-/// The locks several keyboards show: on when any shows it on, unknown when none has
-/// the LED. Any rather than all, because a keyboard that missed an update stays dark.
-fn locks_of(keyboards: impl Iterator<Item = [Option<bool>; 3]>) -> lbm_ipc::input::Locks {
-    let mut seen = [None; 3];
-    for keyboard in keyboards {
-        for (seen, lit) in seen.iter_mut().zip(keyboard) {
-            if let Some(lit) = lit {
-                *seen = Some(seen.unwrap_or(false) || lit);
-            }
-        }
-    }
-    let [caps, num, scroll] = seen;
-    lbm_ipc::input::Locks { caps, num, scroll }
+        leds::leds_of(&device)
+    }))
 }
 
 /// Two values for one code cannot share a frame — the second would overwrite the
@@ -713,19 +689,6 @@ mod tests {
                     vertical: -120
                 },
             ]
-        );
-    }
-
-    #[test]
-    fn a_lock_is_on_when_a_keyboard_shows_it_and_unknown_when_none_can() {
-        let none = locks_of(std::iter::empty());
-        assert_eq!(none, lbm_ipc::input::Locks::default());
-        let laptop = [Some(true), Some(false), None];
-        let usb = [Some(false), Some(false), None];
-        let locks = locks_of([usb, laptop].into_iter());
-        assert_eq!(
-            (locks.caps, locks.num, locks.scroll),
-            (Some(true), Some(false), None)
         );
     }
 }

@@ -26,6 +26,15 @@
 //! ([`Platform::cursor_hiding_spot`]) and stays there; coming home starts from where it
 //! left, not from there.
 //!
+//! ## The lock keys
+//!
+//! Caps Lock, Num Lock and Scroll Lock are per machine: typing over there with the
+//! state of here would type the wrong case. Right after the `Enter`, the batch says
+//! which of them are on here ([`Platform::locks`]), and the other machine taps its own
+//! into line (`remote::lock_taps`). A lock this machine cannot read is not sent; one
+//! the other machine cannot read is left alone there. A tap while the pointer is over
+//! there is a key like any other, and toggles the lock over there only.
+//!
 //! ## Held keys and buttons
 //!
 //! One rule, in both directions: **a release goes where its press went.** Each side
@@ -82,7 +91,7 @@
 
 use std::time::Instant;
 
-use lbm_ipc::input::InputEvent as Wire;
+use lbm_ipc::input::{InputEvent as Wire, Locks};
 
 use crate::geometry::Point;
 use crate::shared::Shared;
@@ -192,6 +201,13 @@ pub(crate) trait Platform {
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
 
     // --- the keyboards ---
+
+    /// This machine's lock keys, read as the pointer crosses out: the machine it goes
+    /// to aligns its own on them. A lock the platform cannot read is unknown, and the
+    /// other machine leaves its own alone.
+    fn locks(&self) -> Locks {
+        Locks::default()
+    }
 
     /// Grabs every keyboard that has no key held and is not grabbed yet.
     fn grab_keyboards(&mut self);
@@ -504,6 +520,11 @@ impl Crossing {
             x: pixel.x(),
             y: pixel.y(),
         });
+        // Read before the keyboards are grabbed: the compositor still lights them.
+        let locks = m.locks();
+        if locks != Locks::default() {
+            self.wire.push(Wire::Locks(locks));
+        }
         self.take_remote_events(Instant::now(), m);
         if !self.send(m) {
             self.side = Side::Local;

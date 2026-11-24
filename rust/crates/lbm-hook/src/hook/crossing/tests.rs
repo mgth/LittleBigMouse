@@ -51,6 +51,8 @@ struct Recording {
     shows: usize,
     /// What hides the cursor is in place, under this spot.
     spot: Option<Point<i32>>,
+    /// This machine's lock keys.
+    locks: Locks,
 }
 
 impl Platform for Recording {
@@ -65,6 +67,10 @@ impl Platform for Recording {
         self.sent
             .extend(decode(&batch).expect("a batch that decodes"));
         true
+    }
+
+    fn locks(&self) -> Locks {
+        self.locks
     }
 
     fn grab_keyboards(&mut self) {
@@ -166,6 +172,7 @@ impl Rig {
                 hides: Vec::new(),
                 shows: 0,
                 spot: None,
+                locks: Locks::default(),
             },
         }
     }
@@ -445,4 +452,27 @@ fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_hom
     // Home is where it left, not where it hid.
     rig.crossing.shut_down(&mut rig.m);
     assert_eq!(rig.local_cursor(), START);
+}
+
+#[test]
+fn the_lock_keys_of_here_follow_the_enter_and_nothing_is_said_of_those_unknown() {
+    let mut rig = Rig::new(true);
+    rig.m.locks = Locks {
+        caps: Some(true),
+        num: Some(false),
+        scroll: None,
+    };
+    rig.go_over();
+    assert_eq!(
+        rig.m.sent,
+        [
+            Wire::Enter { x: 0, y: 500 },
+            Wire::Locks(rig.m.locks),
+        ]
+    );
+
+    // A platform that reads none says nothing: the other machine keeps its own.
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    assert_eq!(rig.m.sent, [Wire::Enter { x: 0, y: 500 }]);
 }

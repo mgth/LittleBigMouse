@@ -9,8 +9,10 @@
 //!
 //! - [`supervisor`]: which session gets an injector, and when it is stopped. Pure.
 //! - [`trust`]: the masters an administrator approved. Pure.
+//! - [`network`]: where approved masters send the stream; portable, tested on loopback.
 //! - `win`: the service itself, and the launch.
 
+pub mod network;
 pub mod supervisor;
 pub mod trust;
 

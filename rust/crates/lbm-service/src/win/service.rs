@@ -7,9 +7,12 @@
 //! `SERVICE_CONTROL_SESSIONCHANGE`, the service's form of
 //! `WTSRegisterSessionNotification`; nothing is polled.
 //!
-//! At this step nothing yet asks for an injector: the input stream of approved masters
-//! is the next one (docs/multi-pc-service-windows.md, step 4). The service checks
-//! where it runs from, follows the console and answers the SCM.
+//! The input stream comes from the approved masters ([`crate::network`], on a runtime
+//! thread of its own): its first batch asks for an injector, each batch is written to
+//! the injector's pipe, and its end is written as a `Leave`, which makes the injector
+//! release what is pressed. An injector that is lost mid-stream is said to the master
+//! (`InputReset`), whose pointer comes home. While the service listens, its port and
+//! fingerprint are published for the agent of the session ([`super::offer`]).
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -24,6 +27,7 @@ use windows_service::service_control_handler::{self, ServiceControlHandlerResult
 use windows_service::service_dispatcher;
 
 use super::launch;
+use crate::network::{self, Network, Stream};
 use crate::supervisor::{Action, Supervisor};
 use crate::SERVICE_NAME;
 
@@ -34,12 +38,12 @@ const STOP_GRACE: Duration = Duration::from_secs(2);
 pub enum Event {
     /// The console may have moved to another session.
     SessionChanged,
-    /// A master's stream starts and needs an injector (step 4).
-    Wanted,
     /// The injector of this launch ended.
     Exited(u64),
     /// `lbm-service trust`/`untrust` changed the approved masters.
     TrustChanged,
+    /// What the network heard.
+    Net(Stream),
     Stop,
 }
 
@@ -134,9 +138,9 @@ fn moves_the_console(reason: SessionChangeReason) -> bool {
 /// The deciding loop, until `Stop`.
 fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<Event>) {
     let mut supervisor = Supervisor::new(launch::console_session());
-    // Read now and at every change; the listener of step 4 will serve these.
-    let mut trusted = read_trust();
-    let mut running: Option<launch::Injector> = None;
+    let mut running: Option<(u64, launch::Injector)> = None;
+    // The link whose stream the injector carries now.
+    let mut driving: Option<u64> = None;
     let (exits, exited) = mpsc::channel::<u64>();
     // Exits come on their own channel, forwarded as events, so the wait callbacks
     // never hold the deciding thread's sender.
@@ -148,64 +152,195 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
             }
         }
     });
+    let network = start_network(events.clone());
 
     for event in heard {
-        let action = match event {
+        match event {
             Event::Stop => break,
-            Event::SessionChanged => supervisor.console_changed(launch::console_session()),
-            Event::Wanted => supervisor.wanted(),
+            Event::SessionChanged => {
+                if let Some(Action::Stop { .. }) =
+                    supervisor.console_changed(launch::console_session())
+                {
+                    if let Some((_, stopped)) = running.take() {
+                        stopped.stop(STOP_GRACE);
+                    }
+                    // The master's pointer comes home: the screen it drove is gone.
+                    if let (Some(network), Some(link)) = (&network, driving.take()) {
+                        network.reset(link);
+                    }
+                }
+            }
             Event::TrustChanged => {
-                trusted = read_trust();
-                None
+                if let Some(network) = &network {
+                    network.trust(read_trust());
+                }
             }
             Event::Exited(launch) => {
                 // Only the exit of the injector running now: a late one of a replaced
                 // injector, even of the same session, leaves the new one alone.
                 if supervisor.exited(launch) {
-                    if let Some(gone) = running.take() {
+                    if let Some((_, gone)) = running.take() {
                         gone.stop(Duration::ZERO);
                     }
+                    if let (Some(network), Some(link)) = (&network, driving.take()) {
+                        network.reset(link);
+                    }
                 }
-                None
             }
-        };
-        match action {
-            Some(Action::Launch { session, launch }) => {
-                match launch::launch(injector, session, |line| eprintln!("[lbm-inject] {line}")) {
-                    Ok(mut started) => {
-                        eprintln!(
-                            "[lbm-service] injector {} in session {session}",
-                            started.pid
-                        );
-                        // Without its exit watched, an injector that leaves would never be
-                        // launched again in this session: a failed watch is a failed start.
-                        match started.notify_exit(launch, exits.clone()) {
-                            Ok(()) => running = Some(started),
-                            Err(error) => {
-                                eprintln!("[lbm-service] {error}");
-                                started.stop(STOP_GRACE);
-                                supervisor.launch_failed(launch);
-                            }
+            Event::Net(Stream::Listening(port)) => match (port, &network) {
+                (Some(port), Some(network)) => {
+                    if let Err(error) = super::offer::publish(port, &network.machine_id) {
+                        eprintln!("[lbm-service] {error}");
+                    }
+                }
+                _ => super::offer::withdraw(),
+            },
+            Event::Net(Stream::Batch { link, batch }) => {
+                if running.is_none() {
+                    if let Some(Action::Launch { session, launch }) = supervisor.wanted() {
+                        running = start_injector(injector, session, launch, &exits);
+                        if running.is_none() {
+                            supervisor.launch_failed(launch);
                         }
                     }
-                    Err(error) => {
-                        eprintln!("[lbm-service] no injector in session {session}: {error}");
-                        supervisor.launch_failed(launch);
+                }
+                let written = running
+                    .as_mut()
+                    .is_some_and(|(_, injector)| write_batch(&mut injector.input, &batch));
+                if written {
+                    driving = Some(link);
+                } else {
+                    // No injector, or one that stopped reading: the session is over here.
+                    if let Some((launch, gone)) = running.take() {
+                        supervisor.exited(launch);
+                        gone.stop(STOP_GRACE);
+                    }
+                    driving = None;
+                    if let Some(network) = &network {
+                        network.reset(link);
                     }
                 }
             }
-            Some(Action::Stop { .. }) => {
-                if let Some(stopped) = running.take() {
-                    stopped.stop(STOP_GRACE);
+            Event::Net(Stream::Ended { link }) => {
+                if driving == Some(link) {
+                    driving = None;
+                    let leave = lbm_ipc::input::encode(&[lbm_ipc::input::InputEvent::Leave]);
+                    if let Some((_, injector)) = running.as_mut() {
+                        write_batch(&mut injector.input, &leave);
+                    }
                 }
             }
-            None => {}
         }
     }
-    if let Some(stopped) = running.take() {
+    drop(network);
+    super::offer::withdraw();
+    if let Some((_, stopped)) = running.take() {
         stopped.stop(STOP_GRACE);
     }
-    drop(trusted);
+}
+
+/// The network, under the service's identity, on a runtime of its own. `None` when the
+/// folder that holds the identity cannot be trusted: then no master is ever admitted.
+struct Running {
+    handle: Network,
+    machine_id: String,
+    _runtime: tokio::runtime::Runtime,
+}
+
+impl std::ops::Deref for Running {
+    type Target = Network;
+    fn deref(&self) -> &Network {
+        &self.handle
+    }
+}
+
+fn start_network(events: mpsc::Sender<Event>) -> Option<Running> {
+    let started = (|| {
+        let folder = super::store::ready_folder()?;
+        let identity = lbm_net::identity::Identity::load_or_create(&folder)
+            .map_err(|e| format!("the service's identity: {e}"))?;
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .map_err(|e| format!("a runtime for the network: {e}"))?;
+        let machine_id = identity.fingerprint().to_owned();
+        let (out, heard) = mpsc::channel();
+        let (handle, serving) = network::start(
+            std::net::SocketAddr::from(([0, 0, 0, 0], network::PORT)),
+            identity,
+            network::hello(&computer_name()),
+            lbm_net::link::Options::default(),
+            read_trust(),
+            out,
+        );
+        runtime.spawn(serving);
+        std::thread::spawn(move || {
+            for stream in heard {
+                if events.send(Event::Net(stream)).is_err() {
+                    break;
+                }
+            }
+        });
+        Ok::<_, String>(Running {
+            handle,
+            machine_id,
+            _runtime: runtime,
+        })
+    })();
+    match started {
+        Ok(running) => {
+            eprintln!("[lbm-service] the service is {}", running.machine_id);
+            Some(running)
+        }
+        Err(error) => {
+            eprintln!("[lbm-service] no network: {error}");
+            None
+        }
+    }
+}
+
+fn start_injector(
+    injector: &Path,
+    session: u32,
+    launch: u64,
+    exits: &mpsc::Sender<u64>,
+) -> Option<(u64, launch::Injector)> {
+    match launch::launch(injector, session, |line| eprintln!("[lbm-inject] {line}")) {
+        Ok(mut started) => {
+            eprintln!(
+                "[lbm-service] injector {} in session {session}",
+                started.pid
+            );
+            // Without its exit watched, an injector that leaves would never be
+            // launched again in this session: a failed watch is a failed start.
+            match started.notify_exit(launch, exits.clone()) {
+                Ok(()) => Some((launch, started)),
+                Err(error) => {
+                    eprintln!("[lbm-service] {error}");
+                    started.stop(STOP_GRACE);
+                    None
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("[lbm-service] no injector in session {session}: {error}");
+            None
+        }
+    }
+}
+
+/// Writes one batch, framed, to the injector's input; `false` when it did not take it.
+fn write_batch(input: &mut std::fs::File, batch: &[u8]) -> bool {
+    use std::io::Write;
+    let mut frame = (batch.len() as u32).to_le_bytes().to_vec();
+    frame.extend_from_slice(batch);
+    input.write_all(&frame).is_ok()
+}
+
+/// This computer's name, for the masters' logs.
+fn computer_name() -> String {
+    std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows".into())
 }
 
 /// The approved masters; none when the store cannot be trusted, which is said.

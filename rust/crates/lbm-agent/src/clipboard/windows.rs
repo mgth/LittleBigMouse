@@ -26,8 +26,8 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData,
-    GetClipboardOwner, IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
-    RemoveClipboardFormatListener, SetClipboardData,
+    GetClipboardOwner, GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW, RemoveClipboardFormatListener, SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
@@ -270,6 +270,8 @@ fn changed(window: HWND) {
     }) else {
         return;
     };
+    // SAFETY: plain reads of the clipboard's state.
+    let copy = u64::from(unsafe { GetClipboardSequenceNumber() });
     let available = |format: u32| unsafe { IsClipboardFormatAvailable(format) }.is_ok();
     let mut shared = Vec::new();
     if !available(formats.exclude) {
@@ -286,7 +288,10 @@ fn changed(window: HWND) {
             shared.push(ClipFormat::Files);
         }
     }
-    let _ = events.send(Event::Changed(shared));
+    let _ = events.send(Event::Changed {
+        copy,
+        formats: shared,
+    });
 }
 
 /// Every command waiting, in order; the window goes once the channel is closed.
@@ -313,11 +318,12 @@ fn commands(window: HWND) {
                 }
             }
             Ok(Command::Read {
+                copy,
                 format,
                 limit,
                 reply,
             }) => {
-                let _ = reply.send(read(window, format, limit));
+                let _ = reply.send(read(window, copy, format, limit));
             }
             Err(std_mpsc::TryRecvError::Empty) => return,
             Err(std_mpsc::TryRecvError::Disconnected) => {
@@ -509,10 +515,20 @@ fn wait(answer: oneshot::Receiver<Data>) -> Data {
 }
 
 /// What was copied here, in `format`, as it crosses.
-fn read(window: HWND, format: ClipFormat, limit: usize) -> Data {
+fn read(window: HWND, copy: u64, format: ClipFormat, limit: usize) -> Data {
     let formats = state(|win| win.formats).ok_or("the clipboard window went")?;
     if !open_clipboard(window) {
         return Err("another application keeps the clipboard open".into());
+    }
+    // Only the copy announced, checked with the clipboard open so that nothing can come
+    // between the check and the read: a newer copy, or one now marked not to be
+    // monitored, is refused.
+    // SAFETY: plain reads of the clipboard's state, which is open.
+    let current = u64::from(unsafe { GetClipboardSequenceNumber() });
+    if current != copy || unsafe { IsClipboardFormatAvailable(formats.exclude) }.is_ok() {
+        // SAFETY: opened above.
+        let _ = unsafe { CloseClipboard() };
+        return Err(super::CHANGED.into());
     }
     let data = match format {
         ClipFormat::Text => {

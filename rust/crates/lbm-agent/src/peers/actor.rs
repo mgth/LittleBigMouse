@@ -359,6 +359,7 @@ pub(super) async fn run(
             None
         }
     };
+    let identity_id = start.identity.fingerprint().to_owned();
     let mut actor = Actor {
         listen_address: listener.as_ref().map(Listener::local_addr),
         listen_error: match &listener {
@@ -410,7 +411,11 @@ pub(super) async fn run(
         next_id: 0,
         next_serial: 0,
         tasks: JoinSet::new(),
-        sharing: Sharing::new(start.clipboard, start.clipboard_factory),
+        sharing: Sharing::new(
+            start.clipboard,
+            start.clipboard_factory,
+            identity_id.clone(),
+        ),
     };
     if let Some(address) = actor.listen_address {
         eprintln!(
@@ -1008,8 +1013,8 @@ impl Actor {
         match wake {
             Wake::Clipboard(event) => self.sharing.clipboard(event, &peers),
             Wake::Patience(transfer) => self.sharing.patience(transfer, &peers),
-            Wake::Listed(serial, formats, listed) => {
-                self.sharing.listed(serial, formats, listed, &peers)
+            Wake::Listed(serial, copy, formats, listed) => {
+                self.sharing.listed(serial, copy, formats, listed, &peers)
             }
             Wake::Fetched(local, fetched) => self.sharing.fetched(local, fetched),
         }

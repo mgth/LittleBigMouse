@@ -30,6 +30,8 @@ struct Inner {
     events: Option<mpsc::UnboundedSender<Event>>,
     /// How many times it was opened.
     opened: usize,
+    /// The number of the last copy made here.
+    copy: u64,
 }
 
 /// The clipboard, shared between the test and the sharing.
@@ -64,14 +66,26 @@ impl Memory {
 
     /// An application here copies `content`.
     pub fn copy(&self, content: Vec<(ClipFormat, Vec<u8>)>) {
+        let formats = self.replace(content);
+        let inner = self.0.lock().unwrap();
+        if let Some(events) = &inner.events {
+            let _ = events.send(Event::Changed {
+                copy: inner.copy,
+                formats,
+            });
+        }
+    }
+
+    /// An application here copies `content`, and the sharing has not heard of it yet:
+    /// what a system clipboard looks like between a copy and its event.
+    pub fn replace(&self, content: Vec<(ClipFormat, Vec<u8>)>) -> Vec<ClipFormat> {
         let content: HashMap<_, _> = content.into_iter().collect();
         let mut formats: Vec<ClipFormat> = content.keys().copied().collect();
         formats.sort_by_key(|format| *format as u8);
         let mut inner = self.0.lock().unwrap();
+        inner.copy += 1;
         inner.content = Some(Content::Local(content));
-        if let Some(events) = &inner.events {
-            let _ = events.send(Event::Changed(formats));
-        }
+        formats
     }
 
     pub fn content(&self) -> Option<Content> {
@@ -130,11 +144,13 @@ impl Clipboard for Open {
                 }
             }
             Command::Read {
+                copy,
                 format,
                 limit,
                 reply,
             } => {
                 let data = match &inner.content {
+                    Some(Content::Local(_)) if copy != inner.copy => Err(super::CHANGED.to_owned()),
                     Some(Content::Local(content)) => match content.get(&format) {
                         Some(data) if data.len() > limit => Err(super::too_large(limit)),
                         Some(data) => Ok(data.clone()),

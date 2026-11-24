@@ -15,7 +15,7 @@
 //! The system's clipboard is opened only while the user lets it go one way or the other
 //! and a machine that shares is linked, and closed as soon as either stops.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -29,7 +29,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use super::clipboard_files::{self as files, Listed, Piece, Routes};
-use crate::clipboard::{too_large, Clipboard, Command, Data, Event, Factory};
+use crate::clipboard::{too_large, Clipboard, Command, Data, Event, Factory, CHANGED};
 
 /// The default bound on one transfer: a screenshot of several 4K screens fits.
 pub const DEFAULT_MAX_BYTES: u64 = 64 * 1024 * 1024;
@@ -46,7 +46,7 @@ const PATIENCE: Duration = Duration::from_secs(20);
 const SHARED: [ClipFormat; 3] = [ClipFormat::Text, ClipFormat::Png, ClipFormat::Files];
 
 /// What a listing of the files copied here comes back as.
-type Listing = (u64, Vec<ClipFormat>, Result<Vec<Listed>, String>);
+type Listing = (u64, u64, Vec<ClipFormat>, Result<Vec<Listed>, String>);
 
 /// What the user lets the clipboard do (`multi-pc.json`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,9 +108,13 @@ pub(super) struct Peer<'a> {
 /// What was copied here, as announced.
 struct Local {
     serial: u64,
+    /// The clipboard's number for the copy: a read names it.
+    copy: u64,
     formats: Vec<ClipFormat>,
     /// With [`ClipFormat::Files`]: what the offer lists, and where each is read from.
     files: Vec<Listed>,
+    /// The links it was announced on: only there can an offer cross it.
+    told: HashSet<(String, u64)>,
 }
 
 /// The offer of another machine that this machine's clipboard holds.
@@ -139,6 +143,7 @@ enum FetchState {
     Done(Vec<PathBuf>),
 }
 
+/// What was copied here, as announced.
 /// A transfer this machine asked for.
 struct Incoming {
     machine_id: String,
@@ -153,8 +158,8 @@ pub(super) enum Wake {
     Clipboard(Event),
     /// A transfer this machine asked for may have gone quiet for too long.
     Patience(u64),
-    /// What was copied here as files, listed (`serial`, the formats copied).
-    Listed(u64, Vec<ClipFormat>, Result<Vec<Listed>, String>),
+    /// What was copied here as files, listed (`serial`, the copy, the formats copied).
+    Listed(u64, u64, Vec<ClipFormat>, Result<Vec<Listed>, String>),
     /// The files of the offer held here under `local`, fetched or not.
     Fetched(u64, Result<Vec<PathBuf>, String>),
 }
@@ -170,6 +175,11 @@ pub(super) struct Sharing {
     /// What was last copied here, as announced. `None` once the clipboard holds another
     /// machine's offer, and while the files copied are being listed.
     local: Option<Local>,
+    /// The last serial each link's machine announced: what this machine has seen of it,
+    /// said back in every offer so that two copies made at once can be told apart.
+    seen: HashMap<(String, u64), u64>,
+    /// This machine's id: of two copies made at once, the one of the lower id wins.
+    machine_id: String,
     held: Option<Held>,
     /// The last number given to a copy here or an offer held: one counter for both.
     serial: u64,
@@ -192,7 +202,7 @@ pub(super) struct Sharing {
 }
 
 impl Sharing {
-    pub fn new(options: Options, factory: Factory) -> Sharing {
+    pub fn new(options: Options, factory: Factory, machine_id: String) -> Sharing {
         let (events_sender, events) = mpsc::unbounded_channel();
         let (patience_sender, patience) = mpsc::unbounded_channel();
         let (outcome_sender, outcome) = mpsc::unbounded_channel();
@@ -207,6 +217,8 @@ impl Sharing {
             patience_sender,
             patience,
             local: None,
+            seen: HashMap::new(),
+            machine_id,
             held: None,
             serial: 0,
             incoming: HashMap::new(),
@@ -250,8 +262,8 @@ impl Sharing {
             tokio::select! {
                 Some(event) = self.events.recv() => return Wake::Clipboard(event),
                 Some(transfer) = self.patience.recv() => return Wake::Patience(transfer),
-                Some((serial, formats, listed)) = self.listed.recv() => {
-                    return Wake::Listed(serial, formats, listed)
+                Some((serial, copy, formats, listed)) = self.listed.recv() => {
+                    return Wake::Listed(serial, copy, formats, listed)
                 }
                 Some((local, fetched)) = self.fetched.recv() => return Wake::Fetched(local, fetched),
                 Some(outcome) = self.outcome.recv() => self.problem = outcome,
@@ -316,14 +328,16 @@ impl Sharing {
                 task.abort();
             }
             for peer in peers {
-                withdraw(peer.sender, self.serial);
+                self.tell(peer, self.serial, Vec::new());
             }
         }
         self.reconcile(peers);
         if !was_sending && send {
-            if let Some(local) = &self.local {
+            if let Some((serial, formats)) =
+                self.local.as_ref().map(|l| (l.serial, l.formats.clone()))
+            {
                 for peer in peers {
-                    offer(peer.sender, local);
+                    self.tell(peer, serial, formats.clone());
                 }
             }
         }
@@ -335,14 +349,16 @@ impl Sharing {
         if !self.options.send || self.open.is_none() {
             return;
         }
-        if let Some(local) = &self.local {
-            offer(peer.sender, local);
+        if let Some((serial, formats)) = self.local.as_ref().map(|l| (l.serial, l.formats.clone()))
+        {
+            self.tell(peer, serial, formats);
         }
     }
 
     /// The link `id` with `machine_id` ended: what it owed is given up, and an offer of
     /// its held here is let go of — a paste must find nothing rather than wait.
     pub fn unlinked(&mut self, machine_id: &str, id: u64, peers: &[Peer<'_>]) {
+        self.seen.remove(&(machine_id.to_owned(), id));
         let gone: Vec<u64> = self
             .incoming
             .iter()
@@ -418,6 +434,32 @@ impl Sharing {
         Some(held)
     }
 
+    /// Announces `formats` under `serial` to `peer`, saying what this machine has seen of
+    /// its copies; an announcement of what was copied here is remembered as told there.
+    fn tell(&mut self, peer: &Peer<'_>, serial: u64, formats: Vec<ClipFormat>) {
+        let files = self
+            .local
+            .as_ref()
+            .filter(|l| l.serial == serial && formats.contains(&ClipFormat::Files))
+            .map(|l| l.files.iter().map(|f| f.entry.clone()).collect())
+            .unwrap_or_default();
+        let link = (peer.machine_id.to_owned(), peer.id);
+        let seen = self.seen.get(&link).copied().unwrap_or_default();
+        if let Some(local) = self.local.as_mut().filter(|l| l.serial == serial) {
+            local.told.insert(link);
+        }
+        send(
+            peer.sender,
+            Control::ClipboardOffer {
+                serial,
+                formats,
+                files,
+                seen,
+                receiving: self.options.receive,
+            },
+        );
+    }
+
     fn command(&self, command: Command) {
         if let Some(open) = &self.open {
             open.command(command);
@@ -427,7 +469,7 @@ impl Sharing {
     /// What the system's clipboard said.
     pub fn clipboard(&mut self, event: Event, peers: &[Peer<'_>]) {
         match event {
-            Event::Changed(formats) => {
+            Event::Changed { copy, formats } => {
                 let formats: Vec<ClipFormat> = formats
                     .into_iter()
                     .filter(|format| SHARED.contains(format))
@@ -442,10 +484,10 @@ impl Sharing {
                 if formats.contains(&ClipFormat::Files) {
                     // Announced once listed: the other side needs the list to ask.
                     self.local = None;
-                    self.list(self.serial, formats);
+                    self.list(self.serial, copy, formats);
                     return;
                 }
-                self.announce(formats, Vec::new(), peers);
+                self.announce(copy, formats, Vec::new(), peers);
             }
             Event::Wanted {
                 serial,
@@ -461,24 +503,36 @@ impl Sharing {
     }
 
     /// Announces what was copied here under the current serial.
-    fn announce(&mut self, formats: Vec<ClipFormat>, files: Vec<Listed>, peers: &[Peer<'_>]) {
-        let local = Local {
-            serial: self.serial,
-            formats,
+    fn announce(
+        &mut self,
+        copy: u64,
+        formats: Vec<ClipFormat>,
+        files: Vec<Listed>,
+        peers: &[Peer<'_>],
+    ) {
+        let serial = self.serial;
+        self.local = Some(Local {
+            serial,
+            copy,
+            formats: formats.clone(),
             files,
-        };
+            told: HashSet::new(),
+        });
         if self.options.send {
             for peer in peers {
-                offer(peer.sender, &local);
+                self.tell(peer, serial, formats.clone());
             }
         }
-        self.local = (!local.formats.is_empty()).then_some(local);
+        if formats.is_empty() {
+            self.local = None;
+        }
     }
 
     /// Reads the paths copied here and walks them, away from the loop.
-    fn list(&self, serial: u64, formats: Vec<ClipFormat>) {
+    fn list(&self, serial: u64, copy: u64, formats: Vec<ClipFormat>) {
         let (reply, answer) = oneshot::channel();
         self.command(Command::Read {
+            copy,
             format: ClipFormat::Files,
             limit: PATHS_LIMIT,
             reply,
@@ -494,7 +548,7 @@ impl Sharing {
                 Ok(Err(error)) => Err(error),
                 Err(_) => Err("the clipboard went".into()),
             };
-            let _ = listed.send((serial, formats, result));
+            let _ = listed.send((serial, copy, formats, result));
         });
     }
 
@@ -503,6 +557,7 @@ impl Sharing {
     pub fn listed(
         &mut self,
         serial: u64,
+        copy: u64,
         mut formats: Vec<ClipFormat>,
         listed: Result<Vec<Listed>, String>,
         peers: &[Peer<'_>],
@@ -524,7 +579,7 @@ impl Sharing {
                 Vec::new()
             }
         };
-        self.announce(formats, files, peers);
+        self.announce(copy, formats, files, peers);
     }
 
     /// The files of the offer held under `local` were fetched, or could not be.
@@ -724,8 +779,24 @@ impl Sharing {
                 serial,
                 formats,
                 files,
+                seen,
+                receiving,
             } => {
+                let link = (from.machine_id.to_owned(), from.id);
+                let last = self.seen.entry(link.clone()).or_default();
+                *last = (*last).max(serial);
                 if !self.options.receive || self.open.is_none() {
+                    return;
+                }
+                // Copied there before that machine heard of what was copied here last:
+                // two copies made at once. Each side applies the same rule, so both end up
+                // with the same one — the copy of the machine with the lower id — rather
+                // than each taking the other's and neither able to serve its own.
+                let crossed = self
+                    .local
+                    .as_ref()
+                    .is_some_and(|l| receiving && l.told.contains(&link) && seen < l.serial);
+                if crossed && !formats.is_empty() && self.machine_id.as_str() < from.machine_id {
                     return;
                 }
                 // Offers are queued as they come and may overtake each other: an older
@@ -846,16 +917,20 @@ impl Sharing {
         if !self.options.send || self.open.is_none() {
             return refuse("this machine does not share its clipboard");
         }
-        match &self.local {
+        let copy = match &self.local {
             Some(local)
                 if local.serial == serial
                     && local.formats.contains(&format)
-                    && format != ClipFormat::Files => {}
-            _ => return refuse("the clipboard changed since"),
-        }
+                    && format != ClipFormat::Files =>
+            {
+                local.copy
+            }
+            _ => return refuse(CHANGED),
+        };
         let (reply, answer) = oneshot::channel();
         let limit = self.limit();
         self.command(Command::Read {
+            copy,
             format,
             limit,
             reply,
@@ -981,27 +1056,4 @@ fn send(sender: &LinkSender, message: Control) {
     tokio::spawn(async move {
         let _ = sender.control(&message).await;
     });
-}
-
-fn offer(sender: &LinkSender, local: &Local) {
-    send(
-        sender,
-        Control::ClipboardOffer {
-            serial: local.serial,
-            formats: local.formats.clone(),
-            files: local.files.iter().map(|l| l.entry.clone()).collect(),
-        },
-    );
-}
-
-/// Tells the other machine that nothing copied here is shared any more.
-fn withdraw(sender: &LinkSender, serial: u64) {
-    send(
-        sender,
-        Control::ClipboardOffer {
-            serial,
-            formats: Vec::new(),
-            files: Vec::new(),
-        },
-    );
 }

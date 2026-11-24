@@ -385,6 +385,8 @@ async fn an_offer_of_files_that_would_land_outside_the_reception_folder_is_refus
                 size: 4,
                 folder: false,
             }],
+            seen: 0,
+            receiving: false,
         })
         .await
         .unwrap();
@@ -430,6 +432,8 @@ async fn a_fetch_whose_sender_leaves_fails_and_leaves_nothing_behind() {
                 size: 1 << 20,
                 folder: false,
             }],
+            seen: 0,
+            receiving: false,
         })
         .await
         .unwrap();
@@ -469,4 +473,62 @@ async fn a_fetch_whose_sender_leaves_fails_and_leaves_nothing_behind() {
     })
     .await
     .expect("what was fetched is removed");
+}
+
+#[tokio::test]
+async fn two_copies_made_at_once_settle_on_one_that_both_sides_can_paste() {
+    for _ in 0..5 {
+        let (desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+        // Both copied before either heard of the other's.
+        desk.clipboard
+            .copy(vec![(ClipFormat::Text, b"from the desk".to_vec())]);
+        tower
+            .clipboard
+            .copy(vec![(ClipFormat::Text, b"from the tower".to_vec())]);
+        let settled = tokio::time::timeout(PATIENCE, async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                match (desk.clipboard.content(), tower.clipboard.content()) {
+                    (Some(Content::Local(_)), Some(Content::Offer { .. })) => {
+                        return (&desk, &tower)
+                    }
+                    (Some(Content::Offer { .. }), Some(Content::Local(_))) => {
+                        return (&tower, &desk)
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("one copy kept, the other side holding it");
+        let (kept, holder) = settled;
+        let theirs = kept.clipboard.paste(ClipFormat::Text).await.unwrap();
+        assert_eq!(
+            holder.clipboard.paste(ClipFormat::Text).await.unwrap(),
+            theirs
+        );
+        // Settled for good: neither moves again.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(matches!(kept.clipboard.content(), Some(Content::Local(_))));
+        assert!(matches!(
+            holder.clipboard.content(),
+            Some(Content::Offer { .. })
+        ));
+    }
+}
+
+#[tokio::test]
+async fn a_newer_copy_than_the_one_announced_is_never_sent() {
+    let (desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Text, b"announced".to_vec())]);
+    offered(&desk.clipboard).await;
+    // Copied over on the tower, its event not yet handled there: what is read must not be
+    // that, a password perhaps.
+    tower
+        .clipboard
+        .replace(vec![(ClipFormat::Text, b"not announced".to_vec())]);
+    let error = desk.clipboard.paste(ClipFormat::Text).await.unwrap_err();
+    assert!(error.contains("changed since"), "{error}");
 }

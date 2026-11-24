@@ -132,6 +132,7 @@ pub(super) fn open(events: mpsc::UnboundedSender<Event>) -> Result<Box<dyn Clipb
         device,
         mimes: HashMap::new(),
         selection: None,
+        copy: 0,
         source: None,
     };
     let thread = std::thread::Builder::new()
@@ -180,6 +181,9 @@ struct State {
     mimes: HashMap<ObjectId, Vec<String>>,
     /// The selection now, when it is another application's: its offer and types.
     selection: Option<(ExtDataControlOfferV1, Vec<String>)>,
+    /// The number of the last selection the compositor announced, whoever made it:
+    /// what [`Event::Changed`] and [`Command::Read`] name a copy by.
+    copy: u64,
     /// The selection this machine made for another machine's offer: the source, the
     /// offer's number, and the formats by MIME type.
     source: Option<(ExtDataControlSourceV1, u64, Vec<ClipFormat>)>,
@@ -209,14 +213,26 @@ impl State {
                 }
             }
             Command::Read {
+                copy,
                 format,
                 limit,
                 reply,
             } => {
-                let Some((offer, mimes)) = &self.selection else {
-                    let _ = reply.send(Err("nothing was copied here".into()));
+                // Only the selection announced, still in a format it was announced in:
+                // a newer one, a secret since, or this machine's own offer is refused.
+                let Some((offer, mimes)) = self
+                    .selection
+                    .as_ref()
+                    .filter(|_| self.copy == copy)
+                    .map(|(offer, mimes)| (offer, mimes))
+                else {
+                    let _ = reply.send(Err(super::CHANGED.into()));
                     return;
                 };
+                if !formats_of(mimes).contains(&format) {
+                    let _ = reply.send(Err(super::CHANGED.into()));
+                    return;
+                }
                 let Some(mime) = mime_for(format, mimes) else {
                     let _ = reply.send(Err("not copied in that format".into()));
                     return;
@@ -320,7 +336,12 @@ fn run(
         let _ = state.events.send(Event::Failed(error));
     };
     loop {
-        // Every command waiting, then whatever the compositor said.
+        // The wake-up first, then every command waiting, then whatever the compositor
+        // said. In that order: a command sent after the queue was found empty has left a
+        // byte in the pipe that the next poll sees, where draining after the queue would
+        // swallow it and sleep with the command waiting.
+        let mut drained = [0u8; 64];
+        while matches!(wake.read(&mut drained), Ok(n) if n > 0) {}
         loop {
             match commands.try_recv() {
                 Ok(command) => state.command(command, &handle, &connection),
@@ -335,8 +356,6 @@ fn run(
                 }
             }
         }
-        let mut drained = [0u8; 64];
-        while matches!(wake.read(&mut drained), Ok(n) if n > 0) {}
         if let Err(error) = queue.dispatch_pending(&mut state) {
             return failed(&state, format!("the compositor connection failed: {error}"));
         }
@@ -438,10 +457,15 @@ impl Dispatch<ExtDataControlDeviceV1, ()> for State {
                 if let Some((previous, _)) = state.selection.take() {
                     previous.destroy();
                 }
+                state.copy += 1;
+                let copy = state.copy;
                 let Some(offer) = id else {
                     // The clipboard is empty: nothing to share any more.
                     if state.source.is_none() {
-                        let _ = state.events.send(Event::Changed(Vec::new()));
+                        let _ = state.events.send(Event::Changed {
+                            copy,
+                            formats: Vec::new(),
+                        });
                     }
                     return;
                 };
@@ -453,7 +477,7 @@ impl Dispatch<ExtDataControlDeviceV1, ()> for State {
                 }
                 let formats = formats_of(&mimes);
                 state.selection = Some((offer, mimes));
-                let _ = state.events.send(Event::Changed(formats));
+                let _ = state.events.send(Event::Changed { copy, formats });
             }
             ext_data_control_device_v1::Event::PrimarySelection { id: Some(offer) } => {
                 state.mimes.remove(&offer.id());

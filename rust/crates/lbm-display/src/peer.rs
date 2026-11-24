@@ -28,6 +28,9 @@ pub fn panel_key(display: &PeerDisplay) -> Option<String> {
     peer_edid(display)?.panel_key()
 }
 
+/// The bytes of an EDID's base block: what a Windows monitor id is computed from.
+const EDID_BASE_BLOCK: usize = 128;
+
 /// How this machine names its own monitors: what a remote's panel is named after, so
 /// that a panel a KVM moves between the two machines keeps one id
 /// ([`lbm_layout::remote::remote_monitor_id`]).
@@ -67,10 +70,14 @@ pub fn remote_monitor_as(display: &PeerDisplay, form: IdForm) -> RemoteMonitor {
     });
     // Windows' own id needs the EDID only, and its PnP code is the EDID's manufacturer
     // and product: `MONITOR\SAME035\...` for manufacturer SAM, product E035.
+    // Only from a whole base block: a shorter one already gives the manufacturer, while
+    // the product, the week, the year and the checksum would be defaults — an id the
+    // panel loses the day the remote sends all of it.
     let local_id = match form {
         IdForm::Linux => None,
         IdForm::Windows => edid
             .as_ref()
+            .filter(|e| e.raw.len() >= EDID_BASE_BLOCK && e.product_code.is_some())
             .zip(pnp_code.as_deref())
             .map(|(e, pnp)| crate::windows::ids::source_id_of(pnp, e)),
     };

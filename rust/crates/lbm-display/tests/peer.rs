@@ -317,3 +317,32 @@ fn a_windows_id_already_taken_here_falls_back_to_the_source_id() {
         remote_source_id(LAPTOP, "HDMI-A-1")
     );
 }
+
+#[test]
+fn a_truncated_edid_gives_no_windows_id_and_the_monitor_its_fallback() {
+    // Well-formed base64 of the first 20 bytes: the manufacturer is there, the
+    // product, week, year and checksum are not.
+    let whole = edid_block_of("SAM", 0xE035, [0; 4], "H1AK500000", 2);
+    let shown_there = peer_display("HDMI-A-1", "HDMI-A-1", Some(&whole[..20]), 0);
+    let remote = remote_monitor_as(&shown_there, IdForm::Windows);
+    assert_eq!(remote.local_id, None);
+
+    let mut layout = Layout::new(LayoutOptions::default());
+    merge_peer_as(
+        &mut layout,
+        LAPTOP,
+        "linux",
+        &[shown_there],
+        IdForm::Windows,
+    );
+    assert_eq!(
+        layout.monitors()[0].id,
+        remote_source_id(LAPTOP, "HDMI-A-1")
+    );
+
+    // The whole block gives it.
+    let shown_whole = peer_display("HDMI-A-1", "HDMI-A-1", Some(&whole), 0);
+    assert!(remote_monitor_as(&shown_whole, IdForm::Windows)
+        .local_id
+        .is_some());
+}

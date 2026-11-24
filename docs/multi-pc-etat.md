@@ -1,6 +1,6 @@
 # Mode multi-PC : état du travail et reste à faire
 
-État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `ca754824`), après la fusion des PR #800 (le mode)
+État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `b104396c`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
 Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
@@ -43,9 +43,10 @@ qui va le pointeur quand il y entre.
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
-reste reconnu pendant que le clavier est capturé. Le dernier cas connu où elle n'était
-pas tenue, le hook de l'esclave qui redémarre seul, est corrigé par la PR #806 (voir
-« Faiblesses connues »).
+reste reconnu pendant que le clavier est capturé. Le hook de l'esclave qui perd seul
+sa connexion à son agent en pleine session y est soumis aussi, comme une traversée qui
+ne trouve pas de hook chez l'esclave : l'agent de l'esclave dit `InputReset` et le
+maître ramène son pointeur.
 
 ## Ce qui a été essayé pour de bon
 
@@ -84,12 +85,6 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 ## Faiblesses connues
 
-- **Hook de l'esclave redémarré en pleine traversée** — *corrigé par la PR #806, pas
-  encore fusionnée.* Quand seul le hook de l'esclave perdait sa connexion à son agent,
-  le lien réseau restait en vie et l'agent de l'esclave n'envoyait pas d'`InputReset` :
-  le maître gardait son clavier capturé jusqu'à la traversée suivante. Avec #806, la
-  fin de la connexion au hook déclenche un `InputReset` unique si une session était en
-  cours. Prouvé par tests, pas provoqué sur les machines.
 - Fonds en mode « Span » sous Linux à une échelle différente de 1 : mal positionnés, y
   compris dans l'aperçu local.
 - Un échec de commutation d'entrée, ou un lien refusé, n'est visible que dans le
@@ -240,7 +235,7 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 - **Tests de bout en bout** avec les vrais binaires sur deux machines : aujourd'hui les
   tests d'intégration tournent en boucle locale avec un faux hook, et la revue a montré
   deux fois que cette doublure masquait un défaut.
-- ~~Les deux faiblesses de protocole~~ : corrélation `Loaded` réglée (PR #809 : identifiant facultatif dans `Load`, renvoyé par `Loaded`/`LoadFailed`) ; `InputReset` en PR #806.
+- ~~Les deux faiblesses de protocole~~ : corrélation `Loaded` réglée (PR #809 : identifiant facultatif dans `Load`, renvoyé par `Loaded`/`LoadFailed`) ; `InputReset` quand le hook de l'esclave tombe (PR #806).
 
 ## Presse-papiers partagé
 
@@ -387,8 +382,8 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
 3. Maître Windows.
-4. `InputReset` quand le hook de l'esclave tombe, corrélation `Loaded`, retour d'erreur
-   vers l'interface, règle de pare-feu dans l'installeur.
+4. ~~Corrélation `Loaded`~~ (#809), retour d'erreur vers l'interface (#808), règle de
+   pare-feu dans l'installeur (#811).
 5. Fenêtres élevées par `StartElevated` (à essayer), puis service Windows pour le
    bureau sécurisé.
 6. Presse-papiers, palier 1 (texte et image), puis palier 2.
@@ -403,7 +398,6 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| `InputReset` quand le hook de l'esclave tombe | PR #806 | Ouverte |
 | Esclave Linux : pointeur injecté moteur arrêté, premiers événements gardés | PR #807 | Ouverte ; essayé sur matériel |
 | Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | PR #808 | Ouverte ; UI vue seulement par kittest |
 | Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil côté protocole, agent et esclave | `claude/multi-pc-small-features-v6-98ec02`, pas poussée | Reprise sur v6 depuis la fusion de #810 : émission des verrous par le maître et verrouillage du pointeur en cours |

@@ -205,8 +205,8 @@ impl Outputs for Outs<'_> {
         let _ = self.virt_kbd.emit(frame);
     }
 
-    fn remote_connected(&self) -> bool {
-        self.link.connected()
+    fn remote_client(&self) -> Option<u64> {
+        self.link.client()
     }
 
     fn send_remote(&mut self, batch: Vec<u8>) -> bool {

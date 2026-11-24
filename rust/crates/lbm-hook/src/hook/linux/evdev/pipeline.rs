@@ -125,8 +125,13 @@ pub(crate) trait Outputs {
     fn pointer(&mut self, frame: &[InputEvent]);
     /// One frame for the virtual keyboard.
     fn keyboard(&mut self, frame: &[InputEvent]);
+    /// The input stream's client to drive another machine through, if it has one. A
+    /// client that replaced another has another value.
+    fn remote_client(&self) -> Option<u64>;
     /// Whether the input stream has a client to drive another machine through.
-    fn remote_connected(&self) -> bool;
+    fn remote_connected(&self) -> bool {
+        self.remote_client().is_some()
+    }
     /// Queues one encoded batch without waiting; `false` when it will never be sent.
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
     /// Grabs every keyboard that has no key held and is not grabbed yet.
@@ -183,6 +188,9 @@ pub(crate) struct Pipeline {
     parked: Option<Point<i32>>,
     /// The machine being driven.
     host: String,
+    /// The input stream's client the `Enter` went to: the only one that knows the
+    /// pointer is over there.
+    client: Option<u64>,
     /// Buttons and keys pressed on the other machine and not released there yet.
     remote_held: HeldSet,
     /// The engine still tracks the pointer where it was before it came home, and has
@@ -207,6 +215,7 @@ impl Pipeline {
             sent: home,
             parked: None,
             host: String::new(),
+            client: None,
             remote_held: HeldSet::default(),
             resync: false,
             rescue: RescueKeys::default(),
@@ -251,10 +260,20 @@ impl Pipeline {
         shared: &'static Shared,
         out: &mut impl Outputs,
     ) -> Option<Rect<i32>> {
-        let connected = out.remote_connected();
+        let client = out.remote_client();
+        let connected = client.is_some();
         if self.is_remote() && !connected {
             eprintln!(
                 "[LittleBigMouse.Hook] evdev: the input stream has no client, the pointer comes home"
+            );
+            self.go_home(None, out);
+        } else if self.is_remote() && client != self.client {
+            // The agent closed the stream and opened another between two cycles — it
+            // does after the other machine dropped input. The new client never read
+            // the `Enter`: what it is sent now would be ignored, with the keyboards
+            // still grabbed here. Its `Leave` is one it has nothing to do with.
+            eprintln!(
+                "[LittleBigMouse.Hook] evdev: the input stream has another client, the pointer comes home"
             );
             self.go_home(None, out);
         }
@@ -482,6 +501,7 @@ impl Pipeline {
         self.rescue.reset();
         self.side = Side::Remote;
         self.host = host;
+        self.client = out.remote_client();
         self.sent = pixel;
         self.wire.clear();
         self.wire.push(Wire::Enter {
@@ -859,6 +879,8 @@ mod tests {
         /// The keyboards are grabbed: asked for, and not let go since.
         grabbed: bool,
         releases: usize,
+        /// Which client the stream has, without a driver.
+        client: u64,
         driver: Option<(Driver, Arc<Outlet>)>,
         /// Each hide: where from, and how many events had been sent by then.
         hides: Vec<((i32, i32), usize)>,
@@ -876,10 +898,10 @@ mod tests {
             self.keyboard.push(shape(frame));
         }
 
-        fn remote_connected(&self) -> bool {
+        fn remote_client(&self) -> Option<u64> {
             match &self.driver {
-                Some((driver, _)) => driver.connected(),
-                None => self.connected,
+                Some((driver, _)) => driver.client(),
+                None => self.connected.then_some(self.client),
             }
         }
 
@@ -962,6 +984,7 @@ mod tests {
                     sent: Vec::new(),
                     grabbed: false,
                     releases: 0,
+                    client: 1,
                     driver,
                     hides: Vec::new(),
                     shows: 0,
@@ -1148,6 +1171,38 @@ mod tests {
         rig.move_by(300, 0);
         assert!(!rig.pipe.is_remote());
         assert_eq!(rig.local_cursor(), (1919, 500));
+    }
+
+    #[test]
+    fn a_client_replaced_while_the_pointer_is_over_there_brings_it_home() {
+        let mut rig = Rig::new(true);
+        rig.go_over();
+        rig.type_key(KEY_A, 1);
+        assert!(rig.out.grabbed);
+        // Between two cycles: the stream never looked unconnected.
+        rig.out.client = 2;
+        rig.out.sent.clear();
+        rig.cycle(&[]);
+
+        assert!(!rig.pipe.is_remote());
+        assert!(!rig.out.grabbed, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1, "the cursor is shown again");
+        assert_eq!(rig.local_cursor(), START, "back where it left");
+        assert!(
+            rig.out
+                .sent
+                .iter()
+                .all(|event| matches!(event, Wire::Leave)),
+            "the new client got {:?} without an Enter",
+            rig.out.sent
+        );
+
+        // And crossing again starts afresh with it. The first report after coming
+        // home is where the engine starts tracking again, as on any homecoming.
+        rig.out.sent.clear();
+        rig.move_by(-10, 0);
+        rig.go_over();
+        assert!(matches!(rig.out.sent.first(), Some(Wire::Enter { .. })));
     }
 
     #[test]
@@ -1518,5 +1573,84 @@ mod tests {
         assert_eq!(rig.local_cursor(), START);
         assert_eq!(rig.out.releases, 1);
         assert_eq!(rig.out.shows, 1);
+    }
+
+    #[tokio::test]
+    async fn through_the_endpoint_a_client_replaced_between_two_cycles_is_sent_an_enter_before_anything_else(
+    ) {
+        let outlet = Arc::new(Outlet::default());
+        let endpoint = crate::testing::endpoint();
+        let _server = crate::ipc::input::start(endpoint.clone(), Box::new(Nowhere), outlet.clone())
+            .expect("binds");
+        let mut first =
+            tokio::time::timeout(Duration::from_secs(5), crate::testing::connect(&endpoint))
+                .await
+                .expect("the endpoint accepts");
+
+        let mut driver = Driver::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !driver.connected() {
+            assert!(Instant::now() < deadline, "the client was never published");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            driver.refresh(&outlet);
+        }
+        let before = driver.client();
+
+        let mut rig = Rig::with_driver(true, Some((driver, outlet.clone())));
+        rig.go_over();
+        let batch = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut first))
+            .await
+            .expect("a batch arrives")
+            .expect("read");
+        assert_eq!(decode(&batch).unwrap(), [Wire::Enter { x: 0, y: 500 }]);
+
+        // The agent's restart: the stream closed and another opened, with no cycle in
+        // between to see it unconnected.
+        drop(first);
+        let mut second =
+            tokio::time::timeout(Duration::from_secs(5), crate::testing::connect(&endpoint))
+                .await
+                .expect("the endpoint accepts again");
+        let mut watcher = Driver::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            watcher.refresh(&outlet);
+            if watcher.client().is_some_and(|id| Some(id) != before) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the successor was never published"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        rig.move_by(11, 0);
+        assert!(!rig.pipe.is_remote(), "the crossing ended with its client");
+        assert!(!rig.out.grabbed, "the keyboards are let go");
+        assert_eq!(rig.out.shows, 1);
+
+        // Whatever the successor reads first, it is not input without an `Enter`.
+        rig.go_over();
+        rig.move_by(10, 0);
+        let mut seen = Vec::new();
+        while !seen
+            .iter()
+            .any(|event| matches!(event, Wire::Motion { .. }))
+        {
+            let batch = tokio::time::timeout(Duration::from_secs(5), read_batch(&mut second))
+                .await
+                .expect("a batch arrives")
+                .expect("read");
+            seen.extend(decode(&batch).unwrap());
+        }
+        let first_input = seen
+            .iter()
+            .position(|event| !matches!(event, Wire::Leave))
+            .expect("something besides a Leave");
+        assert!(
+            matches!(seen[first_input], Wire::Enter { .. }),
+            "the successor read {seen:?}"
+        );
     }
 }

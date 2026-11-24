@@ -190,6 +190,12 @@ jobs:
       # lbm-hook.exe and renamed to the contract name here.
       run: Copy-Item rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
 
+    # The UI looks for the agent beside its own exe (AgentLauncher), and the
+    # installer's firewall rule for the multi-PC port names this exact path. Without
+    # it the installed v6 has no agent to start and the rule guards nothing.
+    - name: Stage agent next to UI output
+      run: Copy-Item rust\target\release\lbm-agent.exe (Join-Path $env:UI_OUTPUT 'lbm-agent.exe')
+
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
       with:

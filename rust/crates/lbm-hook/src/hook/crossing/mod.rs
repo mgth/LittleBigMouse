@@ -413,15 +413,17 @@ impl Crossing {
         let revision = shared.shortcuts_revision.load(Ordering::SeqCst);
         if self.toggle_revision != Some(revision) {
             // Never waited for: a contended read is tried again next cycle.
-            if let (Ok(text), Ok(rescue)) = (
+            if let (Ok(text), Ok(rescue), Ok(letters)) = (
                 shared.pointer_lock_shortcut.try_lock(),
                 shared.rescue_shortcut.try_lock(),
+                shared.letters.try_lock(),
             ) {
                 // At once, even with the pointer over there: a rescue changed by a
                 // reload in the middle of a crossing is the one held down now.
-                self.rescue.set(&rescue);
+                self.rescue.set_on(&rescue, *letters);
+                let relaid = self.toggle.relayout(*letters);
                 let rescue_changed = self.toggle.avoid(&rescue);
-                let changed = self.toggle.set(&text) || rescue_changed;
+                let changed = self.toggle.set(&text) || rescue_changed || relaid;
                 self.toggle_revision = Some(revision);
                 if changed {
                     self.shortcut_changed();
@@ -563,10 +565,16 @@ impl Crossing {
     }
 
     /// One key of a keyboard that is not grabbed: the compositor has it, and only the
-    /// pointer lock's shortcut is looked for in it.
-    pub(crate) fn observed_key(&mut self, code: u16, press: Press) {
+    /// shortcuts are looked for in it — the pointer lock's, and the rescue's, which
+    /// the keyboards read here hold without the desktop's global shortcuts
+    /// (see [`Self::check_rescue`]).
+    pub(crate) fn observed_key(&mut self, code: u16, press: Press, now: Instant) {
         if self.toggle.filter(code, press) == Toggle::Fired {
             self.toggled = true;
+        }
+        if !self.is_remote() {
+            // Nothing to keep back: the compositor has the key already.
+            self.rescue.filter(code, press, now);
         }
     }
 
@@ -576,10 +584,7 @@ impl Crossing {
             self.toggle_lock(m);
             self.report(shared);
         }
-        if self.wire.is_empty() {
-            return;
-        }
-        if !self.send(m) {
+        if !self.wire.is_empty() && !self.send(m) {
             eprintln!(
                 "[LittleBigMouse.Hook] multi-PC: the input stream took no more, the pointer comes home"
             );
@@ -622,18 +627,27 @@ impl Crossing {
         );
     }
 
-    /// Fires the rescue if its shortcut has been held long enough in the grabbed
-    /// stream: home first, so that the `Leave` releases the modifiers over there.
+    /// Fires the rescue if its shortcut has been held long enough in the keys read
+    /// here. In the grabbed stream, home first, so that the `Leave` releases the
+    /// modifiers over there. In the keys the compositor has too, only while the
+    /// desktop has no binding of its own for it: that one fires it then.
     pub(crate) fn check_rescue(
         &mut self,
         shared: &'static Shared,
         now: Instant,
         m: &mut impl Platform,
     ) {
-        if self.is_remote() && self.rescue.due(now) {
-            self.go_home(m);
-            crate::daemon::rescue_fired(shared);
+        if !self.rescue.due(now) {
+            return;
         }
+        if self.is_remote() {
+            self.go_home(m);
+        } else if shared.rescue_bound_by_desktop.load(Ordering::SeqCst) {
+            return;
+        } else {
+            eprintln!("[LittleBigMouse.Hook] rescue: held on the keyboards this daemon reads");
+        }
+        crate::daemon::rescue_fired(shared);
     }
 
     /// Brings the pointer back to the last position it had here, whatever the routing

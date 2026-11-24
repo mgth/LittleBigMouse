@@ -41,6 +41,7 @@ qui va le pointeur quand il y entre.
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
 | Fenêtre élevée chez l'esclave (PR #818) | `lbm-hook/src/remote/blocking.rs`, `remote/windows/foreground.rs`, `Control::InjectionBlocked`, page Machines, tray | Le hook esclave Windows compare l'intégrité du premier plan à la sienne (suivi par `EVENT_SYSTEM_FOREGROUND` pendant une session pilotée seulement), le dit au maître derrière la capacité `InjectionBlocked` ; le maître l'affiche (« Windows blocks the mouse and keyboard on … ») et ramène son pointeur au lieu de le laisser figé |
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines ; côté esclave et icône du tray : voir la ligne suivante) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
+| Raccourcis lus par le maître evdev (PR #826) | `hook/crossing/keys.rs` (`Letters`), `hook/linux/keymap.rs`, `hook/linux/rescue.rs`, `Shared::report_rescue_refused` | Les touches lues par evdev sont des positions : la lettre d'un raccourci (`M` de `Alt+Shift+M` ou du secours `Ctrl+Alt+Shift+M`) est cherchée sur la disposition du bureau, lue dans la keymap que `wl_keyboard` donne à tout client (xkbcommon chargé à l'exécution), suivie à chaque nouvelle keymap ; la disposition active est demandée à KDE (`org.kde.KeyboardLayouts`, suivie par `layoutChanged`, attendue sur le bus si le service arrive après le hook ou redémarre, redemandée à chaque keymap si `/Layouts` n'est pas encore publié) parce que le compositeur peut réserver `wl_keyboard.modifiers` au client qui a le focus, et une keymap à plusieurs dispositions sans réponse est lue dans la première (le journal le dit) ; table US sans Wayland ni xkbcommon. Sur un clavier AZERTY, le verrou et le secours attendaient jusque-là la touche marquée `,`. Le secours est aussi reconnu dans les touches des claviers non capturés, tenu le même temps, tant que le bureau ne l'a pas lié lui-même dans une session dont les signaux sont écoutés ; sa disponibilité suit la liste réelle des claviers (branchement tardif, retrait du dernier, routeur arrêté), et un portail qui ne répond plus le rend aux claviers. Le hook se déclare au portail sous l'app id `io.github.mgth.LittleBigMouse` (`org.freedesktop.host.portal.Registry`) avant de demander le raccourci global |
 | Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
 | Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, `sharing_exits.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running », y compris dans la barre d'état (pastille grise « Deskflow open », l'ambre « … also running » étant réservée à un processus qui route ou peut router). Chaque processus trouvé est attendu jusqu'à sa fin, sans scrutation (Linux : pidfd ; Windows : `RegisterWaitForSingleObject` sur un handle `SYNCHRONIZE`) : quitter Deskflow éteint aussitôt l'indication |
 | Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans |
@@ -103,6 +104,12 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   Linux dont le hook a capturé les claviers lit des LED que le compositeur ne peut plus
   écrire ; délai entre la frappe injectée et la LED) et le pointeur verrouillé sous un
   vrai compositeur (verrouillé chez soi, le raccourci atteint aussi le bureau).
+  Essayé le 2026-11-24 (maître KDE Wayland evdev, clavier AZERTY) : le verrou ne
+  marchait pas et le portail refusait le secours (« An app id is required »). Corrigé
+  par la PR #826, pas encore réessayé : ni la keymap lue sous KWin, ni le secours tenu
+  sur les claviers lus, ni la réponse du portail à l'app id déclaré (l'id n'a pas de
+  `.desktop` installé à son nom ; un portail qui en exigerait un refuserait encore, et
+  le secours lu au clavier resterait seul sur le backend evdev).
 
 ## Faiblesses connues
 
@@ -264,7 +271,16 @@ Windows actuel ne connaît pas les zones distantes.
   le développement : la machine était verrouillée.
 
 Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
-couvrirait aussi les fenêtres élevées pour un utilisateur standard.
+couvrirait aussi les fenêtres élevées pour un utilisateur standard. Conception :
+[`multi-pc-service-windows.md`](multi-pc-service-windows.md), option B validée le
+2026-11-24 ; injecteur (#824) et service (#825) en revue. Essayé sur la vm124 sans le
+service (même lancement, depuis la session 0) : invite UAC annulée par Échap injecté,
+fenêtre élevée au premier plan pilotée, session verrouillée atteinte (`Winlogon`, effet
+non vu à l'œil). Jamais tournés : le service sous le SCM, un compte standard, le réseau
+du service (étape 4), l'installeur (étape 5).
+Son point principal : un canal agent → service limité à l'utilisateur ne suffit pas (tout
+processus de l'utilisateur peut se faire passer pour l'agent, donc valider une invite
+UAC) ; le service reçoit lui-même le flux d'un maître approuvé par un administrateur.
 
 ### 4. Maîtres Linux sans evdev
 
@@ -564,8 +580,9 @@ macOS n'a de sens qu'après.
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
-   Windows ») ; reste le service Windows pour le bureau sécurisé.
-6. Presse-papiers : essayer texte, image et fichiers sur la paire réelle ; puis
+   Windows ») ; reste le service Windows pour le bureau sécurisé et l'utilisateur
+   standard (conception : [`multi-pc-service-windows.md`](multi-pc-service-windows.md)).
+6. Presse-papiers : texte, image et fichiers passent sur la paire réelle ; suivent
    `FILEDESCRIPTOR`/`FILECONTENTS` sous Windows, puis le palier 2.
 7. Plusieurs esclaves.
 8. GNOME, X11, portail `InputCapture`.

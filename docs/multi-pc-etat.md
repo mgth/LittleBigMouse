@@ -41,8 +41,10 @@ qui va le pointeur quand il y entre.
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
-reste reconnu pendant que le clavier est capturé. La règle n'est pas encore tenue
-partout : le hook de l'esclave qui redémarre seul y échappe (voir « Faiblesses connues »).
+reste reconnu pendant que le clavier est capturé. Le hook de l'esclave qui perd seul
+sa connexion à son agent en pleine session y est soumis aussi, comme une traversée qui
+ne trouve pas de hook chez l'esclave : l'agent de l'esclave dit `InputReset` et le
+maître ramène son pointeur.
 
 ## Ce qui a été essayé pour de bon
 
@@ -74,14 +76,6 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 ## Faiblesses connues
 
-- **Hook de l'esclave redémarré en pleine traversée.** Quand seul le hook de l'esclave
-  perd sa connexion à son agent, le lien réseau avec le maître reste en vie et l'agent
-  de l'esclave n'envoie pas d'`InputReset` (il ne le fait que pour un débordement de
-  file, `peers/actor.rs`). Le maître garde donc son clavier capturé et continue
-  d'envoyer ; le nouveau hook ignore tout jusqu'au prochain `Enter`. La saisie est
-  perdue jusqu'à ce que l'utilisateur revienne et retraverse, ou use du raccourci de
-  secours. À corriger : dire `InputReset` aussi quand la connexion au hook tombe
-  pendant une session.
 - La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
   hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
   mauvais. Le corriger demande un identifiant de layout dans la réponse.
@@ -364,8 +358,8 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. Sortir l'automate de traversée du module evdev.
 3. Maître Windows.
-4. `InputReset` quand le hook de l'esclave tombe, corrélation `Loaded`, retour d'erreur
-   vers l'interface, règle de pare-feu dans l'installeur.
+4. Corrélation `Loaded`, retour d'erreur vers l'interface, règle de pare-feu dans
+   l'installeur.
 5. Fenêtres élevées par `StartElevated` (à essayer), puis service Windows pour le
    bureau sécurisé.
 6. Presse-papiers, palier 1 (texte et image), puis palier 2.

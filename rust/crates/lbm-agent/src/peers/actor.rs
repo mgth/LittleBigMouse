@@ -8,6 +8,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use lbm_ipc::input::InputEvent;
 use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
@@ -1113,31 +1114,68 @@ async fn forward(
     mut events: mpsc::Receiver<Event>,
     link: LinkSender,
     internal: mpsc::UnboundedSender<Internal>,
-    hook: Sink,
+    mut hook: Sink,
 ) {
     // Only a master's batches are injected: a remote has no business driving this
     // machine's pointer.
     let injecting = their_role == Role::Master;
-    let mut injected = false;
+    // The session of this master's under way in the hook: the number of its first
+    // batch queued, until the master's `Leave` or the end of the session here.
+    let mut session: Option<u64> = None;
+    // `InputReset` was said: what the master sends before it hears of it opens no
+    // session, only its next crossing (or its `Leave`) does.
+    let mut reset_said = false;
+    // A batch of this link's was queued for the hook since its stream was last ended
+    // here: the end of the link ends it, whether a session is under way or the master
+    // left cleanly, so the hook does not go on holding a client for a master gone.
+    let mut used = false;
     let reason = loop {
-        match events.recv().await {
+        let event = tokio::select! {
+            lost = hook.lost() => {
+                // A batch of the session never reached the hook, or reached it on a
+                // connection that ended since by no doing of this link's (the hook
+                // went, a write failed or took too long): the session is over there,
+                // and what follows is ignored until an `Enter`. The master is told, as
+                // after a full queue below. Batches lost before the session began say
+                // nothing of it.
+                if session.is_some_and(|first| lost >= first) {
+                    session = None;
+                    reset_said = true;
+                    eprintln!(
+                        "[lbm-agent] multi-PC: the hook lost input of the session: \
+                         the master is told"
+                    );
+                    reset(&link);
+                }
+                continue;
+            }
+            event = events.recv() => event,
+        };
+        match event {
             Some(Event::Input(batch)) if injecting => {
-                if hook.try_batch(batch) {
-                    injected = true;
-                } else if injected {
+                let (crosses, leaves) = session_edges(&batch);
+                if let Some(number) = hook.try_batch(batch, crosses) {
+                    used = true;
+                    if leaves {
+                        session = None;
+                        reset_said = false;
+                    } else if crosses || !reset_said {
+                        reset_said = false;
+                        session.get_or_insert(number);
+                    }
+                } else if session.is_some() || crosses {
                     // The hook is not keeping up and this batch is lost: it may have been
-                    // a release. The stream ends here instead, so the hook releases what
-                    // it holds; what follows reaches it as a new stream, ignored until
-                    // the master's next `Enter`. The master is told, or it would go on
-                    // sending into that void, its pointer and keyboards held here, until
-                    // the user crossed home and back. Sent from a task of its own: the
-                    // send may wait for room, and this loop must go on reading the link.
-                    hook.release().await;
-                    injected = false;
-                    let link = link.clone();
-                    tokio::spawn(async move {
-                        let _ = link.control(&Control::InputReset).await;
-                    });
+                    // a release, or the crossing itself. The stream ends here instead, so
+                    // the hook releases what it holds; what follows reaches it as a new
+                    // stream, ignored until the master's next `Enter`. The master is
+                    // told, or it would go on sending into that void, its pointer and
+                    // keyboards held here, until the user crossed home and back.
+                    if std::mem::take(&mut used) {
+                        hook.release().await;
+                    }
+                    session = None;
+                    reset_said = true;
+                    reset(&link);
                 }
             }
             Some(Event::Input(_)) => {}
@@ -1152,8 +1190,9 @@ async fn forward(
             None => break CloseReason::Local("the link stopped".into()),
         }
     };
-    // The stream is over: the hook releases whatever it left pressed.
-    if injected {
+    // The stream is over: the hook releases whatever it left pressed, and has no client
+    // for this master any more.
+    if used {
         hook.release().await;
     }
     let _ = internal.send(Internal::Closed {
@@ -1161,6 +1200,31 @@ async fn forward(
         machine_id,
         reason,
     });
+}
+
+/// Tells the master the session of its stream ended here: what it goes on sending is
+/// ignored until its next `Enter`. Sent from a task of its own: the send may wait for
+/// room, and the link's loop must go on reading.
+fn reset(link: &LinkSender) {
+    let link = link.clone();
+    tokio::spawn(async move {
+        let _ = link.control(&Control::InputReset).await;
+    });
+}
+
+/// Whether `batch` crosses (carries an `Enter`), and whether it ends the master's
+/// session: the pointer went home with it and the hook let go of everything (its last
+/// `Enter` or `Leave` is a `Leave`).
+fn session_edges(batch: &[u8]) -> (bool, bool) {
+    let Ok(events) = lbm_ipc::input::decode(batch) else {
+        return (false, false);
+    };
+    let edges = events
+        .iter()
+        .filter(|event| matches!(event, InputEvent::Enter { .. } | InputEvent::Leave));
+    let crosses = edges.clone().any(|event| *event != InputEvent::Leave);
+    let leaves = edges.clone().next_back() == Some(&InputEvent::Leave);
+    (crosses, leaves)
 }
 
 /// `host`, `host:port`, `[v6]` or `[v6]:port`, with the protocol's port when none is

@@ -553,8 +553,17 @@ impl Actor {
                     state: PeerState::Paired,
                     problem: self.problems.get(&paired.machine_id).cloned(),
                     overlay_error: self.overlay_errors.get(&paired.machine_id).cloned(),
+                    // What the agent last said is kept for when the stream goes back to
+                    // it, and not shown while the remote's service carries the stream:
+                    // that one injects above every window.
                     injection_blocked: live
                         .filter(|live| live.info.hello.role == Role::Remote)
+                        .filter(|live| {
+                            !self
+                                .services
+                                .get(&paired.machine_id)
+                                .is_some_and(|service| service.link_id == live.id)
+                        })
                         .and_then(|live| live.blocked.clone()),
                 }
             })

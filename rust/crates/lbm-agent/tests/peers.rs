@@ -2956,3 +2956,42 @@ async fn a_service_reached_for_a_replaced_link_is_dialled_again_for_the_current_
         "the second link with the service was closed too"
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_block_said_by_the_agent_is_not_shown_while_the_service_carries_the_stream() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    use lbm_ipc::peer::InjectionBlock;
+    let mut with = driven_through_the_service().await;
+    let tower_id = with.tower.fingerprint().to_owned();
+    with.tower_link
+        .sender()
+        .control(&Control::InjectionBlocked {
+            block: Some(InjectionBlock::elevated("osk.exe")),
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let state = with.desk.state().await;
+    assert_eq!(
+        peer(&state, &tower_id).and_then(|p| p.injection_blocked.clone()),
+        None,
+        "shown blocked while the service injects"
+    );
+    let motion = [InputEvent::Motion { x: 6, y: 6 }];
+    write_batch(&mut with.hook, &encode(&motion)).await.unwrap();
+    assert_eq!(next_input(&mut with.service_link).await, motion);
+
+    // The service goes: the stream is the agent's again, and so is what it said.
+    with.service_link.sender().close("stopped").await;
+    let state = with
+        .desk
+        .until(|s| peer(s, &tower_id).is_some_and(|p| p.injection_blocked.is_some()))
+        .await;
+    assert_eq!(
+        peer(&state, &tower_id)
+            .and_then(|p| p.injection_blocked.clone())
+            .map(|b| b.process),
+        Some("osk.exe".to_owned())
+    );
+}

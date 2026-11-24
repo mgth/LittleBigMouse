@@ -31,6 +31,9 @@ mod windows;
 /// Some content, or why there is none.
 pub type Data = Result<Vec<u8>, String>;
 
+/// Why a read of a copy no longer on the clipboard is refused.
+pub const CHANGED: &str = "the clipboard changed since";
+
 /// Why a content over `limit` bytes does not cross, in words for the user.
 pub fn too_large(limit: usize) -> String {
     format!(
@@ -52,9 +55,12 @@ pub enum Command {
     /// The offer `serial` cannot be served any more (its machine left): let go of the
     /// clipboard if it still holds it, so that a paste finds nothing rather than waits.
     Withdraw { serial: u64 },
-    /// Read `format` of what was copied here last, no more than `limit` bytes: past it
-    /// the answer is an error, and what was read is thrown away.
+    /// Read `format` of the copy numbered `copy` ([`Event::Changed`]), no more than
+    /// `limit` bytes: past it the answer is an error, and what was read is thrown away.
+    /// Refused when the clipboard holds another copy by now, or the same one marked as
+    /// not to be shared since: what crosses is only ever what was announced.
     Read {
+        copy: u64,
         format: ClipFormat,
         limit: usize,
         reply: oneshot::Sender<Data>,
@@ -66,8 +72,8 @@ pub enum Command {
 pub enum Event {
     /// Something was copied here, readable in `formats` (empty: nothing that is shared —
     /// a format of no use elsewhere, a secret, or an empty clipboard). Never said of an
-    /// [`Command::Offer`].
-    Changed(Vec<ClipFormat>),
+    /// [`Command::Offer`]. `copy` numbers it for [`Command::Read`].
+    Changed { copy: u64, formats: Vec<ClipFormat> },
     /// An application here reads `format` of the offer `serial`: the content goes to
     /// `reply`, which it waits for.
     Wanted {

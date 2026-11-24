@@ -451,6 +451,17 @@ sees it.
   megabytes would put that much bulk ahead of the next click. On a wired network that is
   more than is in flight; on a slow Wi-Fi it caps a transfer's pace and costs input a few
   milliseconds at worst.
+- **Two copies at once.** Every offer says the last serial its sender heard from the
+  receiver (`Seen`) and whether it takes offers at all (`Receiving`). An offer from a
+  machine that takes them, whose `Seen` is older than the receiver's own last
+  announcement to it, crossed that announcement: the machine with the lower id keeps its
+  copy, the other takes it, the same rule on both sides, so that both paste the same
+  thing rather than each holding the other's and neither able to serve its own.
+- **Only what was announced is read.** The clipboard numbers each copy as it reports it
+  (Wayland: each selection the compositor announces; Windows: the clipboard's sequence
+  number), and a read names the copy it is for: a newer one, or the same one marked not
+  to be monitored since, is refused (`the clipboard changed since`), checked with the
+  Windows clipboard open so that nothing comes between the check and the read.
 - **No echo.** A clipboard never reports a change it made itself (Windows: it is the
   owner; Wayland: its source offers the private `application/x-littlebigmouse-remote`
   type), so a received copy is never announced back.

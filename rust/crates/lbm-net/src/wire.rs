@@ -195,10 +195,20 @@ pub enum Control {
     /// `serial` on the sender. Nothing of the content: it crosses only when an
     /// application on the other side reads it (`ClipboardRequest`). Empty `formats` says
     /// the sender holds nothing it shares any more.
+    ///
+    /// `seen` is the last `serial` the sender heard from the receiver: an offer whose
+    /// `seen` is older than the receiver's own last announcement crossed it, two copies
+    /// made at once, which both sides settle the same way (the lower machine id wins).
+    /// `receiving` says whether the sender takes the receiver's offers at all: when it
+    /// does not, there is nothing to settle, and its copy is taken.
     ClipboardOffer {
         serial: u64,
         #[serde(default)]
         formats: Vec<ClipFormat>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        seen: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        receiving: bool,
     },
     /// The answer to a `ClipboardOffer`: `format` of what was offered under `serial`,
     /// please, as the bulk transfer numbered `transfer` (numbered by the asker). Answered
@@ -240,6 +250,10 @@ pub enum ClipFormat {
     /// knows of the offer is still worth taking.
     #[serde(other)]
     Unknown,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 /// One piece of a bulk transfer.
@@ -600,10 +614,14 @@ mod tests {
             Control::ClipboardOffer {
                 serial: 4,
                 formats: vec![ClipFormat::Text, ClipFormat::Png],
+                seen: 3,
+                receiving: true,
             },
             Control::ClipboardOffer {
                 serial: 5,
                 formats: vec![],
+                seen: 0,
+                receiving: false,
             },
             Control::ClipboardRequest {
                 serial: 4,
@@ -626,7 +644,9 @@ mod tests {
             newer,
             Control::ClipboardOffer {
                 serial: 1,
-                formats: vec![ClipFormat::Text, ClipFormat::Unknown]
+                formats: vec![ClipFormat::Text, ClipFormat::Unknown],
+                seen: 0,
+                receiving: false,
             }
         );
     }

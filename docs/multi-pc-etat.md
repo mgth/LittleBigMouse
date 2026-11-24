@@ -1,6 +1,6 @@
 # Mode multi-PC : état du travail et reste à faire
 
-État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `5f489dea`), après la fusion des PR #800 (le mode)
+État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `d7204166`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
 Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
@@ -31,7 +31,7 @@ qui va le pointeur quand il y entre.
 | Brique | Où | Contenu |
 |---|---|---|
 | Réseau | `lbm-net` | TCP 24817, TLS 1.3 mutuel, certificats auto-signés épinglés, appairage confirmé des deux côtés, `peers.json`, keepalive |
-| Flux d'entrée | `lbm-ipc/src/input.rs` | Trames binaires `Enter/Leave/Motion/Button/Wheel/Key`, codes evdev, positions absolues en pixels du receveur |
+| Flux d'entrée | `lbm-ipc/src/input.rs` | Trames binaires `Enter/Leave/Motion/Button/Wheel/Key/Locks`, codes evdev, positions absolues en pixels du receveur ; `Locks` retiré pour un pair qui n'annonce pas la capacité `InputLocks` |
 | Modèle | `lbm-layout`, `lbm-display`, `lbm-store`, `lbm-zones` | Machine portée par la source, clé de dalle inter-machines, fusion des écrans distants, zones avec hôte |
 | Agent | `lbm-agent/src/peers` | Gestion des pairs, API (`Peers`, `SetMultiPc`, `PeerConnect`…), relais du flux, un esclave « sélectionné » |
 | Hook maître | `lbm-hook/src/hook/crossing` (règles, toutes plateformes), `lbm-hook/src/hook/linux/evdev` (seul client) | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
@@ -39,6 +39,7 @@ qui va le pointeur quand il y entre.
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
+| Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -82,7 +83,12 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   l'esclave Linux), la correspondance verticale exacte à la traversée ;
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
-  provoqués sur les machines.
+  provoqués sur les machines ;
+- les trois fonctions de la PR #813 : l'indicateur, l'alignement des verrous (`GetKeyState`
+  depuis le fil de l'injecteur Windows peut retarder sur l'état système ; un esclave
+  Linux dont le hook a capturé les claviers lit des LED que le compositeur ne peut plus
+  écrire ; délai entre la frappe injectée et la LED) et le pointeur verrouillé sous un
+  vrai compositeur (verrouillé chez soi, le raccourci atteint aussi le bureau).
 
 ## Faiblesses connues
 
@@ -321,16 +327,16 @@ qu'aucun pair n'est lié ou que l'option est coupée.
 
 ## Fonctionnalités à envisager
 
-Des idées, pas des engagements. Les points 1, 3 et 4 sont codés dans la PR #813, pas
-encore fusionnée ; les autres ne sont pas commencés. Dans l'ordre d'utilité estimée.
+Des idées, pas des engagements. Les points 1, 3 et 4 sont livrés (PR #813), jamais
+essayés sur matériel ; les autres ne sont pas commencés. Dans l'ordre d'utilité estimée.
 
-1. **Verrouiller le pointeur sur une machine** par un raccourci *(codé, PR #813, voir « Travaux en cours »)*. Pour les jeux et le
+1. **Verrouiller le pointeur sur une machine** par un raccourci *(livré, PR #813)*. Pour les jeux et le
    plein écran, où l'on franchit le bord par accident. La reconnaissance d'un raccourci
    dans le flux capturé existe déjà pour le raccourci de secours.
 2. **Raccourcis pour sauter d'une machine à l'autre** sans viser un bord, avec retour à
    la dernière position. Utile quand les écrans ne sont pas côte à côte.
-3. **Synchroniser les verrous** (Verr. Maj, Verr. Num) à l'entrée sur l'esclave *(codé, même branche)*.
-4. **Indicateur de machine pilotée** *(codé, même branche)* dans le tray et dans l'état de l'agent :
+3. **Synchroniser les verrous** (Verr. Maj, Verr. Num) à l'entrée sur l'esclave *(livré, PR #813)*.
+4. **Indicateur de machine pilotée** *(livré, PR #813)* dans le tray et dans l'état de l'agent :
    aujourd'hui seul le curseur dit où va le clavier.
 5. **Réveil de l'esclave** : Wake-on-LAN à l'approche du bord, et pas de mise en veille
    de l'écran de l'esclave pendant qu'on le pilote. Le WoL existe déjà dans le dépôt
@@ -404,9 +410,7 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-| Sujet | Branche / PR | État |
-|---|---|---|
-| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte ; tous les points de revue sont résolus (dernière vérification à 5af944bc), CI en cours, pas encore fusionnée. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
+Aucun : toutes les PR de la série (#806 à #811, #813) sont fusionnées dans `v6`.
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

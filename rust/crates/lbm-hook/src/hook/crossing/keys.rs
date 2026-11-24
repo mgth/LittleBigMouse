@@ -149,8 +149,19 @@ pub(crate) struct RescueKeys {
     text: String,
     /// Modifier keys held in the grabbed stream.
     modifiers: Modifiers,
-    /// Since when the final key has been held, kept back.
-    since: Option<Instant>,
+    /// The final key being held, kept back.
+    kept: Option<Kept>,
+}
+
+/// The key a hold keeps back. Its own: the shortcut may change while it is down, and
+/// what is forwarded when the hold is given up is the key that was pressed.
+#[derive(Debug, Clone, Copy)]
+struct Kept {
+    key: u16,
+    since: Instant,
+    /// Still the shortcut's: a rebinding while it is down keeps the key back until it is
+    /// given up, but does not fire a rescue that is no longer the one configured.
+    armed: bool,
 }
 
 impl RescueKeys {
@@ -161,21 +172,21 @@ impl RescueKeys {
         }
         self.text = text.to_owned();
         self.wanted = Combination::parse(text);
+        if let Some(kept) = &mut self.kept {
+            kept.armed = false;
+        }
     }
 
     /// The grabbed stream starts or stops: nothing is held in it any more.
     pub(crate) fn reset(&mut self) {
         self.modifiers.clear();
-        self.since = None;
+        self.kept = None;
     }
 
     /// Reads one key event of the grabbed stream.
     pub(crate) fn filter(&mut self, code: u16, press: Press, now: Instant) -> Verdict {
         self.modifiers.track(code, press);
-        let Some(wanted) = self.wanted else {
-            return Verdict::Pass;
-        };
-        if self.since.is_some() {
+        if let Some(kept) = self.kept {
             // Autorepeat, of the key or of a modifier: still the same hold.
             if press == Press::Repeat {
                 return Verdict::Hold;
@@ -183,11 +194,18 @@ impl RescueKeys {
             // Let go early, a modifier let go, or another key pressed: the user was
             // typing, not asking for a rescue. What was kept goes first, so the other
             // machine sees the keys in the order they were pressed.
-            self.since = None;
-            return Verdict::Release(wanted.key);
+            self.kept = None;
+            return Verdict::Release(kept.key);
         }
+        let Some(wanted) = self.wanted else {
+            return Verdict::Pass;
+        };
         if self.modifiers.completes(wanted, code, press) {
-            self.since = Some(now);
+            self.kept = Some(Kept {
+                key: code,
+                since: now,
+                armed: true,
+            });
             return Verdict::Hold;
         }
         Verdict::Pass
@@ -195,9 +213,9 @@ impl RescueKeys {
 
     /// Whether the kept key has now been held long enough to fire. Fires once.
     pub(crate) fn due(&mut self, now: Instant) -> bool {
-        match self.since {
-            Some(since) if now.duration_since(since) >= HOLD => {
-                self.since = None;
+        match self.kept {
+            Some(kept) if kept.armed && now.duration_since(kept.since) >= HOLD => {
+                self.kept = None;
                 true
             }
             _ => false,
@@ -542,5 +560,29 @@ mod tests {
         let mut keys = ToggleKeys::default();
         const KEY_L: u16 = 38;
         assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass);
+    }
+
+    #[test]
+    fn a_key_kept_back_stays_itself_when_the_shortcut_changes_under_it() {
+        let start = Instant::now();
+        let mut keys = rescue();
+        press_modifiers(&mut keys, start);
+        assert_eq!(keys.filter(KEY_M, Press::Down, start), Verdict::Hold);
+        keys.set("Ctrl+Alt+L");
+        // No longer the rescue: it does not fire, and M, not L, is handed back.
+        assert!(!keys.due(start + HOLD));
+        assert_eq!(
+            keys.filter(KEY_M, Press::Up, start + HOLD),
+            Verdict::Release(KEY_M)
+        );
+        // Nor when the shortcut is taken away altogether.
+        let mut keys = rescue();
+        press_modifiers(&mut keys, start);
+        keys.filter(KEY_M, Press::Down, start);
+        keys.set("");
+        assert_eq!(
+            keys.filter(KEY_M, Press::Up, start),
+            Verdict::Release(KEY_M)
+        );
     }
 }

@@ -680,3 +680,40 @@ fn a_rescue_changed_to_the_lock_shortcut_during_a_crossing_still_brings_the_poin
         rig.m.sent
     );
 }
+
+#[test]
+fn a_key_held_while_the_rescue_is_rebound_goes_over_as_itself() {
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    // The old rescue's final key, kept back...
+    rig.type_key(KEY_M, Press::Down);
+    // ...while a reload moves the rescue elsewhere.
+    *rig.shared.rescue_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
+    rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    rig.cycle(None, &[]);
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(rig.crossing.is_remote(), "the old rescue no longer fires");
+    rig.type_key(KEY_M, Press::Up);
+    for code in [KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTCTRL] {
+        rig.type_key(code, Press::Up);
+    }
+
+    let key = |code, pressed| Wire::Key { code, pressed };
+    assert_eq!(
+        rig.m.sent[1..],
+        [
+            key(KEY_LEFTCTRL, true),
+            key(KEY_LEFTALT, true),
+            key(KEY_LEFTSHIFT, true),
+            key(KEY_M, true),
+            key(KEY_M, false),
+            key(KEY_LEFTSHIFT, false),
+            key(KEY_LEFTALT, false),
+            key(KEY_LEFTCTRL, false),
+        ]
+    );
+}

@@ -75,9 +75,18 @@ screen), Windows as master, the portal and X11 backends as master.
     its latest choice for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
+<<<<<<< HEAD
   - `ClipboardOffer { Serial, Formats }`, `ClipboardRequest { Serial, Format, Transfer }`,
     `ClipboardAbort { Transfer, Reason }` — either way, between peers that both announced
     `Clipboard`: see "Shared clipboard"
+=======
+  - `Overlay { Revision, Bands: [Band] }` — master → remote: the rulers to draw on the
+    remote's screens, in place of any drawn before; empty takes them down (see "Rulers
+    on a remote's screens"). Sent only to a remote whose `Hello` lists the capability
+    `RemoteOverlay`; added after protocol 1 without a new version
+  - `OverlayFailed { Revision, Error }` — remote → master: the rulers of `Revision`
+    are not shown, refused or taken down, and why
+>>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -288,6 +297,10 @@ On a remote (`lbm-hook/src/remote`):
     fingerprint), `Incompatible` or `Lost`; absent for a link ended on purpose;
   - `PeerWallpapers { MachineId }` (capability `PeerWallpapers`) → `{ MachineId,
     Revision, Wallpapers: [{ Display, Image | Color }] }`, see "Wallpapers";
+  - `PeerOverlay { MachineId, Bands }` (capability `PeerOverlay`) → `null`: the rulers
+    to draw on that remote's screens, empty to take them down, see "Rulers on a remote's
+    screens"; `OverlayError` on the remote's entry in `Peers` says why it does not show
+    them;
   - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
     everything is closed;
   - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
@@ -407,6 +420,7 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.
 
+<<<<<<< HEAD
 ## Shared clipboard
 
 Off by default, on each machine and each way (`ClipboardSend`, `ClipboardReceive` in
@@ -470,6 +484,44 @@ sees it.
   Wayland gives up after one second without data, so a large picture over a slow network
   may fail to paste. X11 and the
   primary selection are not shared.
+=======
+## Rulers on a remote's screens
+
+"Rulers on screens" (Location mode) draws on every screen a ruler graduated in
+millimetres from the selected panel. The remote's screens get theirs too, each at its
+place and its physical size.
+
+- **Computed by the master**, from its layout: `lbm-app` takes, per remote machine on
+  the map, the layout with every other machine's sources off their desktop
+  (`remote_rulers::wanted`) and runs the same `lbm_overlay::scene::from_layout` as for
+  its own screens. The millimetres (where the zero falls, the measured panel's length,
+  each screen's physical length) are the master's; the pixels, the scale and the
+  output's name are those the remote reported in `Displays`. The window sends a set
+  only when it changed (`PeerOverlay`): a drag sends one per redraw, a still layout
+  none.
+- **Checked and drawn by the remote**: every band must be a ruler on one of its attached
+  screens as they are now — same output, same pixel rectangle, same scale — or the whole
+  set is refused with `OverlayFailed` (a master working from an older report must not
+  draw across the wrong place). Drawn by `lbm_overlay::Standalone`, **passive**: the
+  pointer and the keyboard go through them (the remote has no editor to hand a drag to;
+  the rulers are dragged from the master's own screens). Windows: layered windows owned
+  by a hidden window, on a thread waiting on its message queue only. Linux: the
+  layer-shell or X11 surfaces of the same helper process the editor uses (the agent run
+  as `--screen-overlay-host`), whose two-second lease the thread renews every 500 ms
+  while — and only while — rulers are shown.
+- **Never left behind**: they go when the master sends an empty set (rulers off,
+  Escape, another mode, the remote leaving the map), when the master's frontend that
+  asked goes (the agent takes down, on each remote, the rulers that connection wrote
+  last; a window turning its rulers off or closing never takes down those another
+  window wrote since), when the link ends,
+  when the mode is turned off on either side, when the remote's screens change (checked
+  again; the master sends a new set from the new `Displays`), and when the surfaces
+  report a display change. The surfaces and their thread exist only while shown.
+- A remote without `RemoteOverlay` is sent nothing; `OverlayError` says it cannot show
+  rulers.
+- `examples/peer_drive` asks for them (`rulers N`, `norulers`); `examples/peer_remote`
+  runs a remote's multi-PC node alone, with real rulers, beside a user's running agent.
+>>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
 
 ## A panel both machines know
 

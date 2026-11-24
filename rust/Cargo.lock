@@ -2456,6 +2456,7 @@ dependencies = [
  "lbm-ipc",
  "lbm-layout",
  "lbm-net",
+ "lbm-overlay",
  "lbm-store",
  "lbm-wallpaper",
  "lbm-zones",

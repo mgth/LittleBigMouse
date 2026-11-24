@@ -55,6 +55,7 @@ async fn main() -> ExitCode {
         port: Some(port),
         name: None,
         pointer_lock_shortcut: None,
+        clipboard: Default::default(),
     });
     let state = match on {
         Answer::Now(result) => result,

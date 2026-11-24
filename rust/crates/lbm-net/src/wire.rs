@@ -104,10 +104,15 @@ pub enum Control {
         #[serde(default)]
         wallpapers: Vec<PeerWallpaper>,
     },
-    /// Either way: write VCP 0x60 = `value` on that display.
+    /// Either way: write VCP 0x60 = `value` on that display. `request` numbers it, for
+    /// the answer (`InputSwitched`) to say which request it answers: a retry of the same
+    /// value must not be settled by the answer to the attempt before it. Added after
+    /// protocol 1: absent from an older master, ignored by an older remote.
     SelectInput {
         display: String,
         value: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<u64>,
     },
     /// Remote → master: the remote ended the session of the master's input stream
     /// although the link lives on (its hook could not keep up, and what it held was
@@ -115,6 +120,19 @@ pub enum Control {
     /// master brings its pointer home and starts afresh. Added after protocol 1 without
     /// a new version: an older master sees an unknown type.
     InputReset,
+    /// Remote → master: how the `SelectInput` for `display` and `value` went on the
+    /// remote, with that request's `request`: `error` says why it could not, absent when
+    /// the monitor shows that input now. What lets the master's user see a switch that
+    /// failed on the other machine. Added after protocol 1 without a new version: an
+    /// older master sees an unknown type, and an older remote sends none.
+    InputSwitched {
+        display: String,
+        value: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     Ping,
     Pong,
     /// The sender is closing the link on purpose.
@@ -244,8 +262,21 @@ mod tests {
             Control::SelectInput {
                 display: "DP-1".into(),
                 value: 0x0f,
+                request: Some(7),
             },
             Control::InputReset,
+            Control::InputSwitched {
+                display: "DP-1".into(),
+                value: 0x0f,
+                request: None,
+                error: None,
+            },
+            Control::InputSwitched {
+                display: "DP-1".into(),
+                value: 0x0f,
+                request: Some(7),
+                error: Some("DDC/CI write failed".into()),
+            },
             Control::Ping,
             Control::Pong,
             Control::Bye {
@@ -258,6 +289,7 @@ mod tests {
         let select = encode_control(&Control::SelectInput {
             display: "DP-1".into(),
             value: 17,
+            request: None,
         })
         .unwrap();
         assert_eq!(
@@ -304,6 +336,43 @@ mod tests {
         assert_eq!(
             std::str::from_utf8(&reset[5..]).unwrap(),
             r#"{"Type":"InputReset"}"#
+        );
+    }
+
+    #[test]
+    fn an_input_switch_says_why_only_when_it_failed() {
+        let done = encode_control(&Control::InputSwitched {
+            display: "DP-1".into(),
+            value: 17,
+            request: None,
+            error: None,
+        })
+        .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&done[5..]).unwrap(),
+            r#"{"Type":"InputSwitched","Display":"DP-1","Value":17}"#
+        );
+        let failed = encode_control(&Control::InputSwitched {
+            display: "DP-1".into(),
+            value: 17,
+            request: Some(3),
+            error: Some("no answer".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&failed[5..]).unwrap(),
+            r#"{"Type":"InputSwitched","Display":"DP-1","Value":17,"Request":3,"Error":"no answer"}"#
+        );
+        // What an older master sends reads, with no request to echo.
+        let older: Control =
+            serde_json::from_str(r#"{"Type":"SelectInput","Display":"DP-1","Value":17}"#).unwrap();
+        assert_eq!(
+            older,
+            Control::SelectInput {
+                display: "DP-1".into(),
+                value: 17,
+                request: None
+            }
         );
     }
 

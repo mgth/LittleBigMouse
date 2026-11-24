@@ -72,6 +72,7 @@ pub struct FakeDdc {
 struct FakeState {
     values: std::collections::HashMap<(String, u8), u16>,
     silent: std::collections::HashSet<String>,
+    held: std::collections::HashMap<String, std::sync::Arc<tokio::sync::Semaphore>>,
     calls: Vec<DdcCall>,
 }
 
@@ -89,6 +90,18 @@ impl FakeDdc {
             .unwrap()
             .silent
             .insert(connector.to_owned());
+    }
+
+    /// Every read of `connector` from now on waits for a permit of the gate returned:
+    /// `add_permits(n)` lets `n` of them through. For a test to hold a switch half-way.
+    pub fn hold(&self, connector: &str) -> std::sync::Arc<tokio::sync::Semaphore> {
+        let gate = std::sync::Arc::new(tokio::sync::Semaphore::new(0));
+        self.state
+            .lock()
+            .unwrap()
+            .held
+            .insert(connector.to_owned(), gate.clone());
+        gate
     }
 
     pub fn calls(&self) -> Vec<DdcCall> {
@@ -119,7 +132,15 @@ impl Ddc for FakeDdc {
                 .copied()
                 .ok_or_else(|| format!("{} does not support {code:#04x}", target.connector))
         };
-        Box::pin(async move { result })
+        let gate = state.held.get(&target.connector).cloned();
+        Box::pin(async move {
+            if let Some(gate) = gate {
+                if let Ok(permit) = gate.acquire().await {
+                    permit.forget();
+                }
+            }
+            result
+        })
     }
 
     fn write(&self, target: Target, code: u8, value: u16) -> DdcFuture<()> {

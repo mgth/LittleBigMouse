@@ -289,7 +289,19 @@ impl Pending {
     /// [`Options::pairing_timeout`], so a caller with an event loop spawns this rather
     /// than awaiting it inline.
     pub async fn accept(mut self) -> Result<Link, LinkError> {
-        send(&mut self.stream, &Control::Paired).await?;
+        if let Err(error) = send(&mut self.stream, &Control::Paired).await {
+            // The peer may have refused this node and closed already: its reason, if it
+            // is still there to read, says more than the broken connection does.
+            let said = timeout(
+                self.options.handshake_timeout,
+                wire::read_frame(&mut self.stream),
+            )
+            .await;
+            return Err(match said {
+                Ok(Ok(Frame::Control(Control::Refused { reason }))) => LinkError::Refused(reason),
+                _ => LinkError::Io(error),
+            });
+        }
         let wait = async {
             loop {
                 match wire::read_frame(&mut self.stream).await {
@@ -330,6 +342,11 @@ impl Pending {
         let _ = timeout(self.options.handshake_timeout, async {
             let _ = send(&mut self.stream, &refused).await;
             let _ = self.stream.shutdown().await;
+            // Read what the peer still sends (its `Paired`, crossing the refusal) until it
+            // closes: a connection closed with data unread is reset, and a reset can
+            // throw away the `Refused` before the peer has read it — Windows does, and
+            // the peer then knows only that the connection was aborted.
+            while wire::read_frame(&mut self.stream).await.is_ok() {}
         })
         .await;
     }

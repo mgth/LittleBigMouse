@@ -107,6 +107,12 @@ pub trait AgentWorld: World {
         false
     }
 
+    /// Whether the current layout has the monitor `monitor`: what is said of a monitor
+    /// that is gone is said no more. A world that keeps no layout says every one.
+    fn has_monitor(&self, _monitor: &str) -> bool {
+        true
+    }
+
     /// Persists the current layout's Enabled alone.
     fn save_enabled(&mut self) -> io::Result<()>;
 
@@ -562,6 +568,12 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
     fn display_monitor(&self, display: &str) -> Option<String> {
         display_monitor(self.layout.as_ref()?, display)
     }
+    fn has_monitor(&self, monitor: &str) -> bool {
+        self.layout
+            .as_ref()
+            .is_some_and(|layout| layout.monitor(monitor).is_some())
+    }
+
     fn switch_failed(&mut self, monitor: &str, source: &str) -> bool {
         let waiting = self
             .switching

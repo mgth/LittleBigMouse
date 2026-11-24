@@ -1126,10 +1126,28 @@ impl App {
         if let Some(note) = &self.switch_note {
             ui.small(note);
         }
+        if let Some(failed) = self.switch_failure(layout, &id) {
+            ui.colored_label(ui.visuals().error_fg_color, failed);
+        }
         ui.separator();
         if let Some(source) = chosen {
             self.switch_source(&id, &source);
         }
+    }
+
+    /// Why the last switch of `monitor` failed, in words, while the agent says it stands.
+    fn switch_failure(&self, layout: &Layout, monitor: &str) -> Option<String> {
+        let failure = self
+            .agent
+            .switch_failures
+            .iter()
+            .find(|f| f.monitor == monitor)?;
+        Some(lbm_app::machines::switch_failure_text(
+            layout,
+            failure,
+            self.machines.here(),
+            self.machines.state.as_ref(),
+        ))
     }
 
     /// The badge of every monitor in `shown`, in its order: `None` for a local one.
@@ -1139,7 +1157,14 @@ impl App {
         };
         shown
             .iter()
-            .map(|m| lbm_app::machines::tag(layout, m.id, self.machines.here()))
+            .map(|m| {
+                lbm_app::machines::tag(layout, m.id, self.machines.here()).map(|tag| {
+                    lbm_app::machines::Tag {
+                        problem: self.switch_failure(layout, m.id),
+                        ..tag
+                    }
+                })
+            })
             .collect()
     }
 
@@ -5233,6 +5258,58 @@ mod machines_tests {
     }
 
     #[test]
+    fn a_failed_switch_is_on_the_panels_badge_and_under_its_switch() {
+        let layout = desk_and_laptop(true);
+        let dell = dell_of(&layout);
+        let remote = layout
+            .monitor(&dell)
+            .unwrap()
+            .sources
+            .iter()
+            .find(|s| layout.source(s).is_some_and(|s| s.source.host.is_some()))
+            .cloned()
+            .unwrap();
+        let (mut app, _incoming) = app_with(layout);
+        app.mode = lbm_ui::mode::Mode::Size;
+        app.selected = Some(dell.clone());
+        app.agent.switch_failures = vec![lbm_app::machines::SwitchFailure {
+            monitor: dell.clone(),
+            source: remote,
+            value: 0x11,
+            error: "The monitor did not respond in time".into(),
+            remote: None,
+            remote_error: None,
+        }];
+        let said = "Could not switch this screen to laptop (input 0x11): \
+                    The monitor did not respond in time";
+
+        let logos = HashMap::new();
+        let monitors = app.monitors(&logos);
+        let tag = app
+            .tags(&monitors)
+            .into_iter()
+            .zip(&monitors)
+            .find(|(_, m)| m.id == dell)
+            .and_then(|(t, _)| t)
+            .unwrap();
+        assert_eq!(tag.problem.as_deref(), Some(said));
+        assert!(tag.host().badge().ends_with("switch failed"));
+        let (text, _) = properties(&mut app);
+        assert!(text.contains(said), "{text}");
+
+        // The agent no longer says it: neither does the window.
+        app.agent.switch_failures.clear();
+        let monitors = app.monitors(&logos);
+        assert!(app
+            .tags(&monitors)
+            .into_iter()
+            .flatten()
+            .all(|t| t.problem.is_none()));
+        let (text, _) = properties(&mut app);
+        assert!(!text.contains("Could not switch"), "{text}");
+    }
+
+    #[test]
     fn switching_a_shared_panel_asks_the_agent_and_the_map_follows() {
         let layout = desk_and_laptop(true);
         let dell = dell_of(&layout);
@@ -5297,7 +5374,8 @@ mod machines_tests {
             lbm_app::machines::Tag {
                 machine: "laptop".into(),
                 remote: true,
-                shared: true
+                shared: true,
+                problem: None,
             }
         );
         assert!(!app.dirty(), "the agent holds the switch: nothing to save");

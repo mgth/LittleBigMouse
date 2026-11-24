@@ -142,6 +142,11 @@ pub struct Agent<W> {
     remote: Option<std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>>,
     /// The multi-PC mode, when this agent offers it.
     peers: Option<crate::peers::Service>,
+    /// Where the Windows service's offer is said to have changed, and the watch saying it
+    /// (`service_offer`); none off Windows.
+    service_offers: Option<UnboundedReceiver<()>>,
+    #[cfg(windows)]
+    service_offer_watch: Option<crate::service_offer::Watch>,
     /// The monitors' input, read and written for the multi-PC mode (`input_switch`).
     /// [`NoDdc`](crate::vcp::NoDdc) unless `main` or a test hands one over.
     ddc: std::sync::Arc<dyn crate::vcp::Ddc>,
@@ -242,6 +247,9 @@ impl<W: AgentWorld> Agent<W> {
             vcp: Default::default(),
             remote: None,
             peers: None,
+            service_offers: None,
+            #[cfg(windows)]
+            service_offer_watch: None,
             ddc: std::sync::Arc::new(crate::vcp::NoDdc),
             vcp_events,
             vcp_events_rx: Some(vcp_events_rx),
@@ -332,6 +340,13 @@ impl<W: AgentWorld> Agent<W> {
     /// Offers the multi-PC mode (see [`crate::peers`]).
     pub fn with_peers(mut self, peers: crate::peers::Service) -> Self {
         self.peers = Some(peers);
+        // The Windows service's offer, announced to the masters while it lasts.
+        #[cfg(windows)]
+        {
+            let (changed, changes) = tokio::sync::mpsc::unbounded_channel();
+            self.service_offer_watch = crate::service_offer::watch(changed);
+            self.service_offers = Some(changes);
+        }
         self
     }
 
@@ -1672,6 +1687,7 @@ impl<W: AgentWorld> Agent<W> {
         let mut vcp_events = self.vcp_events_rx.take();
         let mut wallpaper_changes = self.wallpaper_changes_rx.take();
         let mut sharing_ended = self.sharing_exits.as_mut().and_then(|e| e.take_events());
+        let mut service_offers = self.service_offers.take();
         // The events of one wallpaper change, read once. No event, no deadline.
         let mut wallpaper_burst = crate::wallpaper_watch::Burst::default();
         loop {
@@ -1717,6 +1733,22 @@ impl<W: AgentWorld> Agent<W> {
                             self.handle(Input::Hook(HookEvent::Resumed));
                         }
                         None => sleep = None,
+                    }
+                    continue;
+                },
+                offer = async {
+                    match &mut service_offers {
+                        Some(offers) => offers.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match offer {
+                        Some(()) => {
+                            if let Some(peers) = &mut self.peers {
+                                peers.set_secure_input(crate::service_offer::read());
+                            }
+                        }
+                        None => service_offers = None,
                     }
                     continue;
                 },

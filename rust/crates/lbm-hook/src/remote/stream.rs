@@ -46,20 +46,29 @@ pub fn pump(reader: &mut impl Read, injector: &mut dyn Injector) -> io::Result<(
 /// that stops being the input desktop when the secure desktop comes up (a UAC prompt,
 /// the lock screen) or goes away. Fewer in than asked is that moment: `reattach`
 /// moves the thread to the input desktop and says whether it changed, and only then
-/// is the rest sent again, once. `false` when inputs are still missing.
+/// is the rest sent again, once. Says how many went in: the first ones, in order.
 pub fn send_following(
     count: usize,
     mut send: impl FnMut(usize) -> usize,
     reattach: impl FnOnce() -> bool,
-) -> bool {
+) -> usize {
     let sent = send(0).min(count);
-    if sent == count {
-        return true;
+    if sent == count || !reattach() {
+        return sent;
     }
-    if !reattach() {
-        return false;
-    }
-    sent + send(sent) >= count
+    (sent + send(sent)).min(count)
+}
+
+/// Keeps, out of what did not go in (`unsent`, the tail of a batch), the releases.
+///
+/// The [`Session`] stops tracking a key the moment it hands its release over, so a
+/// release the system refused — the secure desktop came up between the press and
+/// the release — would leave the key down for good, and the end of the stream would
+/// not know to lift it. Such releases are kept and put in again ahead of the next
+/// batch, and when the injector parks or leaves. Presses and motions are not kept:
+/// input put in late is input nobody typed.
+pub fn keep_releases<T: Copy>(kept: &mut Vec<T>, unsent: &[T], is_release: impl Fn(&T) -> bool) {
+    kept.extend(unsent.iter().copied().filter(|input| is_release(input)));
 }
 
 #[cfg(test)]
@@ -176,21 +185,22 @@ mod tests {
     #[test]
     fn everything_in_at_once_never_reattaches() {
         let reattached = std::cell::Cell::new(false);
-        assert!(send_following(
+        let sent = send_following(
             3,
             |_| 3,
             || {
                 reattached.set(true);
                 true
-            }
-        ));
+            },
+        );
+        assert_eq!(sent, 3);
         assert!(!reattached.get());
     }
 
     #[test]
     fn a_short_send_on_a_new_desktop_sends_the_rest_once() {
         let mut starts = Vec::new();
-        let all = send_following(
+        let sent = send_following(
             5,
             |start| {
                 starts.push(start);
@@ -202,35 +212,82 @@ mod tests {
             },
             || true,
         );
-        assert!(all);
+        assert_eq!(sent, 5);
         assert_eq!(starts, [0, 2]);
     }
 
     #[test]
     fn a_short_send_on_the_same_desktop_is_not_sent_again() {
         let mut calls = 0;
-        assert!(!send_following(
+        let sent = send_following(
             4,
             |_| {
                 calls += 1;
                 0
             },
-            || false
-        ));
+            || false,
+        );
+        assert_eq!(sent, 0);
         assert_eq!(calls, 1);
     }
 
     #[test]
     fn a_second_short_send_is_reported_and_not_retried_further() {
         let mut calls = 0;
-        assert!(!send_following(
+        let sent = send_following(
             4,
             |_| {
                 calls += 1;
                 1
             },
-            || true
-        ));
+            || true,
+        );
+        assert_eq!(sent, 2);
         assert_eq!(calls, 2);
+    }
+
+    /// What a Windows injector does around `SendInput`, with the inputs as
+    /// `(code, pressed)` and `accepts` saying how many of the call go in.
+    fn put(kept: &mut Vec<(u16, bool)>, batch: &[(u16, bool)], accepts: usize) -> Vec<(u16, bool)> {
+        let mut all = std::mem::take(kept);
+        all.extend_from_slice(batch);
+        let sent = accepts.min(all.len());
+        keep_releases(kept, &all[sent..], |&(_, pressed)| !pressed);
+        all[..sent].to_vec()
+    }
+
+    #[test]
+    fn a_modifier_whose_release_alone_is_refused_is_released_with_the_next_batch() {
+        const CTRL: u16 = 29;
+        let mut kept = Vec::new();
+        assert_eq!(put(&mut kept, &[(CTRL, true)], 1), [(CTRL, true)]);
+        // The secure desktop came up: the release does not go in.
+        assert!(put(&mut kept, &[(CTRL, false)], 0).is_empty());
+        assert_eq!(kept, [(CTRL, false)]);
+        // Back on a desktop that takes input: the release goes first.
+        assert_eq!(
+            put(&mut kept, &[(KEY_A, true)], 2),
+            [(CTRL, false), (KEY_A, true)]
+        );
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn only_releases_are_kept_from_what_did_not_go_in() {
+        let mut kept = Vec::new();
+        put(
+            &mut kept,
+            &[(1, true), (2, false), (3, true), (4, false)],
+            1,
+        );
+        assert_eq!(kept, [(2, false), (4, false)]);
+    }
+
+    #[test]
+    fn a_release_refused_twice_is_kept_once() {
+        let mut kept = Vec::new();
+        put(&mut kept, &[(1, false)], 0);
+        put(&mut kept, &[], 0);
+        assert_eq!(kept, [(1, false)]);
     }
 }

@@ -57,6 +57,9 @@ pub struct SendInputInjector {
     hider: hider::Hider,
     /// What this injector runs as: the hook, or `lbm-inject`.
     mode: Mode,
+    /// Releases the system refused, put in again ahead of the next batch
+    /// ([`super::stream::keep_releases`]).
+    unsent: Vec<INPUT>,
 }
 
 enum Mode {
@@ -83,6 +86,57 @@ impl SendInputInjector {
             inputs: Vec::with_capacity(16),
             hider: hider::Hider::default(),
             mode,
+            unsent: Vec::new(),
+        }
+    }
+
+    /// Puts `self.inputs` into the system, after the releases a refused batch left,
+    /// and keeps those of its releases that do not go in.
+    fn put(&mut self) {
+        if !self.unsent.is_empty() {
+            let batch = std::mem::take(&mut self.inputs);
+            self.inputs = std::mem::take(&mut self.unsent);
+            self.inputs.extend_from_slice(&batch);
+        }
+        if self.inputs.is_empty() {
+            return;
+        }
+        let inputs = &self.inputs;
+        let send = |start: usize| {
+            // SAFETY: a slice of initialised INPUTs and their size.
+            unsafe { SendInput(&inputs[start..], std::mem::size_of::<INPUT>() as i32) as usize }
+        };
+        let sent = match &mut self.mode {
+            Mode::Hook(_) => {
+                foreground::input();
+                // A UIPI block is silent: `SendInput` counts what it dropped as sent,
+                // which is why the foreground is watched. Fewer than asked is a desktop
+                // this process cannot reach (a secure desktop): as final, said the same
+                // way, once.
+                let sent = send(0).min(inputs.len());
+                if sent < inputs.len() {
+                    foreground::short();
+                }
+                sent
+            }
+            Mode::Inject(desktop) => {
+                let sent = super::stream::send_following(inputs.len(), send, || desktop.attach());
+                if sent < inputs.len() {
+                    eprintln!("[lbm-inject] input lost: SendInput fell short");
+                }
+                sent
+            }
+        };
+        super::stream::keep_releases(&mut self.unsent, &self.inputs[sent..], is_release);
+        self.inputs.clear();
+    }
+
+    /// Puts in the releases still waiting: when the injector parks or leaves, so that
+    /// a key refused once does not stay down for want of a next batch.
+    fn put_unsent(&mut self) {
+        if !self.unsent.is_empty() {
+            self.inputs.clear();
+            self.put();
         }
     }
 
@@ -163,6 +217,23 @@ fn button(code: u16, pressed: bool) -> Option<(MOUSE_EVENT_FLAGS, u32)> {
     })
 }
 
+/// A key or button going up: what must reach the system even late
+/// ([`super::stream::keep_releases`]).
+fn is_release(input: &INPUT) -> bool {
+    if input.r#type == INPUT_KEYBOARD {
+        // SAFETY: the union member the type says.
+        let flags = unsafe { input.Anonymous.ki.dwFlags };
+        return flags.contains(KEYEVENTF_KEYUP);
+    }
+    if input.r#type == INPUT_MOUSE {
+        // SAFETY: as above.
+        let flags = unsafe { input.Anonymous.mi.dwFlags };
+        let up = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_MIDDLEUP | MOUSEEVENTF_XUP;
+        return flags.0 & up.0 != 0;
+    }
+    false
+}
+
 impl Injector for SendInputInjector {
     fn inject(&mut self, batch: &[Injection]) {
         let batch = &*super::expand_locks(batch, local_locks);
@@ -229,31 +300,7 @@ impl Injector for SendInputInjector {
                 Injection::Locks(_) | Injection::Park | Injection::Unpark => {}
             }
         }
-        if self.inputs.is_empty() {
-            return;
-        }
-        let inputs = &self.inputs;
-        let send = |start: usize| {
-            // SAFETY: a slice of initialised INPUTs and their size.
-            unsafe { SendInput(&inputs[start..], std::mem::size_of::<INPUT>() as i32) as usize }
-        };
-        match &mut self.mode {
-            Mode::Hook(_) => {
-                foreground::input();
-                // A UIPI block is silent: `SendInput` counts what it dropped as sent,
-                // which is why the foreground is watched. Fewer than asked is a desktop
-                // this process cannot reach (a secure desktop): as final, said the same
-                // way, once.
-                if send(0) < inputs.len() {
-                    foreground::short();
-                }
-            }
-            Mode::Inject(desktop) => {
-                if !super::stream::send_following(inputs.len(), send, || desktop.attach()) {
-                    eprintln!("[lbm-inject] input lost: SendInput fell short");
-                }
-            }
-        }
+        self.put();
     }
 
     fn begin(&mut self) {
@@ -268,6 +315,7 @@ impl Injector for SendInputInjector {
     }
 
     fn park(&mut self) {
+        self.put_unsent();
         if let Mode::Hook(_) = self.mode {
             foreground::end();
         }
@@ -275,6 +323,91 @@ impl Injector for SendInputInjector {
     }
 
     fn unpark(&mut self) {
+        self.put_unsent();
         self.hider.unpark();
+    }
+}
+
+/// The prefix of the pipes the service makes for `lbm-inject`; the rest is random.
+pub const SERVICE_PIPE_PREFIX: &str = "lbm-inject-";
+
+/// Whether `name` is one the service makes: the prefix, then 32 hex digits. Anything
+/// else (a path, another pipe) is refused before it is opened.
+pub fn is_service_pipe_name(name: &str) -> bool {
+    name.strip_prefix(SERVICE_PIPE_PREFIX)
+        .is_some_and(|rest| rest.len() == 32 && rest.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// Opens the input pipe the service made for this launch, and checks that the process
+/// serving it is `server`, the one that launched this one: a pipe of the same name made
+/// by anyone else would feed this process's SYSTEM rights.
+pub fn open_service_pipe(name: &str, server: u32) -> Result<std::fs::File, String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Pipes::GetNamedPipeServerProcessId;
+
+    if !is_service_pipe_name(name) {
+        return Err(format!("{name:?} is not a pipe of the service"));
+    }
+    let pipe = std::fs::OpenOptions::new()
+        .read(true)
+        .open(format!(r"\\.\pipe\{name}"))
+        .map_err(|e| format!("pipe {name}: {e}"))?;
+    let mut serving = 0u32;
+    // SAFETY: a pipe handle owned by `pipe`, an out pointer to a local.
+    unsafe { GetNamedPipeServerProcessId(HANDLE(pipe.as_raw_handle()), &mut serving) }
+        .map_err(|e| format!("pipe {name}: no server process id: {e}"))?;
+    if serving != server {
+        return Err(format!(
+            "pipe {name} is served by process {serving}, not {server}: refused"
+        ));
+    }
+    Ok(pipe)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_service_s_pipe_names_are_opened() {
+        assert!(is_service_pipe_name(
+            "lbm-inject-0123456789abcdef0123456789ABCDEF"
+        ));
+        assert!(!is_service_pipe_name("lbm-inject-0123"));
+        assert!(!is_service_pipe_name(
+            "other-0123456789abcdef0123456789abcdef"
+        ));
+        assert!(!is_service_pipe_name(
+            r"lbm-inject-..\..\0123456789abcdef0123456789"
+        ));
+    }
+
+    #[test]
+    fn releases_are_told_from_presses() {
+        let key = |flags| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        };
+        let mouse = |flags| INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        };
+        assert!(is_release(&key(KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE)));
+        assert!(!is_release(&key(KEYEVENTF_SCANCODE)));
+        assert!(is_release(&mouse(MOUSEEVENTF_XUP)));
+        assert!(is_release(&mouse(MOUSEEVENTF_LEFTUP)));
+        assert!(!is_release(&mouse(MOUSEEVENTF_LEFTDOWN)));
+        assert!(!is_release(&mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)));
     }
 }

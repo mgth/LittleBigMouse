@@ -264,6 +264,10 @@ Liste de contrôle pour la relecture de chaque PR :
   `%ProgramData%\LittleBigMouse\service` n'est pas créé par l'installeur : le service et
   `lbm-service trust` le créent eux-mêmes avec sa DACL protégée, et le vérifient. Une
   tâche décochée lors d'une mise à jour retire le service et sa règle, pas le dossier.
+  Un échec du service (création, règle de pare-feu, démarrage) est dit dans une boîte de
+  message, dans le journal, et par le **code de sortie 100** de l'installeur
+  (`GetCustomSetupExitCode`), pour une installation silencieuse ; les fichiers restent
+  installés.
   Mise à jour : arrêt du service avant la copie, puis redémarrage ; **le dossier est
   gardé**, avec l'identité du service et le magasin, sans quoi les maîtres approuvés
   seraient oubliés et refuseraient la nouvelle empreinte qu'ils n'ont pas épinglée.

@@ -220,11 +220,15 @@ begin
   Result := RunSystem('sc.exe', 'query ' + InputServiceName);
 end;
 
-{ Said in a message box and in the log; a silent install with /SUPPRESSMSGBOXES logs it
-  as answered. The service task's steps cannot fail the install itself: by then the
-  files are in place. }
+{ Said in a message box and in the log, and in the exit code (GetCustomSetupExitCode
+  below): a silent install with /SUPPRESSMSGBOXES answers the box by itself, and a
+  deployment tool reads the code. The files stay installed: by then they are in place. }
+var
+  InputServiceFailure: Boolean;
+
 procedure InputServiceFailed(const Step: String);
 begin
+  InputServiceFailure := True;
   Log('Input service: ' + Step + ' failed');
   SuppressibleMsgBox('Little Big Mouse input service: ' + Step + ' failed. ' +
                      'Another PC will not be able to drive this one on the secure desktop ' +
@@ -271,6 +275,19 @@ begin
   { It refuses to start where others than administrators can change its files. }
   if not RunSystem('net.exe', 'start ' + InputServiceName) then
     InputServiceFailed('starting the service');
+end;
+
+{ Setup's exit code: 0 as usual, InputServiceExitCode when the input service task was
+  ticked and one of its steps failed. Inno's own codes are 1 to 8. }
+const
+  InputServiceExitCode = 100;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  if InputServiceFailure then
+    Result := InputServiceExitCode
+  else
+    Result := 0;
 end;
 
 procedure StopLittleBigMouse;

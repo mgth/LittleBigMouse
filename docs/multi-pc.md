@@ -23,9 +23,9 @@ ways: **when a hop of the input stream ends, the pointer is home** — the maste
 hook brings its pointer back to a local zone and releases the keyboards; the
 remote's hook releases every key and button the stream left pressed.
 
-First supported pair: Linux master with the evdev backend → Windows remote. Out of
-scope for now: clipboard, drag and drop, the Windows secure desktop (UAC, lock
-screen), Windows as master, the portal and X11 backends as master.
+First supported pair: Linux master with the evdev backend → Windows remote. Windows
+as master came next (its low-level hooks, below). Out of scope for now: drag and drop,
+the Windows secure desktop (UAC, lock screen), the portal and X11 backends as master.
 
 ## Network: crate `lbm-net`
 
@@ -96,9 +96,11 @@ Hook ↔ agent: the hook serves a second endpoint beside its command endpoint
 (`input_endpoint_beside`), single client, raw batches both ways. The command
 protocol only gains what configures it (`Load` already carries the zones).
 
-On the master (lot 6, evdev backend only; the rules are in
-`lbm-hook/src/hook/crossing/`, platform-neutral, and what evdev adds to them in
-`lbm-hook/src/hook/linux/evdev/pipeline.rs`):
+On the master (lot 6; the rules are in `lbm-hook/src/hook/crossing/`,
+platform-neutral; what evdev adds to them is in
+`lbm-hook/src/hook/linux/evdev/pipeline.rs`, what the Windows low-level hooks add in
+`lbm-hook/src/hook/ll_master.rs` and `hook/windows/master.rs`, see "The Windows master"
+below):
 
 - The other machines' zones are **in play only while the input endpoint has a
   client**. An agent connects to it while it has a remote to relay to and the hook has
@@ -132,6 +134,48 @@ On the master (lot 6, evdev backend only; the rules are in
   compositor (or the X server) drops what it asked for, and the cursor is back. When
   the display server cannot be reached or lacks layer-shell, one line in the log says
   so and the cursor stays visible.
+
+### The Windows master
+
+The same rules, fed by `WH_MOUSE_LL` and `WH_KEYBOARD_LL` instead of devices
+(`hook::ll_master`, tested on every system against the real engine; `hook::windows::master`
+is its system side). Nothing of it runs while the input endpoint has no client: the
+endpoint says when its client changes (`Outlet::on_change`), and only then is the
+keyboard hook installed and the window that hides the cursor made.
+
+- **Motion.** A low-level mouse hook reports the cursor plus the displacement the
+  system is about to apply, accelerated, and past the desktop's edge when the mouse
+  pushes on it (tried on the vm124: x = -5 at the left edge, 5763 at the right one).
+  The engine therefore crosses to another machine's zone as it crosses between
+  monitors. While the pointer is away every move is swallowed, which leaves the cursor
+  where it is, and the report is read as `report - cursor`: the system's acceleration
+  is kept, which Raw Input's counts would not have. The cursor is first frozen where it
+  left, then moved under the remote's hider window (`remote/windows/hider.rs`, reused),
+  in the middle of the monitor, so that no edge bounds the next report. A pointer that
+  reports absolute positions (a tablet, a remote desktop) has no displacement to give
+  and drives the other machine badly.
+- **Buttons and wheels** away go to the rules one event at a time: taken, swallowed;
+  left for this machine (the release of a button pressed here), passed on.
+- **Keys.** "Grabbed" means the keyboard hook swallows every key for the stream, from
+  the moment no key pressed here is held (a modifier held while crossing keeps the
+  keyboard here until it is released, as on Linux). Keys are read by scancode and
+  `LLKHF_EXTENDED` (`remote::keymap::linux_key`, the inverse of the remote's table); a
+  key injected by virtual key alone, with no scancode, by its virtual key. A release
+  whose press went over there is swallowed here unless the system has that key down.
+- **What no hook sees.** Ctrl+Alt+Del and Win+L take the input to the secure desktop:
+  the desktop switch brings the pointer home, whose `Leave` releases over there what
+  was pressed. A window of a higher integrity level in the foreground receives the
+  input without a non-elevated hook seeing any of it (tried on the vm124: no move, no
+  key); one that takes the focus while the pointer is away brings it home at the next
+  tick. Starting LittleBigMouse elevated (`StartElevated`) gives the hook the same
+  level; then it sees it all (tried).
+- **A timer** of the hook's thread, every 100 ms while the pointer is away only, lets a
+  rescue held without autorepeat fire and a client that went be noticed without a move.
+  The hook's watchdog, which reinstalls a hook Windows dropped when the cursor moves
+  with no move counted, stands down while the pointer is away: the cursor going onto
+  the hider is this process's doing.
+- **Lock keys** are read with `GetKeyState` on the hooks' thread as the pointer crosses
+  out (`Platform::locks`).
 
 On a remote (`lbm-hook/src/remote`):
 

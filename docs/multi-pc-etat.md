@@ -3,7 +3,7 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `d7204166`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
-Mis à jour au fil des travaux (dernière fois le 2026-11-24, règles sur l'esclave) : voir « Travaux en cours » à la fin.
+Mis à jour au fil des travaux (dernière fois le 2026-11-24, maître Windows) : voir « Travaux en cours » à la fin.
 
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
@@ -34,7 +34,8 @@ qui va le pointeur quand il y entre.
 | Flux d'entrée | `lbm-ipc/src/input.rs` | Trames binaires `Enter/Leave/Motion/Button/Wheel/Key/Locks`, codes evdev, positions absolues en pixels du receveur ; `Locks` retiré pour un pair qui n'annonce pas la capacité `InputLocks` |
 | Modèle | `lbm-layout`, `lbm-display`, `lbm-store`, `lbm-zones` | Machine portée par la source, clé de dalle inter-machines, fusion des écrans distants, zones avec hôte |
 | Agent | `lbm-agent/src/peers` | Gestion des pairs, API (`Peers`, `SetMultiPc`, `PeerConnect`…), relais du flux, un esclave « sélectionné » |
-| Hook maître | `lbm-hook/src/hook/crossing` (règles, toutes plateformes), `lbm-hook/src/hook/linux/evdev` (seul client) | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
+| Hook maître | `lbm-hook/src/hook/crossing` (règles, toutes plateformes), `lbm-hook/src/hook/linux/evdev` et le maître Windows (ligne suivante) | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
+| Maître Windows (PR #PRMASTER) | `lbm-hook/src/hook/ll_master.rs` (neutre, testé partout avec le vrai moteur), `hook/windows/master.rs`, `remote::keymap::linux_key` | Hooks bas niveau `WH_MOUSE_LL` et `WH_KEYBOARD_LL` sur l'automate commun : mouvement avalé et lu comme déplacement depuis le curseur figé, curseur caché sous la fenêtre de l'esclave Windows (`remote/windows/hider.rs`, réutilisée), clavier avalé une fois relâchées les touches tenues ici, table scancode → code evdev, verrous par `GetKeyState`, retour au changement de bureau (Ctrl+Alt+Suppr, Win+L) et quand une fenêtre élevée prend le focus ; hook clavier et fenêtre de masquage posés seulement quand le flux a un client (`Outlet::on_change`), minuterie seulement quand le pointeur est parti. Exemple `lbm-hook --example input_sink` : un esclave qui consigne le flux au lieu de l'injecter, pour essayer un maître sans piloter le bureau de l'esclave |
 | Hook esclave | `lbm-hook/src/remote` | Injection `SendInput` (Windows) et uinput (Linux), relâchement de tout ce qui est tenu en fin de session, curseur rangé |
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
@@ -55,8 +56,9 @@ maître ramène son pointeur.
 
 ## Ce qui a été essayé pour de bon
 
-Une seule paire complète : **maître Linux (KDE Plasma 6, Wayland, backend evdev) →
-esclave Windows 11**, avec un écran partagé par KVM. L'esclave Linux et les fonctions
+Une seule paire complète entre deux vraies machines : **maître Linux (KDE Plasma 6,
+Wayland, backend evdev) → esclave Windows 11**, avec un écran partagé par KVM. Le maître
+Windows a tourné sur la vm124 face à un esclave Linux de test (ci-dessous). L'esclave Linux et les fonctions
 Windows annexes ont été essayés à part le 2026-11-24, avec `examples/peer_drive` dans le
 rôle du maître. Le numéro de PR d'une ligne renvoie à la PR qui a apporté les correctifs
 trouvés pendant l'essai.
@@ -77,8 +79,20 @@ trouvés pendant l'essai.
 | Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
 | Règles sur l'esclave Windows (vm124, 4K à 1,5 + 1080p) : affichées à leur place sur les deux écrans, zone mesurée qui suit l'écran choisi, mise à jour, retirées sur ordre et à la chute brutale du lien (maître tué), pointeur qui les traverse (`WindowFromPoint` rend la fenêtre du dessous) | Vérifié avec `peer_drive` comme maître et `peer_remote` comme esclave (l'agent installé du mainteneur tournait à côté, intact) |
 | Règles sur un esclave Linux : surfaces layer-shell, mise à jour, bail renouvelé, hôte d'overlay disparu à la fin | Vérifié dans un KWin imbriqué sans écran (`kwin_wayland --virtual`), pas sur un vrai bureau |
+| Hook souris bas niveau de Windows, au bord du bureau (sonde, vm124) | Le point rapporté **sort du bureau** : curseur à x = 0 poussé à gauche → -5, bord droit 5759 → 5763, bord haut → -4. Avalé, le mouvement laisse le curseur en place et le point vaut curseur + déplacement accéléré ((7, 3) injecté → (9..11, 4..5)). D'où le choix : avaler et lire le déplacement, pas Raw Input |
+| Maître Windows (vm124, 4K à 1,5 + 1080p) → esclave Linux de test (agent `--fake-hook` + `input_sink`, port 24827, aucun pilotage du bureau Linux) : traversée par le bord droit et retour, mouvement, boutons gauche et droit, molette dans les deux sens, touches (lettre, Maj+lettre, Ctrl droite, flèche étendue, Verr. Maj), Verr. Maj tapé là-bas sans effet ici, modificateur tenu en traversant qui garde le clavier ici jusqu'au relâchement, curseur caché (`GetCursorInfo` : `hCursor` nul) puis rendu | Vérifié le 2026-11-24, souris et clavier simulés par `SendInput` relatif et par scancode depuis la session (pas une vraie souris) |
+| Maître Windows : secours tenu là-bas (`M` final retenu, `Leave` qui relâche Ctrl/Alt/Maj, pointeur rendu là où il était parti), hook de l'esclave tué en pleine session (retour en ~1 s sans mouvement), lien tué (agent esclave tué net), traversée sans hook chez l'esclave (`InputReset` immédiat), pointeur verrouillé là-bas puis libéré par `Ctrl+Alt+L` | Vérifié le 2026-11-24 sur la vm124 |
+| Maître Windows et fenêtre élevée au premier plan | Vérifié : hook non élevé → ni mouvement ni touche vus, pas de traversée, la frappe va à la fenêtre élevée ; une fenêtre élevée **survolée sans le focus** ne gêne pas ; une fenêtre élevée qui prend le focus pendant que le pointeur est parti le ramène au tick suivant (`powershell.exe has the focus above this hook…`) ; agent (donc hook) élevé → tout passe, traversée et frappe comprises |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
+
+- le maître Windows avec une **vraie souris et un vrai clavier** (seulement `SendInput`
+  depuis la session), face à un **esclave Windows** ou à un esclave Linux qui injecte
+  pour de bon, ni le passage par Ctrl+Alt+Suppr ou Win+L pendant que le pointeur est
+  parti (codé : retour au changement de bureau) ; l'alignement des verrous à l'`Enter`
+  n'a pas été vu chez l'esclave (le faux hook de l'esclave de test n'annonce pas
+  `InputLocks`, son agent retire donc l'événement), seule la lecture `GetKeyState` côté
+  maître l'a été ;
 
 - la commutation VCP 0x60 (ni `ddcutil`, ni dxva2) ;
 - le suivi en direct des fonds d'écran sous Linux au-delà des tests (dialogue KDE) ;
@@ -157,13 +171,30 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   terminé aussitôt (Linux : `ESRCH` ; Windows : `OpenProcess` en
   `ERROR_INVALID_PARAMETER`, distingué d'un refus d'accès).
 
+- Maître Windows : un pointeur qui donne des positions absolues (tablette, bureau à
+  distance, souris d'une VM vue par RustDesk) n'a pas de déplacement à donner ; le
+  pointeur de l'esclave saute avec lui. Le raccourci de secours et celui du verrou sont
+  cherchés par scancode à leur place sur un clavier US pendant que le pointeur est
+  parti : sur un clavier AZERTY, le `M` attendu est la touche marquée `,` (ici, c'est
+  `RegisterHotKey`, qui suit la disposition). La branche `claude/mpc-lock-rescue-fix`
+  règle ce cas pour evdev (`Letters`) ; il restera à remplir `Letters` sous Windows par
+  `MapVirtualKeyEx` sur la disposition du premier plan. Une fenêtre élevée qui prend le
+  focus ramène le pointeur sans que l'interface le dise (seule une ligne du journal du
+  hook). Le maître et l'esclave d'une même machine partageraient la fenêtre qui cache
+  le curseur (un seul hider par processus).
+- Pointeur verrouillé (règle commune, vu sur le maître Windows, vaut aussi pour evdev) :
+  chaque report retenu par le verrou remet le moteur à zéro (`begin_touch`) avant de
+  repartir de la position tenue ; le report suivant est alors placé par la seule
+  contiguïté des pixels et peut passer sur un autre écran du même esclave sans suivre
+  les liens du layout. Non corrigé.
+
 ## Matrice de support
 
 | | Maître | Esclave |
 |---|---|---|
 | **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, vérifié sous KWin 6 avec `peer_drive` comme maître (correctifs de la PR #807) |
 | **Linux, backend portail Wayland ou X11** | Absent : les zones distantes ne sont jamais franchissables | Livré si `/dev/uinput` est accessible en écriture, jamais essayé sur matériel |
-| **Windows** | Absent | Livré, vérifié |
+| **Windows** | Livré (PR #PRMASTER), essayé sur la vm124 face à un esclave Linux de test, avec une souris simulée ; jamais face à un esclave Windows ni avec une vraie souris | Livré, vérifié |
 | **macOS** | Absent | Absent |
 
 Prérequis des rôles Linux, qui ne sont pas les mêmes :
@@ -181,7 +212,7 @@ Et par fonction annexe :
 | Publication des écrans | KScreen, sinon XRandR | Oui |
 | Lecture du fond d'écran | Plasma seulement | Oui |
 | Suivi du fond en direct | Plasma seulement | Oui, vérifié sur la vm124 |
-| Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Sans objet tant qu'il n'y a pas de maître Windows |
+| Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Oui (fenêtre d'un pixel sous le curseur figé, au centre d'un écran), vérifié sur la vm124 |
 | Curseur rangé, côté esclave | Rien de visible | Oui |
 | DDC/CI | `ddcutil` | dxva2 |
 | Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines **et unique parmi les écrans** (l'id du moniteur est alors cette clé). Sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil. Avec deux dalles annonçant le même numéro de série, celle que le KVM bascule est rattachée à sa jumelle restée sur le maître, et le profil change aussi | Non : Windows nomme ses moniteurs autrement |
@@ -206,30 +237,42 @@ ne demandent que du temps sur les machines actuelles :
 
 ### 2. Maître Windows
 
-C'est le gros morceau, et celui qui rend le mode symétrique. Rien n'existe : le hook
-Windows actuel ne connaît pas les zones distantes.
+Fait (PR #PRMASTER) ; voir « The Windows master » dans [`multi-pc.md`](multi-pc.md).
+Ce qui a été tranché, et pourquoi :
 
-- **Mouvement relatif pendant que le pointeur est parti.** Le hook bas niveau de
-  Windows donne des positions absolues bornées au bureau : au bord, plus rien ne bouge.
-  Il faut lire les déplacements bruts (Raw Input) ou recentrer le curseur à chaque
-  rapport. À trancher par un essai.
-- **Capture du clavier** : hook clavier bas niveau qui avale les touches, et la table
-  inverse de `remote/keymap.rs` (scancode Windows → code evdev). Ctrl+Alt+Suppr et
-  quelques raccourcis système ne peuvent pas être capturés.
-- **Curseur masqué** : la fenêtre d'un pixel de l'esclave Windows (`remote/windows/hider.rs`)
-  est probablement réutilisable telle quelle.
-- **Automate de traversée** : fait (PR #810). Les règles vivent dans `hook::crossing`.
-  Un maître Windows implémente le trait `Platform` (flux, claviers, curseur, pointeur)
-  et appelle `locate` après chaque mouvement routé. Points ouverts pour lui : pas de
-  capture par périphérique, donc avaler les touches dans le hook clavier bas niveau
-  sauf les relâchements de touches déjà enfoncées à l'`Enter` ; un « frame » de hook
-  bas niveau est un seul événement, laissé passer ou avalé.
-- **Identité des moniteurs** : nommer un écran distant par sa clé de dalle ne suffit pas
-  sous Windows, dont les ids locaux ont une autre forme. Sans cela, un KVM crée un
-  nouveau profil à chaque bascule.
-- **Fenêtres élevées** : à vérifier — un hook bas niveau d'un processus non élevé ne
-  reçoit vraisemblablement pas l'entrée destinée à une fenêtre élevée. `StartElevated`
-  (voir plus bas) est la piste existante.
+- **Mouvement relatif pendant que le pointeur est parti** : avaler chaque mouvement et
+  lire `point rapporté - curseur`. Essai sur la vm124 : le hook bas niveau rapporte bien
+  au-delà du bord du bureau (x = -5 au bord gauche), donc la traversée vers une zone
+  distante se fait comme entre deux écrans ; un mouvement avalé laisse le curseur en
+  place, et le point rapporté vaut curseur + déplacement **accéléré**. Raw Input donne
+  les comptes de la souris avant accélération (il faudrait refaire la courbe de Windows
+  pour garder la sensation) et arrive en messages de fenêtre, à part des boutons et des
+  touches du hook. Le curseur figé est ensuite rangé au centre d'un écran, sous la
+  fenêtre de masquage, pour qu'aucun bord ne borne le report suivant.
+- **Capture du clavier** : hook clavier bas niveau posé seulement quand le flux a un
+  client ; il avale les touches une fois relâchées celles qui étaient tenues ici à
+  l'`Enter` (règle de Linux : un clavier n'est saisi que quand rien n'y est tenu) ;
+  table `remote::keymap::linux_key`, l'inverse exacte de celle de l'esclave (testée sur
+  tous ses codes). Ctrl+Alt+Suppr et Win+L ne passent par aucun hook : le changement de
+  bureau ramène le pointeur.
+- **Curseur masqué** : `remote/windows/hider.rs` réutilisé tel quel, avec la création
+  de la fenêtre avancée à l'arrivée du client (jamais d'attente dans le hook).
+- **Automate** : `hook::ll_master` implémente `Platform` ; une « trame » est un
+  événement, passé ou avalé. Secours, pointeur verrouillé et verrous fonctionnent comme
+  sous Linux (essayés), au défaut de disposition près (« Faiblesses connues »).
+- **Identité des moniteurs** : PR à part (#PRIDS), l'id Windows calculé sur l'EDID de
+  l'esclave.
+- **Fenêtres élevées** côté maître : vérifié, un hook non élevé ne voit rien de
+  l'entrée destinée à une fenêtre élevée au premier plan (ni mouvement ni touche), même
+  le pointeur ailleurs ; survolée sans le focus, elle ne gêne pas. Le maître ramène son
+  pointeur quand une telle fenêtre prend le focus pendant qu'il est parti. Le recours
+  est `StartElevated` (essayé : agent élevé, hook élevé, tout passe) ; pour un
+  utilisateur standard, le service Windows.
+
+Reste : un essai avec une vraie souris et un vrai clavier, face à un esclave Windows et
+à un esclave Linux qui injecte ; la disposition du clavier pour le secours et le verrou
+une fois `claude/mpc-lock-rescue-fix` fusionnée ; dire dans l'interface qu'une fenêtre
+élevée a ramené le pointeur.
 
 ### 3. Esclave Windows : les deux trous
 
@@ -463,7 +506,8 @@ macOS n'a de sens qu'après.
 
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
-3. Maître Windows.
+3. ~~Maître Windows~~ (PR #PRMASTER ; reste l'essai avec de vrais périphériques et un
+   esclave Windows, et la disposition du clavier pour les raccourcis).
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
@@ -477,6 +521,9 @@ macOS n'a de sens qu'après.
 
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
+
+Maître Windows : PR #PRMASTER (hooks bas niveau), non fusionnée ; l'identité des écrans
+distants sur un maître Windows est une PR à part (#PRIDS).
 
 La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; elle est
 décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les

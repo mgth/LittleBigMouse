@@ -3310,6 +3310,11 @@ impl eframe::App for App {
                                 lbm_ui::theme::status(ui, "Agent connected", lbm_ui::theme::ACCENT);
                             }
                         }
+                        // Said beside the agent: the one thing that moves the mouse to other
+                        // machines with the engine stopped.
+                        if self.without_agent.is_none() {
+                            lbm_ui::machines::sharing_status(ui, &self.agent.sharing);
+                        }
                     })
                 {
                     for effect in lbm_ui::update(&mut self.state, lbm_ui::Action::Pressed(press)) {
@@ -3570,6 +3575,7 @@ impl eframe::App for App {
                         &mut self.machines.panel,
                         busy,
                         self.machines.error.as_deref(),
+                        &self.agent.sharing,
                     );
                     return;
                 }

@@ -410,6 +410,11 @@ pub struct Snapshot {
     /// this one — by the multi-PC pointer lock's shortcut. Additive.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The other mouse-and-keyboard sharing tools running on this machine (Deskflow,
+    /// Synergy, Barrier, Input Leap), as found at the last of the moments the agent looks
+    /// (`crate::input_sharing`): never watched in between. Additive; absent when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_sharing: Vec<lbm_ipc::sharing::Running>,
 }
 
 /// An answer to request `id`.

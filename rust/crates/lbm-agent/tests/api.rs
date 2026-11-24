@@ -360,6 +360,85 @@ async fn a_frontend_sees_the_agent_and_drives_it() {
 }
 
 /// The hook says it once, and usually with no window open: the state is what keeps it.
+static SHARING_LOOKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static DESKFLOW_RUNS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Stands in for the process list: an orphaned `deskflow-core server` holding a client,
+/// while `DESKFLOW_RUNS` says so; every look counted.
+fn scan_sharing() -> Vec<lbm_ipc::sharing::Running> {
+    use std::sync::atomic::Ordering;
+    SHARING_LOOKS.fetch_add(1, Ordering::SeqCst);
+    if DESKFLOW_RUNS.load(Ordering::SeqCst) {
+        vec![lbm_ipc::sharing::Running {
+            tool: lbm_ipc::sharing::Tool::Deskflow,
+            process: "deskflow-core".to_owned(),
+            pid: 40,
+            role: Some(lbm_ipc::sharing::Role::Server),
+            window: false,
+            connected: Some(true),
+        }]
+    } else {
+        Vec::new()
+    }
+}
+
+/// The other sharing tools are looked for when a window subscribes and when the engine
+/// starts, and are in the state from then on; nothing looks in between.
+#[tokio::test]
+async fn another_sharing_tool_is_in_the_state_from_the_moments_it_is_looked_for() {
+    use std::sync::atomic::Ordering;
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_input_sharing_scan(scan_sharing);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut first = Frontend::connect(&api_endpoint).await;
+    let state = first.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(
+        state["Result"]["InputSharing"],
+        Value::Null,
+        "absent when none"
+    );
+    first.state(|s| s["Engine"] == "Running").await;
+    let looks = SHARING_LOOKS.load(Ordering::SeqCst);
+    assert!(looks >= 2, "at the subscription and at the start: {looks}");
+
+    // Deskflow starts: nobody watches, so nothing changes until a moment that looks.
+    DESKFLOW_RUNS.store(true, Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(SHARING_LOOKS.load(Ordering::SeqCst), looks, "nothing polls");
+
+    // A window opening is one: it sees it, and so does the window already open.
+    let mut later = Frontend::connect(&api_endpoint).await;
+    let state = later.ask(json!({ "Method": "Subscribe" })).await;
+    assert_eq!(
+        state["Result"]["InputSharing"],
+        json!([{ "Tool": "Deskflow", "Process": "deskflow-core", "Pid": 40,
+                 "Role": "Server", "Connected": true }])
+    );
+    first
+        .state(|s| s["InputSharing"][0]["Tool"] == "Deskflow")
+        .await;
+
+    // Deskflow gone, the engine stopped then started: the start looks again.
+    DESKFLOW_RUNS.store(false, Ordering::SeqCst);
+    first.ask(json!({ "Method": "Stop" })).await;
+    first.state(|s| s["Engine"] == "Stopped").await;
+    first.ask(json!({ "Method": "Start" })).await;
+    first
+        .state(|s| s["Engine"] == "Running" && s["InputSharing"].is_null())
+        .await;
+}
+
 #[tokio::test]
 async fn a_window_opened_later_learns_the_shortcut_could_not_be_armed() {
     let dir = tempfile::tempdir().unwrap();

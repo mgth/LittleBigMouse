@@ -18,7 +18,14 @@ mod linux;
 #[cfg(windows)]
 pub mod windows;
 
-use lbm_ipc::input::InputEvent;
+use std::borrow::Cow;
+
+use lbm_ipc::input::{InputEvent, Locks};
+
+/// The lock keys, as Linux codes.
+pub const KEY_CAPSLOCK: u16 = 58;
+pub const KEY_NUMLOCK: u16 = 69;
+pub const KEY_SCROLLLOCK: u16 = 70;
 
 /// One thing to do to the system, in the receiver's own terms: positions in pixels of
 /// its desktop, buttons and keys as Linux codes.
@@ -40,6 +47,9 @@ pub enum Injection {
         code: u16,
         pressed: bool,
     },
+    /// The master's lock keys: the injector taps those of this machine that differ
+    /// ([`lock_taps`]), reading its own state at that moment.
+    Locks(Locks),
     /// Not input: a driven session ended, so this machine is no longer the one the
     /// pointer is on. Delivered through [`Injector::park`], never [`Injector::inject`].
     Park,
@@ -168,6 +178,8 @@ impl Session {
                         self.out.push(Injection::Key { code, pressed });
                     }
                 }
+                // A tap is pressed and released at once: nothing to track.
+                InputEvent::Locks(locks) => self.out.push(Injection::Locks(locks)),
             }
         }
         &self.out
@@ -207,6 +219,52 @@ impl Session {
             self.out.push(Injection::Park);
         }
     }
+}
+
+/// The lock keys to tap, each once, for this machine's locks (`here`) to be the
+/// master's (`wanted`): those that differ, among those both sides know. A lock either
+/// side cannot read is left alone — toggling on a guess is as likely to undo it.
+pub fn lock_taps(wanted: Locks, here: Locks) -> impl Iterator<Item = u16> {
+    [
+        (wanted.caps, here.caps, KEY_CAPSLOCK),
+        (wanted.num, here.num, KEY_NUMLOCK),
+        (wanted.scroll, here.scroll, KEY_SCROLLLOCK),
+    ]
+    .into_iter()
+    .filter_map(|(wanted, here, code)| match (wanted, here) {
+        (Some(wanted), Some(here)) if wanted != here => Some(code),
+        _ => None,
+    })
+}
+
+/// The batch with its `Locks` turned into taps of the lock keys that differ, this
+/// machine's state read with `here` — once, and only for a batch that has some: the
+/// same batch, borrowed, otherwise. What an injector does first, so that it injects
+/// keys only.
+pub fn expand_locks(batch: &[Injection], here: impl FnOnce() -> Locks) -> Cow<'_, [Injection]> {
+    if !batch.iter().any(|i| matches!(i, Injection::Locks(_))) {
+        return Cow::Borrowed(batch);
+    }
+    let here = here();
+    let mut expanded = Vec::with_capacity(batch.len() + 6);
+    for injection in batch {
+        match *injection {
+            Injection::Locks(wanted) => {
+                for code in lock_taps(wanted, here) {
+                    expanded.push(Injection::Key {
+                        code,
+                        pressed: true,
+                    });
+                    expanded.push(Injection::Key {
+                        code,
+                        pressed: false,
+                    });
+                }
+            }
+            other => expanded.push(other),
+        }
+    }
+    Cow::Owned(expanded)
 }
 
 /// Records a press or release in `held`; whether it is to be injected.
@@ -261,6 +319,107 @@ mod tests {
 
     fn key(code: u16, pressed: bool) -> InputEvent {
         InputEvent::Key { code, pressed }
+    }
+
+    const CAPS_ON: Locks = Locks {
+        caps: Some(true),
+        num: Some(true),
+        scroll: None,
+    };
+
+    #[test]
+    fn the_locks_reach_the_injector_only_while_driven() {
+        let mut session = Session::default();
+        assert_eq!(session.apply(&[InputEvent::Locks(CAPS_ON)]), []);
+        assert_eq!(
+            session.apply(&[InputEvent::Enter { x: 1, y: 1 }, InputEvent::Locks(CAPS_ON)]),
+            [
+                Injection::Unpark,
+                Injection::MoveTo { x: 1, y: 1 },
+                Injection::Locks(CAPS_ON)
+            ]
+        );
+        // Nothing held because of it: the Leave releases nothing.
+        assert_eq!(session.apply(&[InputEvent::Leave]), [Injection::Park]);
+    }
+
+    #[test]
+    fn only_the_locks_that_differ_and_both_sides_know_are_tapped() {
+        let here = Locks {
+            caps: Some(false),
+            num: Some(true),
+            scroll: Some(true),
+        };
+        assert_eq!(lock_taps(CAPS_ON, here).collect::<Vec<_>>(), [KEY_CAPSLOCK]);
+        let all_off = Locks {
+            caps: Some(false),
+            num: Some(false),
+            scroll: Some(false),
+        };
+        assert_eq!(
+            lock_taps(all_off, here).collect::<Vec<_>>(),
+            [KEY_NUMLOCK, KEY_SCROLLLOCK]
+        );
+        assert_eq!(lock_taps(here, here).count(), 0);
+        // This machine cannot tell: nothing is toggled on a guess.
+        assert_eq!(lock_taps(CAPS_ON, Locks::default()).count(), 0);
+    }
+
+    #[test]
+    fn the_locks_become_taps_and_the_state_is_read_only_when_needed() {
+        let plain = [Injection::MoveTo { x: 0, y: 0 }];
+        let expanded = expand_locks(&plain, || panic!("no locks, no reading"));
+        assert!(matches!(expanded, Cow::Borrowed(_)));
+
+        let here = Locks {
+            caps: Some(false),
+            num: Some(true),
+            scroll: None,
+        };
+        let batch = [Injection::MoveTo { x: 0, y: 0 }, Injection::Locks(CAPS_ON)];
+        assert_eq!(
+            &*expand_locks(&batch, || here),
+            [
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Key {
+                    code: KEY_CAPSLOCK,
+                    pressed: true
+                },
+                Injection::Key {
+                    code: KEY_CAPSLOCK,
+                    pressed: false
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_lock_run_is_delivered_with_the_input() {
+        #[derive(Default)]
+        struct Seen(Vec<String>);
+        impl Injector for Seen {
+            fn inject(&mut self, batch: &[Injection]) {
+                self.0.push(format!("{batch:?}"));
+            }
+            fn park(&mut self) {
+                self.0.push("park".into());
+            }
+            fn unpark(&mut self) {
+                self.0.push("unpark".into());
+            }
+        }
+        let mut seen = Seen::default();
+        deliver(
+            &mut seen,
+            &[
+                Injection::Unpark,
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Locks(CAPS_ON),
+            ],
+        );
+        assert_eq!(seen.0.len(), 2);
+        assert_eq!(seen.0[0], "unpark");
+        assert!(seen.0[1].contains("Locks"), "{:?}", seen.0);
     }
 
     #[test]

@@ -8,7 +8,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use lbm_ipc::input::InputEvent;
+use lbm_ipc::input::{InputEvent, LOCKS_CAPABILITY};
 use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
@@ -20,7 +20,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
-use super::hook_input::{HookInput, Sink};
+use super::hook_input::{HookInput, Sink, Target};
 use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
 
 /// The first wait before calling a remote back, doubled at every failure up to
@@ -201,6 +201,13 @@ struct Actor {
     tasks: JoinSet<()>,
 }
 
+/// What this node can do beyond the protocol's baseline: its hook reads the master's
+/// lock keys (the hook ships with this agent, which retires one of another protocol).
+fn with_capabilities(mut hello: Hello) -> Hello {
+    hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
+    hello
+}
+
 /// Runs the manager until it is told to stop or the agent drops its end. `started` is
 /// answered once the listener is up (or could not be), so that whoever turned the mode
 /// on can report the outcome.
@@ -210,7 +217,11 @@ pub(super) async fn run(
     started: oneshot::Sender<()>,
 ) {
     let (internal, mut internal_rx) = mpsc::unbounded_channel();
-    let hello = Hello::new(start.name.clone(), env!("CARGO_PKG_VERSION"), Role::Remote);
+    let hello = with_capabilities(Hello::new(
+        start.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+        Role::Remote,
+    ));
     // Every node with the mode on listens; whoever connects is a master, so this side
     // of those links says it is the remote.
     let mut listener = match link::listen(
@@ -315,7 +326,11 @@ pub(super) async fn run(
 
 impl Actor {
     fn hello(&self) -> Hello {
-        Hello::new(self.name.clone(), env!("CARGO_PKG_VERSION"), Role::Master)
+        with_capabilities(Hello::new(
+            self.name.clone(),
+            env!("CARGO_PKG_VERSION"),
+            Role::Master,
+        ))
     }
 
     /// Tells the agent when what it would show changed.
@@ -1017,7 +1032,15 @@ impl Actor {
         let sender = next
             .as_ref()
             .and_then(|(machine_id, _)| self.links.get(machine_id))
-            .map(|live| live.sender.clone());
+            .map(|live| Target {
+                link: live.sender.clone(),
+                reads_locks: live
+                    .info
+                    .hello
+                    .capabilities
+                    .iter()
+                    .any(|c| c == LOCKS_CAPABILITY),
+            });
         self.relaying = next;
         self.hook.set_target(sender);
     }

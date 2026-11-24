@@ -1046,16 +1046,22 @@ async fn a_remote(
     name: &str,
     options: link::Options,
 ) -> (tempfile::TempDir, Identity, link::Listener) {
+    a_remote_able(name, options, &[]).await
+}
+
+/// [`a_remote`], saying it can do `capabilities`.
+async fn a_remote_able(
+    name: &str,
+    options: link::Options,
+    capabilities: &[&str],
+) -> (tempfile::TempDir, Identity, link::Listener) {
     let directory = tempfile::tempdir().unwrap();
     let identity = Identity::load_or_create(directory.path()).unwrap();
-    let listener = link::listen(
-        "127.0.0.1:0",
-        &identity,
-        Hello::new(name, "0", Role::Remote),
-        options,
-    )
-    .await
-    .unwrap();
+    let mut hello = Hello::new(name, "0", Role::Remote);
+    hello.capabilities = capabilities.iter().map(|c| (*c).to_owned()).collect();
+    let listener = link::listen("127.0.0.1:0", &identity, hello, options)
+        .await
+        .unwrap();
     (directory, identity, listener)
 }
 
@@ -1376,6 +1382,57 @@ async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from
         next_input(&mut laptop_link).await,
         [InputEvent::Enter { x: 20, y: 20 }]
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_lock_keys_go_only_to_a_remote_that_reads_them() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent, Locks, LOCKS_CAPABILITY};
+    let enter = InputEvent::Enter { x: 10, y: 10 };
+    let locks = InputEvent::Locks(Locks {
+        caps: Some(true),
+        num: Some(true),
+        scroll: None,
+    });
+    let older: &[InputEvent] = &[enter];
+    let newer: &[InputEvent] = &[enter, locks];
+    for (capabilities, expected) in [(&[][..], older), (&[LOCKS_CAPABILITY][..], newer)] {
+        let (_laptop_dir, laptop, mut listener) =
+            a_remote_able("laptop", link::Options::default(), capabilities).await;
+        let desk_dir = tempfile::tempdir().unwrap();
+        pair(
+            desk_dir.path(),
+            laptop.fingerprint(),
+            &listener.local_addr().to_string(),
+            Role::Remote,
+        );
+        let hook_path = desk_dir.path().join("desk-input.sock");
+        let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+        let mut desk = Node::new(
+            desk_dir.path(),
+            Some(hook_path.to_string_lossy().into_owned()),
+        );
+        desk.turn_on(0, "desk").await;
+        let mut laptop_link = linked_from(&mut listener).await;
+        assert!(
+            laptop_link
+                .peer()
+                .hello
+                .capabilities
+                .iter()
+                .any(|c| c == LOCKS_CAPABILITY),
+            "this agent says its hook reads them"
+        );
+        desk.hook_ready_for(laptop.fingerprint()).await;
+        let (mut hook, _) = tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap();
+        write_batch(&mut hook, &encode(&[enter, locks]))
+            .await
+            .unwrap();
+        assert_eq!(next_input(&mut laptop_link).await, expected);
+    }
 }
 
 #[cfg(unix)]

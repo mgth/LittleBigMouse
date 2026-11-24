@@ -97,6 +97,21 @@ impl Default for SendInputInjector {
 /// The virtual screen as `(left, top, width, height)`, in physical pixels since the
 /// process is per-monitor DPI aware. Read per batch rather than cached: a display
 /// change must not leave the pointer landing by the old geometry.
+/// This session's lock keys: the toggle bit of `GetKeyState`. Read on the injector's
+/// thread, whose view of the keyboard is the one the injected taps change.
+fn local_locks() -> lbm_ipc::input::Locks {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyState, VK_CAPITAL, VK_NUMLOCK, VK_SCROLL,
+    };
+    // SAFETY: no pointer; any virtual key may be asked.
+    let toggled = |vk: VIRTUAL_KEY| Some(unsafe { GetKeyState(i32::from(vk.0)) } & 1 != 0);
+    lbm_ipc::input::Locks {
+        caps: toggled(VK_CAPITAL),
+        num: toggled(VK_NUMLOCK),
+        scroll: toggled(VK_SCROLL),
+    }
+}
+
 fn virtual_screen() -> (i32, i32, i32, i32) {
     unsafe {
         (
@@ -126,6 +141,7 @@ fn button(code: u16, pressed: bool) -> Option<(MOUSE_EVENT_FLAGS, u32)> {
 
 impl Injector for SendInputInjector {
     fn inject(&mut self, batch: &[Injection]) {
+        let batch = &*super::expand_locks(batch, local_locks);
         self.inputs.clear();
         let mut screen = None;
         for injection in batch {
@@ -184,7 +200,9 @@ impl Injector for SendInputInjector {
                     }
                 }
                 // Delivered through park/unpark (super::deliver), never in a batch.
-                Injection::Park | Injection::Unpark => {}
+                // Turned into keys above (expand_locks), or delivered through
+                // park/unpark (super::deliver), never here.
+                Injection::Locks(_) | Injection::Park | Injection::Unpark => {}
             }
         }
         if self.inputs.is_empty() {

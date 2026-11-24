@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use lbm_ipc::input::{crossing, encode, read_batch, write_batch, InputEvent};
+use lbm_ipc::input::{crossing, encode, read_batch, without_locks, write_batch, InputEvent};
 use lbm_net::link::LinkSender;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -76,6 +76,15 @@ enum Message {
         crosses: bool,
     },
     Release,
+}
+
+/// The link the hook's batches go to, and whether the remote's hook reads the lock
+/// keys' state (`lbm_ipc::input::LOCKS_CAPABILITY`): one that does not fails a whole
+/// batch on it, so it is cut out of the batches relayed there.
+#[derive(Clone)]
+pub struct Target {
+    pub link: LinkSender,
+    pub reads_locks: bool,
 }
 
 /// Where the network side hands batches to the hook, and the end of a stream.
@@ -132,7 +141,7 @@ pub struct HookInput {
     messages: mpsc::Sender<Message>,
     numbered: Arc<AtomicU64>,
     lost: watch::Sender<u64>,
-    target: watch::Sender<Option<LinkSender>>,
+    target: watch::Sender<Option<Target>>,
     driving: watch::Receiver<Driving>,
 }
 
@@ -197,8 +206,8 @@ impl HookInput {
     }
 
     /// The link the hook's own batches go to (this machine is its master), or none.
-    pub fn set_target(&self, link: Option<LinkSender>) {
-        self.target.send_replace(link);
+    pub fn set_target(&self, target: Option<Target>) {
+        self.target.send_replace(target);
     }
 
     /// Ends the hop under way and starts the next at once, to the same link: the remote
@@ -216,7 +225,7 @@ struct Connection {
     reading: JoinHandle<()>,
     lost: oneshot::Receiver<()>,
     /// The link the hook's batches go to, for the whole life of this connection.
-    relaying_to: Option<LinkSender>,
+    relaying_to: Option<Target>,
     /// The number of the last batch written to it (0: none).
     written: u64,
 }
@@ -231,7 +240,7 @@ impl Drop for Connection {
 async fn run(
     endpoint: Option<String>,
     mut inbox: mpsc::Receiver<Message>,
-    mut targets: watch::Receiver<Option<LinkSender>>,
+    mut targets: watch::Receiver<Option<Target>>,
     lost: watch::Sender<u64>,
     driving: watch::Sender<Driving>,
 ) {
@@ -336,9 +345,9 @@ async fn run(
 /// `Leave` is still on its way. A connection opened meanwhile (this machine also being
 /// a remote, whose batches share the connection) relays nothing.
 fn relay_target(
-    targets: &watch::Receiver<Option<LinkSender>>,
+    targets: &watch::Receiver<Option<Target>>,
     leaving: &Option<JoinHandle<()>>,
-) -> Option<LinkSender> {
+) -> Option<Target> {
     match leaving {
         Some(_) => None,
         None => targets.borrow().clone(),
@@ -362,7 +371,7 @@ fn close(
             std::mem::replace(&mut now.driven, false)
         });
     }
-    let Some(link) = connection.take().and_then(|c| c.relaying_to.clone()) else {
+    let Some(Target { link, .. }) = connection.take().and_then(|c| c.relaying_to.clone()) else {
         return;
     };
     let before = leaving.take();
@@ -377,7 +386,7 @@ fn close(
 /// Connects, and starts relaying what the hook writes to `target`.
 async fn open(
     endpoint: Option<&str>,
-    target: Option<LinkSender>,
+    target: Option<Target>,
     retry_at: &mut Option<Instant>,
     driving: &DrivingSender,
 ) -> Option<Connection> {
@@ -421,12 +430,16 @@ async fn open(
 /// [`close`]). With no target they are read and let go: nothing was sent anywhere.
 async fn relay(
     mut reader: impl AsyncRead + Unpin,
-    target: Option<LinkSender>,
+    target: Option<Target>,
     lost: oneshot::Sender<()>,
     (driving, connection): (DrivingSender, u64),
 ) {
     while let Ok(batch) = read_batch(&mut reader).await {
-        if let Some(link) = &target {
+        if let Some(Target { link, reads_locks }) = &target {
+            let batch = match reads_locks {
+                true => std::borrow::Cow::Borrowed(batch.as_slice()),
+                false => without_locks(&batch),
+            };
             if link.try_input(&batch).is_err() {
                 break;
             }

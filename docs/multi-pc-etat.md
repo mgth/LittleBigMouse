@@ -224,15 +224,9 @@ Windows actuel ne connaît pas les zones distantes.
   capture par périphérique, donc avaler les touches dans le hook clavier bas niveau
   sauf les relâchements de touches déjà enfoncées à l'`Enter` ; un « frame » de hook
   bas niveau est un seul événement, laissé passer ou avalé.
-- ~~**Identité des moniteurs**~~ : fait (PR #827). Sur un maître Windows, un écran
-  distant est nommé comme Windows le nommerait en local, à partir de l'EDID que l'esclave
-  envoie (`RemoteMonitor::local_id`, `lbm_display::peer::IdForm`) ; la clé de dalle
-  reste ce qui reconnaît un écran vu des deux côtés à la fois. Un profil enregistré
-  avant pour l'écran affiché chez l'esclave, sous sa clé de dalle, est abandonné au
-  profit de celui de l'écran affiché ici. Hypothèse non vérifiée : l'EDID lu par
-  l'esclave à travers le KVM est octet pour octet celui que Windows lit, et le code PnP
-  du périphérique Windows est le constructeur et le produit de l'EDID. Un écran que
-  Windows distingue d'un jumeau par `_{instance}` ne peut pas être reconnu ainsi.
+- **Identité des moniteurs** : nommer un écran distant par sa clé de dalle ne suffit pas
+  sous Windows, dont les ids locaux ont une autre forme. Sans cela, un KVM crée un
+  nouveau profil à chaque bascule.
 - **Fenêtres élevées** : à vérifier — un hook bas niveau d'un processus non élevé ne
   reçoit vraisemblablement pas l'entrée destinée à une fenêtre élevée. `StartElevated`
   (voir plus bas) est la piste existante.

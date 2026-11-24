@@ -204,7 +204,8 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 - **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
-- **Presse-papiers**, puis glisser-déposer. Rien n'existe.
+- **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
+  viendrait après.
 - **État des verrous** (Verr. Maj, Verr. Num) : aucune synchronisation entre machines.
 - **Découverte** : l'adresse de l'esclave se tape à la main. mDNS serait un confort.
 - **Pare-feu Windows** : la règle d'entrée sur le port 24817 a été posée à la main
@@ -217,6 +218,76 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   tests d'intégration tournent en boucle locale avec un faux hook, et la revue a montré
   deux fois que cette doublure masquait un défaut.
 - Les deux faiblesses de protocole listées plus haut.
+
+## Presse-papiers partagé
+
+Rien n'existe. Objectif minimal : **texte et image** dans les deux sens ; le reste par
+paliers. Ce qui suit est une proposition, tirée de ma connaissance des API et de ce que
+font Deskflow et consorts — rien n'a été essayé.
+
+### Formats, par palier
+
+| Palier | Contenu | Windows | Linux | Remarque |
+|---|---|---|---|---|
+| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8` | Convertir les fins de ligne |
+| 1 | Image | `CF_DIBV5`, et le format enregistré `PNG` | `image/png` | PNG sur le fil : sans perte, transparence conservée |
+| 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | L'en-tête de `HTML Format` (décalages) est à reconstruire |
+| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Ce n'est plus du presse-papiers mais un transfert de fichiers : chemins à réécrire, flux, annulation |
+| 4 | Glisser-déposer entre machines | — | — | Dépend du palier 3 |
+
+Au palier 1, proposer aussi le texte brut quand la source n'offre que du HTML : c'est ce
+que fait toute application et cela couvre la plupart des collages.
+
+### Transfert à la demande
+
+Ne pas envoyer le contenu à chaque copie : une capture d'écran 4K copiée puis jamais
+collée ailleurs n'a pas à traverser le réseau.
+
+- À chaque changement, la machine qui possède le presse-papiers **annonce** les formats
+  disponibles (un message de contrôle, quelques octets).
+- L'autre machine se déclare propriétaire d'un presse-papiers **sans contenu** : rendu
+  différé sous Windows, source de données qui n'écrit qu'à la demande sous Wayland et
+  X11.
+- Le contenu n'est demandé qu'au **collage**, dans le format réellement voulu.
+
+Conséquences sur le protocole : un message d'annonce, une requête et une réponse ; la
+réponse dépasse la borne de 1 Mio des trames de contrôle, donc un nouveau type de trame
+découpée, qui ne doit jamais passer devant le flux d'entrée (même règle que les fonds
+d'écran). Une capacité `Clipboard` dans `Hello`, pour qu'un pair plus ancien l'ignore.
+
+### Écouter et écrire, par système
+
+| Système | Écouter les changements | Écrire | Où |
+|---|---|---|---|
+| Windows | `AddClipboardFormatListener` (événement, pas de scrutation) | Rendu différé (`WM_RENDERFORMAT`) | La fenêtre cachée que l'agent a déjà |
+| Wayland | Protocole `ext-data-control-v1`, ou `wlr-data-control` | Source de données du même protocole | Une connexion Wayland de l'agent ; support selon le compositeur, à vérifier pour KWin, absent de GNOME |
+| X11 | XFixes (`XFixesSelectionNotify`) | Propriétaire de la sélection `CLIPBOARD` | Agent |
+
+Conforme à la règle du projet : uniquement des événements, et rien d'installé tant
+qu'aucun pair n'est lié ou que l'option est coupée.
+
+### Garde-fous
+
+- **Option coupée par défaut**, par machine, et par sens (recevoir, envoyer).
+- **Secrets** : ne pas annoncer ce qu'un gestionnaire de mots de passe marque comme
+  sensible (`ExcludeClipboardContentFromMonitorProcessing` sous Windows,
+  `x-kde-passwordManagerHint` sous KDE).
+- **Taille** : une borne configurable ; au-delà, l'annonce n'est pas faite et l'interface
+  le dit.
+- **Sélection primaire** de Linux (clic milieu) : hors périmètre, elle n'a pas
+  d'équivalent Windows.
+- Ne jamais réannoncer ce qu'on vient de recevoir : sinon les deux machines se
+  renvoient le presse-papiers sans fin.
+- Le contenu ne circule que sur le lien TLS épinglé, entre machines appairées.
+
+### Ce qu'il faut trancher
+
+- Le presse-papiers suit-il le pointeur (comme Deskflow, synchronisé au passage du
+  bord) ou chaque copie est-elle annoncée tout de suite ? L'annonce immédiate avec
+  transfert à la demande est plus simple à expliquer et ne coûte presque rien.
+- Qui porte le code sous Linux : l'agent n'a pas de connexion Wayland aujourd'hui, le
+  hook en a une pour masquer le curseur. Le presse-papiers n'a rien à faire dans le
+  chemin de l'entrée ; je le mettrais dans l'agent.
 
 ## macOS
 
@@ -260,6 +331,7 @@ macOS n'a de sens qu'après.
    vers l'interface, règle de pare-feu dans l'installeur.
 5. Fenêtres élevées par `StartElevated` (à essayer), puis service Windows pour le
    bureau sécurisé.
-6. Plusieurs esclaves, presse-papiers.
-7. GNOME, X11, portail `InputCapture`.
-8. macOS esclave, si quelqu'un peut l'essayer.
+6. Presse-papiers, palier 1 (texte et image), puis palier 2.
+7. Plusieurs esclaves.
+8. GNOME, X11, portail `InputCapture`.
+9. macOS esclave, si quelqu'un peut l'essayer.

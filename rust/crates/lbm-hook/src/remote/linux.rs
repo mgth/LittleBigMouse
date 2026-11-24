@@ -14,9 +14,11 @@
 //! A freshly created device is not seen by the compositor at once: what it emits in
 //! the first few hundred milliseconds is lost (measured under KWin 6: everything up to
 //! 300 ms after the creation, nothing from 450 ms on). Both devices are therefore
-//! built when a driven session starts ([`Injector::unpark`]), together, and kept for
-//! the life of the hook; and the first frame for a device that young waits until it is
-//! [`SETTLE`] old — once, at the start of the first session.
+//! built when a driven session starts ([`Injector::begin`]), together, and kept for
+//! the life of the hook; and what arrives for a device that young is held back until
+//! it is [`SETTLE`] old — once, at the start of the first session — and then put in
+//! ([`Injector::catch_up`]). Held back, not waited for: the endpoint keeps reading,
+//! and a master moving at 1 kHz must not see its stream back up.
 
 use std::sync::TryLockError;
 use std::time::{Duration, Instant};
@@ -58,6 +60,8 @@ pub struct UinputInjector {
     no_desktop_said: bool,
     /// Until when a device just built cannot be written to usefully.
     settled_at: Option<Instant>,
+    /// What arrived before then.
+    backlog: Backlog,
     /// Buttons this injector pressed and has not released: the pointer device is not
     /// rebuilt for a new desktop while one is held, which would drop it mid-drag.
     buttons_held: usize,
@@ -78,6 +82,7 @@ impl UinputInjector {
             keyboard_failed: None,
             no_desktop_said: false,
             settled_at: None,
+            backlog: Backlog::default(),
             buttons_held: 0,
             wheel_rest: (0, 0),
             pointer_frame: Vec::with_capacity(16),
@@ -215,14 +220,43 @@ impl UinputInjector {
     }
 }
 
-/// How long to hold a frame for a device that is not settled yet; `None` once it is,
-/// and from then on.
-fn still_settling(settled_at: &mut Option<Instant>, now: Instant) -> Option<Duration> {
-    let wait = settled_at.and_then(|at| at.checked_duration_since(now));
-    if wait.is_none() {
-        *settled_at = None;
+/// What a session sent while its devices were too young to be written to, in order.
+/// Motion and wheel are folded into the one before when it is of the same kind, so a
+/// fast mouse adds nothing: what grows it is presses, releases and the motion between
+/// them, a few hundred milliseconds' worth.
+#[derive(Debug, Default)]
+struct Backlog(Vec<Injection>);
+
+impl Backlog {
+    fn push(&mut self, injection: Injection) {
+        match (self.0.last_mut(), injection) {
+            (Some(Injection::MoveTo { x, y }), Injection::MoveTo { x: nx, y: ny }) => {
+                (*x, *y) = (nx, ny);
+            }
+            (
+                Some(Injection::Wheel {
+                    horizontal,
+                    vertical,
+                }),
+                Injection::Wheel {
+                    horizontal: more_h,
+                    vertical: more_v,
+                },
+            ) => {
+                *horizontal = horizontal.saturating_add(more_h);
+                *vertical = vertical.saturating_add(more_v);
+            }
+            _ => self.0.push(injection),
+        }
     }
-    wait.filter(|w| !w.is_zero())
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn take(&mut self) -> Vec<Injection> {
+        std::mem::take(&mut self.0)
+    }
 }
 
 /// Two values for one code cannot share a frame — the second would overwrite the
@@ -256,12 +290,54 @@ impl Injector for UinputInjector {
         if batch.iter().any(|i| matches!(i, Injection::Key { .. })) {
             self.ensure_keyboard();
         }
-        // Blocks this endpoint's own thread only; what arrives meanwhile waits in the
-        // connection and follows in order.
-        if let Some(wait) = still_settling(&mut self.settled_at, Instant::now()) {
-            std::thread::sleep(wait);
-            self.settled_at = None;
+        if self.settled_at.is_some_and(|at| Instant::now() < at) {
+            for injection in batch {
+                self.backlog.push(*injection);
+            }
+            return;
         }
+        self.catch_up();
+        self.write(batch);
+    }
+
+    /// Before the devices settle, nothing is due; after, what they held back.
+    fn due(&self) -> Option<Instant> {
+        if self.backlog.is_empty() {
+            return None;
+        }
+        Some(self.settled_at.unwrap_or_else(Instant::now))
+    }
+
+    fn catch_up(&mut self) {
+        self.settled_at = None;
+        let held = self.backlog.take();
+        if !held.is_empty() {
+            self.write(&held);
+        }
+    }
+
+    /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
+    /// it, and there is no portable way to: a Wayland client chooses the cursor only
+    /// over its own surfaces, and the Windows trick of a one-pixel window under the
+    /// pointer would need a topmost, input-taking surface no portable protocol offers.
+    /// Moving it away instead — a corner, an edge — is what sets off hot corners and
+    /// edge actions. The pointer stays where the master left it.
+    fn park(&mut self) {}
+
+    fn unpark(&mut self) {}
+
+    /// Builds both devices ahead of the session's first motion, so that they settle
+    /// together and a first key is not held back on its own. Never on the hook's way
+    /// out: that is `unpark` alone.
+    fn begin(&mut self) {
+        self.ensure_pointer();
+        self.ensure_keyboard();
+    }
+}
+
+/// The stream's injections into the devices, as they come.
+impl UinputInjector {
+    fn write(&mut self, batch: &[Injection]) {
         for injection in batch {
             match *injection {
                 Injection::MoveTo { x, y } => {
@@ -308,7 +384,7 @@ impl Injector for UinputInjector {
                 Injection::Key { code, pressed } => {
                     self.queue_keyboard(InputEvent::new(EventType::KEY.0, code, pressed as i32));
                 }
-                // Delivered through park/unpark (super::deliver), never in a batch.
+                // Delivered through park/begin (super::deliver), never in a batch.
                 Injection::Park | Injection::Unpark => {}
             }
         }
@@ -318,47 +394,108 @@ impl Injector for UinputInjector {
         );
         flush(&mut self.keyboard_frame, self.keyboard.as_mut());
     }
-
-    /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
-    /// it, and there is no portable way to: a Wayland client chooses the cursor only
-    /// over its own surfaces, and the Windows trick of a one-pixel window under the
-    /// pointer would need a topmost, input-taking surface no portable protocol offers.
-    /// Moving it away instead — a corner, an edge — is what sets off hot corners and
-    /// edge actions. The pointer stays where the master left it.
-    fn park(&mut self) {}
-
-    /// Builds both devices ahead of the session's first motion, so that they settle
-    /// together and a first key does not wait on its own.
-    fn unpark(&mut self) {
-        self.ensure_pointer();
-        self.ensure_keyboard();
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_young_device_holds_its_first_frame_for_what_is_left_of_the_settling() {
-        let now = Instant::now();
-        let mut settled_at = Some(now + Duration::from_millis(300));
-        assert_eq!(
-            still_settling(&mut settled_at, now + Duration::from_millis(100)),
-            Some(Duration::from_millis(200))
-        );
-        assert!(settled_at.is_some(), "still to wait for");
+    const BTN_LEFT: u16 = 0x110;
+    const LEFT_CTRL: u16 = 29;
+
+    fn held(injections: &[Injection]) -> Vec<Injection> {
+        let mut backlog = Backlog::default();
+        for injection in injections {
+            backlog.push(*injection);
+        }
+        backlog.take()
     }
 
     #[test]
-    fn a_settled_device_never_waits_again() {
-        let now = Instant::now();
-        let mut settled_at = Some(now);
+    fn a_fast_mouse_held_back_is_one_position_the_last() {
+        let motion: Vec<_> = (0..1000)
+            .map(|i| Injection::MoveTo { x: i, y: 2 * i })
+            .collect();
+        assert_eq!(held(&motion), [Injection::MoveTo { x: 999, y: 1998 }]);
+    }
+
+    #[test]
+    fn presses_and_releases_keep_their_place_between_the_positions() {
         assert_eq!(
-            still_settling(&mut settled_at, now + Duration::from_millis(1)),
-            None
+            held(&[
+                Injection::MoveTo { x: 1, y: 1 },
+                Injection::MoveTo { x: 2, y: 2 },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::MoveTo { x: 3, y: 3 },
+                Injection::MoveTo { x: 4, y: 4 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: false
+                },
+            ]),
+            [
+                Injection::MoveTo { x: 2, y: 2 },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::MoveTo { x: 4, y: 4 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+                Injection::Key {
+                    code: LEFT_CTRL,
+                    pressed: false
+                },
+            ]
         );
-        assert_eq!(settled_at, None);
-        assert_eq!(still_settling(&mut settled_at, now), None);
+    }
+
+    #[test]
+    fn wheel_travel_held_back_is_summed_not_lost() {
+        assert_eq!(
+            held(&[
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: 30
+                },
+                Injection::Wheel {
+                    horizontal: 15,
+                    vertical: 60
+                },
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: -120
+                },
+            ]),
+            [
+                Injection::Wheel {
+                    horizontal: 15,
+                    vertical: 90
+                },
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Wheel {
+                    horizontal: 0,
+                    vertical: -120
+                },
+            ]
+        );
     }
 }

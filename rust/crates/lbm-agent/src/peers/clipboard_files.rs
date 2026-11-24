@@ -201,19 +201,21 @@ impl Walk {
                 self.visit(&child.path(), format!("{relative}/{name}"))?;
             }
         } else if metadata.is_file() {
-            self.total += metadata.len();
+            // The size announced is the one of the very file whose identity is kept: the
+            // path's, read before it was opened, may be another version's.
+            let stamp = std::fs::File::open(path)
+                .and_then(|file| Stamp::of(&file))
+                .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+            self.total += stamp.len;
             if self.total > self.max_bytes {
                 return Err(super::super::clipboard::too_large(
                     usize::try_from(self.max_bytes).unwrap_or(usize::MAX),
                 ));
             }
-            let stamp = std::fs::File::open(path)
-                .and_then(|file| Stamp::of(&file))
-                .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
             self.listed.push(Listed {
                 entry: ClipFile {
                     path: relative,
-                    size: metadata.len(),
+                    size: stamp.len,
                     folder: false,
                 },
                 source: path.to_owned(),
@@ -367,15 +369,37 @@ pub fn acceptable_on(files: &[ClipFile], max_bytes: u64, fold_case: bool) -> Res
     Ok(())
 }
 
-/// The folder under `reception` the files of the offer held under `local` are fetched
-/// to: its own, named by when and which, so that two pastes never mix.
-pub fn folder_for(reception: &Path, local: u64) -> PathBuf {
+/// A new folder under `reception` for the files of the offer held under `local`,
+/// created here and now: a name already taken — by an earlier paste, or another agent
+/// sharing the reception folder — is never reused, so that a paste only ever writes,
+/// and on failure removes, a folder of its own. Blocking.
+pub fn reserve(reception: &Path, local: u64) -> Result<PathBuf, String> {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or_default();
-    reception.join(format!("clipboard-{stamp}-{local}"))
+    std::fs::create_dir_all(reception)
+        .map_err(|error| format!("{} cannot be made: {error}", reception.display()))?;
+    let base = format!("clipboard-{stamp}-{}-{local}", std::process::id());
+    for n in 0..1000 {
+        let name = if n == 0 {
+            base.clone()
+        } else {
+            format!("{base}-{n}")
+        };
+        let folder = reception.join(name);
+        match std::fs::create_dir(&folder) {
+            Ok(()) => return Ok(folder),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(format!("{} cannot be made: {error}", folder.display())),
+        }
+    }
+    Err(format!("no free folder under {}", reception.display()))
 }
+
+/// The folder a fetch reserved, once it has: what an abandon may remove, and nothing
+/// else.
+pub type Reserved = Arc<Mutex<Option<PathBuf>>>;
 
 /// What a fetch receives for one of its ranges.
 #[derive(Debug)]
@@ -406,6 +430,7 @@ pub struct Fetch {
     pub serial: u64,
     pub local: u64,
     pub files: Vec<ClipFile>,
+    /// Reserved already ([`reserve`]).
     pub folder: PathBuf,
     pub routes: Routes,
     pub transfers: Arc<AtomicU64>,
@@ -726,6 +751,20 @@ mod tests {
         };
         assert!(super::fetch(fetch).await.unwrap_err().contains("same name"));
         assert_eq!(std::fs::read(folder.join("x")).unwrap(), b"first");
+    }
+
+    #[test]
+    fn each_paste_reserves_a_folder_of_its_own_and_never_takes_one_that_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let reception = dir.path().join("in");
+        let a = reserve(&reception, 1).unwrap();
+        std::fs::write(a.join("theirs"), b"another agent's").unwrap();
+        // The same paste number again in the same second, as an agent restarted (or a
+        // second one) would ask for.
+        let b = reserve(&reception, 1).unwrap();
+        assert_ne!(a, b);
+        assert!(b.read_dir().unwrap().next().is_none(), "new and empty");
+        assert_eq!(std::fs::read(a.join("theirs")).unwrap(), b"another agent's");
     }
 
     #[test]

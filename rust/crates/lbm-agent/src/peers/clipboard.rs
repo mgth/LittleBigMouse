@@ -135,7 +135,8 @@ enum FetchState {
     None,
     Running {
         task: JoinHandle<()>,
-        folder: PathBuf,
+        /// The folder it reserved, once it has.
+        folder: files::Reserved,
         /// The applications waiting for the paths.
         waiting: Vec<oneshot::Sender<Data>>,
     },
@@ -304,6 +305,10 @@ impl Sharing {
             eprintln!("[lbm-agent] multi-PC: the clipboard is no longer shared");
         }
         self.local = None;
+        // A listing under way belongs to a clipboard that is gone: what it finds must not
+        // come back as this machine's copy once the clipboard opens again.
+        self.listing = None;
+        self.serial += 1;
         self.let_go(None);
         for (_, incoming) in self.incoming.drain() {
             let _ = incoming
@@ -431,9 +436,11 @@ impl Sharing {
                 }
             }
             drop(routes);
-            tokio::task::spawn_blocking(move || {
-                let _ = std::fs::remove_dir_all(folder);
-            });
+            if let Some(folder) = folder.lock().unwrap().take() {
+                tokio::task::spawn_blocking(move || {
+                    let _ = std::fs::remove_dir_all(folder);
+                });
+            }
         }
         Some(held)
     }
@@ -660,46 +667,58 @@ impl Sharing {
             let _ = reply.send(Err("the other machine left".into()));
             return;
         };
-        // Named once: the fetch writes there and an abandon removes that very folder.
-        let folder = files::folder_for(&self.options.reception, held.local);
-        let fetch = files::Fetch {
+        let reception = self.options.reception.clone();
+        let reserved = files::Reserved::default();
+        let mut fetch = files::Fetch {
             link: peer.sender.clone(),
             machine_id: held.machine_id.clone(),
             link_id: held.link,
             serial: held.serial,
             local: held.local,
             files: held.files.clone(),
-            folder: folder.clone(),
+            folder: PathBuf::new(),
             routes: self.routes.clone(),
             transfers: self.transfers.clone(),
         };
         let fetched = self.fetched_sender.clone();
         let local = held.local;
-        let running_folder = folder.clone();
+        let running = reserved.clone();
         let task = tokio::spawn(async move {
-            let made = folder.clone();
+            // Reserved, and said so, in one step that cannot be cut: what the abandon
+            // removes is a folder this fetch made, never one it found.
+            let taken = reserved.clone();
             let result = match files::blocking(move || {
-                std::fs::create_dir_all(&made)
-                    .map_err(|error| format!("{} cannot be made: {error}", made.display()))
+                let folder = files::reserve(&reception, local)?;
+                *taken.lock().unwrap() = Some(folder.clone());
+                Ok(folder)
             })
             .await
             {
-                Ok(()) => files::fetch(fetch).await,
+                Ok(folder) => {
+                    fetch.folder = folder;
+                    files::fetch(fetch).await
+                }
                 Err(error) => Err(error),
             };
-            if result.is_err() {
-                let folder = folder.clone();
-                let _ = files::blocking(move || {
-                    let _ = std::fs::remove_dir_all(folder);
-                    Ok(())
-                })
-                .await;
+            let made = if result.is_err() {
+                reserved.lock().unwrap().take()
+            } else {
+                None
+            };
+            {
+                if let Some(folder) = made {
+                    let _ = files::blocking(move || {
+                        let _ = std::fs::remove_dir_all(folder);
+                        Ok(())
+                    })
+                    .await;
+                }
             }
             let _ = fetched.send((local, result));
         });
         held.fetch = FetchState::Running {
             task,
-            folder: running_folder,
+            folder: running,
             waiting: vec![reply],
         };
     }

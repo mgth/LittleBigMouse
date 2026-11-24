@@ -445,7 +445,9 @@ sees it.
   set (`ClipboardFilesMaxBytes`, 4 GiB by default, 10 000 entries). Both systems' file
   clipboards hold paths, not content, so the receiver fetches every file first, range by
   range (`ClipboardRequest { Item, Offset, Length }`, at most 4 MiB a range, the next one
-  asked once the last is written), into a folder of its own under the reception folder
+  asked once the last is written), into a folder of its own under the reception folder,
+  created new for that paste (a name taken, by another agent sharing the folder say, is
+  never reused, and an abandon removes only the folder it created)
   (`ClipboardFolder`, `Downloads/LittleBigMouse` by default), then hands the application
   those paths; it copies from there. A name that would land outside that folder (`..`,
   an absolute path, a drive) refuses the whole offer, and so do two entries that would
@@ -457,8 +459,9 @@ sees it.
   the ANSI code page, and one it cannot decode is not read. Every range is read from the
   very file that was listed — not a link since, the same file (device and inode on Unix,
   volume and file index on Windows), size and time, checked before and after the read —
-  or the paste fails rather than mix two versions. A copy emptied or replaced while its
-  files are listed is never offered. A list too large for one control message is not offered,
+  or the paste fails rather than mix two versions; the size announced is that very
+  file's. A copy emptied or replaced while its files are listed is never offered, nor
+  one whose listing outlived the clipboard closing. A list too large for one control message is not offered,
   and the copier's state says so. Paths go between the system clipboard and the sharing
   NUL-separated, exactly as the system has them. The fetch starts at the first read and is not tied to it: the reader may
   give up first (a Qt application under Wayland after one second without data, Windows

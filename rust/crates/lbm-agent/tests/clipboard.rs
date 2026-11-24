@@ -557,3 +557,37 @@ async fn files_whose_copy_was_cleared_while_they_were_listed_are_never_offered()
         );
     }
 }
+
+#[tokio::test]
+async fn a_listing_cut_short_by_the_last_machine_leaving_is_not_offered_when_it_comes_back() {
+    let (mut desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, _) = some_files(source.path());
+    tower.clipboard.slow_reads(Duration::from_millis(300));
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    // The only machine the tower shares with goes while the files are being listed: the
+    // tower's clipboard closes.
+    let off = |enabled| PeerRequest::Set {
+        enabled,
+        port: None,
+        name: None,
+        pointer_lock_shortcut: None,
+        clipboard: ClipboardChange::default(),
+    };
+    desk.ask(off(false)).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    // And comes back: what was being listed then is not this machine's copy now.
+    desk.ask(off(true)).await.unwrap();
+    let tm = tower.machine_id.clone();
+    desk.until(|s| linked(s, &tm)).await;
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !matches!(desk.clipboard.content(), Some(Content::Offer { .. })),
+            "nothing is offered from a listing of a clipboard closed since"
+        );
+    }
+}

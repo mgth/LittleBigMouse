@@ -189,6 +189,9 @@ pub struct Agent<W> {
     /// How to look for them: [`crate::input_sharing::scan`] in `main`, nothing in a test
     /// that did not ask (a test must not report the machine it runs on).
     scan_input_sharing: fn() -> Vec<lbm_ipc::sharing::Running>,
+    /// The end of each process found, as an event: `None` unless asked for (`main`),
+    /// so that a test's made-up pids are never watched.
+    sharing_exits: Option<crate::sharing_exits::Exits>,
     /// The multi-PC mode was on in the last `Peers` state: turning it on is a moment
     /// to look for the other tools.
     multi_pc_on: bool,
@@ -257,6 +260,7 @@ impl<W: AgentWorld> Agent<W> {
             told_hook_ready: None,
             input_sharing: Vec::new(),
             scan_input_sharing: Vec::new,
+            sharing_exits: None,
             multi_pc_on: false,
             linked: Vec::new(),
         }
@@ -267,6 +271,24 @@ impl<W: AgentWorld> Agent<W> {
     pub fn with_input_sharing_scan(mut self, scan: fn() -> Vec<lbm_ipc::sharing::Running>) -> Self {
         self.scan_input_sharing = scan;
         self
+    }
+
+    /// Says a process found is gone as soon as it ends ([`crate::sharing_exits`]).
+    pub fn with_input_sharing_exits(mut self) -> Self {
+        self.sharing_exits = Some(crate::sharing_exits::Exits::new());
+        self
+    }
+
+    /// A process found has ended: it is no longer said running.
+    fn input_sharing_ended(&mut self, pid: u32) {
+        if let Some(exits) = &mut self.sharing_exits {
+            exits.forget(pid);
+        }
+        let before = self.input_sharing.len();
+        self.input_sharing.retain(|running| running.pid != pid);
+        if self.input_sharing.len() != before {
+            eprintln!("[lbm-agent] sharing tool process {pid} ended");
+        }
     }
 
     /// One look for the other sharing tools, for the state. `why` is for the log, which
@@ -281,6 +303,9 @@ impl<W: AgentWorld> Agent<W> {
                 eprintln!("[lbm-agent] {warning} ({why})");
             }
             self.input_sharing = found;
+        }
+        if let Some(exits) = &mut self.sharing_exits {
+            exits.follow(&self.input_sharing);
         }
     }
 
@@ -1646,6 +1671,7 @@ impl<W: AgentWorld> Agent<W> {
         let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
         let mut vcp_events = self.vcp_events_rx.take();
         let mut wallpaper_changes = self.wallpaper_changes_rx.take();
+        let mut sharing_ended = self.sharing_exits.as_mut().and_then(|e| e.take_events());
         // The events of one wallpaper change, read once. No event, no deadline.
         let mut wallpaper_burst = crate::wallpaper_watch::Burst::default();
         loop {
@@ -1729,6 +1755,18 @@ impl<W: AgentWorld> Agent<W> {
                             self.selected(from, display, value, request, result)
                         }
                         None => vcp_events = None,
+                    }
+                    continue;
+                },
+                pid = async {
+                    match &mut sharing_ended {
+                        Some(ended) => ended.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match pid {
+                        Some(pid) => self.input_sharing_ended(pid),
+                        None => sharing_ended = None,
                     }
                     continue;
                 },

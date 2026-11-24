@@ -41,7 +41,7 @@ qui va le pointeur quand il y entre.
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines ; côté esclave et icône du tray : voir la ligne suivante) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
 | Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
-| Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running » |
+| Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, `sharing_exits.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running », y compris dans la barre d'état (pastille grise « Deskflow open », l'ambre « … also running » étant réservée à un processus qui route ou peut router). Chaque processus trouvé est attendu jusqu'à sa fin, sans scrutation (Linux : pidfd ; Windows : `RegisterWaitForSingleObject` sur un handle `SYNCHRONIZE`) : quitter Deskflow éteint aussitôt l'indication |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -119,17 +119,28 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   bureau que par un `Load`), et KWin 6 jette ce qu'un périphérique uinput émet dans ses
   ~300 premières millisecondes, d'où un premier `Enter` sans effet.
 
-- Autres outils de partage : regardés, jamais surveillés. Un Deskflow lancé ou arrêté
-  après le dernier de ces moments (mode activé, lien établi, Start, fenêtre ouverte)
-  n'apparaît ou ne disparaît qu'au moment suivant ; c'est la règle « événements
-  seulement ». Sous Linux, les sockets d'un processus d'un autre utilisateur sont
+- Autres outils de partage : la liste n'est relevée qu'à certains moments (mode activé,
+  lien établi, Start, fenêtre ouverte) ; un processus trouvé en sort dès qu'il se
+  termine (événement de fin), mais un Deskflow **lancé** après le dernier de ces moments,
+  ou dont la fenêtre démarre ensuite son `deskflow-core`, n'apparaît qu'au moment
+  suivant : aucun des deux systèmes n'offre à un agent non privilégié d'événement
+  « processus lancé » sans scrutation (Linux : le connecteur de processus netlink exige
+  `CAP_NET_ADMIN` ; Windows : `Win32_ProcessStartTrace` exige l'administrateur, et
+  `__InstanceCreationEvent` scrute, clause `WITHIN`). De même, une fenêtre Deskflow qui arrête
+  son serveur sans se fermer laisse « Deskflow open » à juste titre, mais un
+  `deskflow-core` resté en vie après un « Stop » reste dit « running ». Un processus
+  qu'on ne peut pas attendre (pidfd refusé, handle d'un processus élevé refusé sous
+  Windows) reste dit jusqu'au relevé suivant. Sous Linux, les sockets d'un processus d'un autre utilisateur sont
   illisibles : sa connexion reste « inconnue », même si une connexion est établie sur
   le port 24800 (elle peut être celle d'un autre outil). Les connexions vers la boucle
   locale (socket de contrôle du service, 24801 chez Synergy) ne comptent jamais. Sous Windows, la ligne de commande d'un autre processus
   n'est pas lue : `deskflow-core.exe` n'est dit serveur ou client que par une connexion
-  sur le port 24800. Rien de tout cela n'a tourné sur Windows ; sous Linux, seule une
-  fenêtre `deskflow` seule a été vue sur une vraie machine (lecture de `/proc`), jamais un
-  `deskflow-core` relié à un client.
+  sur le port 24800. Rien de tout cela n'a tourné sur Windows (ni l'attente de fin) ;
+  sous Linux, la fenêtre `deskflow` seule a été vue sur une vraie machine, mal nommée
+  « running » dans la barre jusqu'à la correction (v6 d51f72d7, signalé par le
+  mainteneur), et jamais un `deskflow-core` relié à un client. L'attente de fin a tourné
+  sur de vrais processus Linux de test (liens vers `sleep` nommés comme Deskflow), pas
+  sur Deskflow lui-même.
 
 ## Matrice de support
 

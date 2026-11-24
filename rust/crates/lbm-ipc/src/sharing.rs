@@ -157,6 +157,15 @@ pub fn tools(running: &[Running]) -> Vec<Tool> {
     tools
 }
 
+/// The tools of `running` split in two, each in the order of [`Tool`]: those with a
+/// process that routes or may (anything but the window), and those with only their
+/// window open — which moves nothing until the user starts it.
+pub fn active_and_open(running: &[Running]) -> (Vec<Tool>, Vec<Tool>) {
+    tools(running)
+        .into_iter()
+        .partition(|&tool| running.iter().any(|r| r.tool == tool && !r.window))
+}
+
 /// What the user is told, one sentence per tool, in the order of [`Tool`].
 pub fn warnings(running: &[Running]) -> Vec<String> {
     tools(running)
@@ -307,6 +316,23 @@ mod tests {
                  drive this one through it",
             ]
         );
+    }
+
+    #[test]
+    fn a_tool_with_only_its_window_is_open_not_active() {
+        let mut window = running(Tool::Deskflow, None, Some(false));
+        window.window = true;
+        let core = running(Tool::Barrier, Some(Role::Server), None);
+        assert_eq!(
+            active_and_open(&[window.clone(), core.clone()]),
+            (vec![Tool::Barrier], vec![Tool::Deskflow])
+        );
+        let deskflow_core = running(Tool::Deskflow, None, None);
+        assert_eq!(
+            active_and_open(&[window, deskflow_core]),
+            (vec![Tool::Deskflow], vec![])
+        );
+        assert_eq!(active_and_open(&[]), (vec![], vec![]));
     }
 
     #[test]

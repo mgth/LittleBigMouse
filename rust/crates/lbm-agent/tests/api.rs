@@ -382,6 +382,71 @@ fn scan_sharing() -> Vec<lbm_ipc::sharing::Running> {
     }
 }
 
+/// Reported on v6 d51f72d7: Deskflow quit, the bar still said it ran. With the real
+/// scan and the real watch, a process found leaves the state as soon as it ends — no
+/// look in between. The process is this test's own, named like Deskflow's core (a link
+/// to `sleep`); a real Deskflow on the machine may be found too and is left alone.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_sharing_tool_that_quits_leaves_the_state_at_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let sleep = ["/usr/bin/sleep", "/bin/sleep"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .expect("a sleep binary");
+    let core = dir.path().join("deskflow-core");
+    std::os::unix::fs::symlink(sleep, &core).unwrap();
+    let mut child = std::process::Command::new(&core).arg("60").spawn().unwrap();
+    let pid = child.id();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_input_sharing_scan(lbm_agent::input_sharing::scan)
+            .with_input_sharing_exits();
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let ours = move |state: &Value| {
+        state["InputSharing"]
+            .as_array()
+            .is_some_and(|list| list.iter().any(|r| r["Pid"] == pid))
+    };
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(
+        ours(&state["Result"]),
+        "found: {}",
+        state["Result"]["InputSharing"]
+    );
+    // The engine's Start is a moment to look: past it, nothing else looks, so only the
+    // watch can take the process out.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let now = frontend.ask(json!({ "Method": "Snapshot" })).await;
+            if now["Result"]["Engine"] == "Running" {
+                assert!(ours(&now["Result"]));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the engine started");
+
+    child.kill().unwrap();
+    let _ = child.wait();
+    let after = tokio::time::timeout(Duration::from_secs(5), frontend.state(|s| !ours(s)))
+        .await
+        .expect("gone from the state without a new look");
+    assert!(!ours(&after));
+}
+
 /// The other sharing tools are looked for when a window subscribes and when the engine
 /// starts, and are in the state from then on; nothing looks in between.
 #[tokio::test]

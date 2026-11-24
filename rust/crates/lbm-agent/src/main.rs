@@ -307,6 +307,8 @@ fn run(options: Options) -> ExitCode {
             .with_api(calls_rx)
             // Looked for at the moments it matters, never watched.
             .with_input_sharing_scan(lbm_agent::input_sharing::scan)
+            // And no longer said once it has quit: one wait per process, on its end.
+            .with_input_sharing_exits()
             .with_remote_config(config_dir.clone())
             // Off unless `multi-pc.json` says otherwise; then nothing listens or runs.
             .with_peers(lbm_agent::peers::Service::new(

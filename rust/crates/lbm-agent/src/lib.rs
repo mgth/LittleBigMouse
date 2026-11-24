@@ -46,6 +46,7 @@ pub mod probe;
 pub mod reconcile;
 pub mod runtime;
 pub mod schtask;
+pub mod sharing_exits;
 #[cfg(target_os = "linux")]
 pub mod sleep;
 pub mod supervise;

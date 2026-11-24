@@ -17,9 +17,37 @@ fn run() -> std::process::ExitCode {
                 std::process::ExitCode::FAILURE
             }
         },
+        // An administrator's, elevated: approving and withdrawing masters.
+        Some("trust") => command(|| {
+            let mut rest = std::env::args().skip(2);
+            let id = rest.next().ok_or("trust <machine id> [<name>]")?;
+            let name = rest.collect::<Vec<_>>().join(" ");
+            lbm_service::win::commands::trust(&id, &name)
+        }),
+        Some("untrust") => command(|| {
+            let id = std::env::args().nth(2).ok_or("untrust <machine id>")?;
+            lbm_service::win::commands::untrust(&id)
+        }),
+        Some("list") => command(lbm_service::win::commands::list),
         _ => {
-            eprintln!("lbm-service is started by the Service Control Manager (`lbm-service run`)");
+            eprintln!(
+                "lbm-service run                      started by the Service Control Manager\n\
+                 lbm-service trust <id> [<name>]      approve a master (elevated)\n\
+                 lbm-service untrust <id>             withdraw one (elevated)\n\
+                 lbm-service list                     the approved masters"
+            );
             std::process::ExitCode::from(2)
+        }
+    }
+}
+
+#[cfg(windows)]
+fn command(run: impl FnOnce() -> Result<(), String>) -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::ExitCode::FAILURE
         }
     }
 }

@@ -38,6 +38,8 @@ pub enum Event {
     Wanted,
     /// The injector of this session ended.
     Exited(u32),
+    /// `lbm-service trust`/`untrust` changed the approved masters.
+    TrustChanged,
     Stop,
 }
 
@@ -68,6 +70,10 @@ fn serve() -> Result<(), String> {
             if moves_the_console(change.reason) {
                 let _ = control.send(Event::SessionChanged);
             }
+            ServiceControlHandlerResult::NoError
+        }
+        ServiceControl::UserEvent(code) if code.to_raw() == crate::CONTROL_RELOAD_TRUST => {
+            let _ = control.send(Event::TrustChanged);
             ServiceControlHandlerResult::NoError
         }
         _ => ServiceControlHandlerResult::NotImplemented,
@@ -128,6 +134,8 @@ fn moves_the_console(reason: SessionChangeReason) -> bool {
 /// The deciding loop, until `Stop`.
 fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<Event>) {
     let mut supervisor = Supervisor::new(launch::console_session());
+    // Read now and at every change; the listener of step 4 will serve these.
+    let mut trusted = read_trust();
     let mut running: Option<launch::Injector> = None;
     let (exits, exited) = mpsc::channel::<u32>();
     // Exits come on their own channel, forwarded as events, so the wait callbacks
@@ -146,6 +154,10 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
             Event::Stop => break,
             Event::SessionChanged => supervisor.console_changed(launch::console_session()),
             Event::Wanted => supervisor.wanted(),
+            Event::TrustChanged => {
+                trusted = read_trust();
+                None
+            }
             Event::Exited(session) => {
                 supervisor.exited(session);
                 if running.as_ref().is_some_and(|i| i.session == session) {
@@ -184,5 +196,20 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
     }
     if let Some(stopped) = running.take() {
         stopped.stop(STOP_GRACE);
+    }
+    drop(trusted);
+}
+
+/// The approved masters; none when the store cannot be trusted, which is said.
+fn read_trust() -> crate::trust::TrustStore {
+    match super::store::read() {
+        Ok(store) => {
+            eprintln!("[lbm-service] {} approved master(s)", store.masters().len());
+            store
+        }
+        Err(error) => {
+            eprintln!("[lbm-service] {error}");
+            crate::trust::TrustStore::default()
+        }
     }
 }

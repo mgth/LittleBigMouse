@@ -2655,6 +2655,8 @@ version = "0.1.0"
 dependencies = [
  "lbm-admin-only",
  "lbm-ipc",
+ "serde",
+ "serde_json",
  "windows 0.58.0",
  "windows-service",
 ]

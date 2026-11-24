@@ -8,6 +8,8 @@ description = "The Windows service of the multi-PC mode: injects a master's inpu
 
 [dependencies]
 lbm-admin-only = { path = "../lbm-admin-only" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
@@ -17,9 +19,15 @@ version = "0.58"
 features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
     "Win32_System_Pipes",
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ]
 
 [dev-dependencies]

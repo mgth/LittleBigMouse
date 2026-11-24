@@ -1,8 +1,11 @@
-//! The Windows side: the service ([`service`]) and how it launches the injector
-//! ([`launch`]).
+//! The Windows side: the service ([`service`]), how it launches the injector
+//! ([`launch`]), the approved masters ([`store`]) and the commands that change them
+//! ([`commands`]).
 
+pub mod commands;
 pub mod launch;
 pub mod service;
+pub mod store;
 
 use std::path::{Path, PathBuf};
 

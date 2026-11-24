@@ -12,41 +12,30 @@
 //! endpoint has a client, the agent — the other machines' (`ZonesLayout::
 //! set_remote_enterable`, set every cycle from [`Outputs::remote_connected`]). The
 //! virtual cursor is authoritative, so after each routed report its position alone
-//! says where the report goes: a position on this machine is emitted to the virtual
-//! pointer exactly as it always was; a position in another machine's zone is
-//! translated to that machine's own desktop pixels and written to the agent as an
-//! `lbm_ipc::input` batch. Another machine's desktop lies outside this one's (each is
-//! offset to the right of everything else), so the cursor's extent grows to cover them
-//! while they are in play, and what is emitted here is clamped to this desktop and,
-//! while the pointer is away, frozen where it left: the local cursor stays where it
-//! was, at [`Pipeline::local_pos`].
+//! says where the report goes ([`crossing::locate`]): a position on this machine is
+//! emitted to the virtual pointer exactly as it always was; a position in another
+//! machine's zone is translated to that machine's own desktop pixels and written to the
+//! agent as an `lbm_ipc::input` batch. Another machine's desktop lies outside this
+//! one's (each is offset to the right of everything else), so the cursor's extent grows
+//! to cover them while they are in play, and what is emitted here is clamped to this
+//! desktop and, while the pointer is away, frozen where it left: the local cursor stays
+//! where it was, at [`Pipeline::local_pos`].
 //!
-//! Crossing out: `Enter` first, at the landing pixel; then nothing more to the virtual
-//! pointer, and the keyboards are grabbed so that typing follows the pointer. Crossing
-//! back: `Leave`, the keyboards are let go, and emission resumes here from where the
-//! engine landed.
+//! What follows from where the pointer is — the `Enter` and the `Leave`, the
+//! keyboards' grab, where a held key or button is released, coming home, the rescue,
+//! hiding the local cursor — is the platform-neutral [`crossing::Crossing`]'s. This
+//! pipeline is one master among those it serves: it lends the rules, through
+//! [`crossing::Platform`], its virtual cursor, the frame being composed and its
+//! outputs. Putting the pointer back home also has the engine forget where it was
+//! (`MouseEngine::begin_touch`) before it routes again, at the next chance to take its
+//! lock without waiting.
 //!
-//! ## The local cursor
+//! ## What the rules rely on here
 //!
-//! The compositor would go on drawing the frozen pointer, so it is hidden while the
-//! pointer is away ([`super::hider`]): [`Outputs::hide_cursor`] once the `Enter` is
-//! queued, [`Outputs::show_cursor`] every time the pointer comes home, whichever way.
-//! Once the surface that hides it is in place, the frozen pointer is moved onto it
-//! ([`Outputs::cursor_hiding_spot`]), a few pixels inside the edge it left by, and
-//! stays there; coming home starts from where it left, not from there.
-//!
-//! ## Held keys and buttons
-//!
-//! One rule, in both directions: **a release goes where its press went.** Each side
-//! then sees a press and its release, never one without the other, whatever the
-//! pointer did in between.
-//!
-//! * A button or key pressed here and held across the border is released here: a
-//!   drag that reaches the border ends at the border when the button comes up, and the
-//!   other machine never sees a release it had no press for. Its own motion meanwhile
-//!   goes on over there, buttonless. Dragging across machines is not supported
-//!   (docs/multi-pc.md), and this is the form of "not supported" that leaves nothing
-//!   stuck.
+//! * The frame's buttons and keys are sorted by evdev type and code: mouse buttons
+//!   (`BTN_LEFT..=BTN_TASK`) and keyboard usages go to the rules; tablet tools and
+//!   joystick buttons stay here, meaning nothing over there; wheels go over in 120ths
+//!   of a detent, and scancodes (`EV_MSC`) describe this machine's keyboard.
 //! * Pressed over there and released after coming home: `Leave` released it over there
 //!   (the remote's session releases everything the stream left pressed), and the
 //!   release that comes later is handed to this machine's virtual device, which drops a
@@ -59,38 +48,10 @@
 //!   release from another device). Until the user lets go, that keyboard keeps typing
 //!   on this machine; the next cycle after, it is grabbed. A press that lands in the
 //!   instant between the last read and the grab is the one case this does not cover.
-//! * Key autorepeat is forwarded as a repeated press, which the remote turns into its
-//!   own repeat; button repeats do not exist and are dropped.
-//!
-//! ## Coming home
-//!
-//! When a hop of the input stream ends, the pointer is home (docs/multi-pc.md): the
-//! virtual cursor goes back to the last position it had here, the keyboards are let go
-//! and the engine forgets it was elsewhere. That happens when the client goes away,
-//! when a batch cannot be queued (no client, a connection that closed, or a full queue
-//! — which also closes the connection, [`crate::ipc::input::Driver::send`]), when a
-//! reloaded layout no longer has the machine the pointer is on, when the rescue
-//! shortcut fires, and when the router goes away, which is how Stop, pause, suspend,
-//! the rescue's unhook and quit all end ([`Pipeline::shut_down`]). Without a client,
-//! the other machines' zones are not in play and their borders are walls. `Leave` is
-//! sent whenever it can be; when it cannot, the connection is closing, and its end
-//! means the same thing to the remote.
-//!
-//! ## The rescue
-//!
-//! With the keyboards grabbed the portal's global shortcut never fires: the compositor
-//! sees no key. The configured shortcut is therefore watched for in the grabbed stream
-//! ([`super::keys::RescueKeys`]), with the same hold, and fires the same
-//! `daemon::rescue_fired` after bringing the pointer home. Its final key is kept back
-//! while it is held, so the other machine never sees it; given up early, it is
-//! forwarded late, in order.
-//!
-//! ## One remote
-//!
-//! Batches carry no destination: the agent relays them to the one remote it drives. A
-//! layout with zones of two machines is routed over both by the engine, but crossing
-//! from one to the other is treated as leaving the one being driven, and the pointer
-//! comes home.
+//! * With the keyboards grabbed the portal's global shortcut never fires: the
+//!   compositor sees no key. That is why the rules watch for the rescue in the grabbed
+//!   stream.
+//! * The local cursor is hidden by [`super::hider`].
 //!
 //! ## Cost
 //!
@@ -102,71 +63,45 @@ use std::sync::TryLockError;
 use std::time::Instant;
 
 use evdev::{EventType, InputEvent};
-use lbm_ipc::input::InputEvent as Wire;
 
 use crate::engine::cursor::CursorEnv;
 use crate::engine::MouseEngine;
 use crate::geometry::{Point, Rect};
 use crate::hook::hot_path::{count_event, route_move_then, Routed};
 use crate::shared::Shared;
-use crate::zones::HostPoint;
 
 use super::cursor::EvdevCursor;
 use super::frame::PumpBuffers;
-use super::keys::{HeldSet, RescueKeys, Verdict};
 use super::probe::{extents, try_device_bounds};
 use super::{BTN_MOUSE_RANGE, BTN_RANGE, BTN_TRIGGER_HAPPY_RANGE};
+use crate::hook::crossing::{self, Crossing, Input, Place, Platform, Press};
 
 /// Everything a cycle writes to: this machine's two virtual devices, the input stream,
-/// and the keyboards' exclusivity. The router's implementation owns the devices; the
-/// tests' records what it is handed.
+/// the keyboards' exclusivity and the cursor's visibility. The router's implementation
+/// owns the devices; the tests' records what it is handed.
 pub(crate) trait Outputs {
     /// One frame for the virtual pointer.
     fn pointer(&mut self, frame: &[InputEvent]);
     /// One frame for the virtual keyboard.
     fn keyboard(&mut self, frame: &[InputEvent]);
-    /// The input stream's client to drive another machine through, if it has one. A
-    /// client that replaced another has another value.
+    /// See [`crossing::Platform::remote_client`].
     fn remote_client(&self) -> Option<u64>;
-    /// Whether the input stream has a client to drive another machine through.
+    /// See [`crossing::Platform::remote_connected`].
     fn remote_connected(&self) -> bool {
         self.remote_client().is_some()
     }
-    /// Queues one encoded batch without waiting; `false` when it will never be sent.
+    /// See [`crossing::Platform::send_remote`].
     fn send_remote(&mut self, batch: Vec<u8>) -> bool;
-    /// Grabs every keyboard that has no key held and is not grabbed yet.
+    /// See [`crossing::Platform::grab_keyboards`].
     fn grab_keyboards(&mut self);
-    /// Lets every keyboard go.
+    /// See [`crossing::Platform::release_keyboards`].
     fn release_keyboards(&mut self);
-    /// The pointer went to another machine from `from`, where it is frozen: hide this
-    /// machine's cursor.
+    /// See [`crossing::Platform::hide_cursor`].
     fn hide_cursor(&mut self, from: Point<i32>);
-    /// Where the frozen pointer is to go to be under what hides the cursor, once that
-    /// is in place; `None` until then, and when nothing hides it.
+    /// See [`crossing::Platform::cursor_hiding_spot`].
     fn cursor_hiding_spot(&mut self) -> Option<Point<i32>>;
-    /// The pointer is home: show this machine's cursor.
+    /// See [`crossing::Platform::show_cursor`].
     fn show_cursor(&mut self);
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Side {
-    Local,
-    Remote,
-}
-
-/// Where a routed position is, as far as the next frame is concerned.
-#[derive(Debug, PartialEq)]
-enum Place {
-    Local,
-    /// On another machine, the pointer coming from here.
-    Enter {
-        pixel: Point<i32>,
-        host: String,
-    },
-    /// On the machine being driven.
-    Remote(Point<i32>),
-    /// Neither here nor on the machine being driven.
-    Away,
 }
 
 /// The pump's state between devices and outputs.
@@ -177,28 +112,109 @@ pub(crate) struct Pipeline {
     /// Sub-pixel remainder of the sensitivity-scaled raw motion integration.
     rem: (f64, f64),
     debug: bool,
-    side: Side,
-    /// The last position the pointer had on this machine: where the local cursor
-    /// stays while the pointer is away, and where it comes back to.
-    home: Point<i32>,
-    /// The last pixel sent to the other machine.
-    sent: Point<i32>,
-    /// Where the frozen pointer was moved to be under what hides the cursor, while the
-    /// pointer is away.
-    parked: Option<Point<i32>>,
-    /// The machine being driven.
-    host: String,
-    /// The input stream's client the `Enter` went to: the only one that knows the
-    /// pointer is over there.
-    client: Option<u64>,
-    /// Buttons and keys pressed on the other machine and not released there yet.
-    remote_held: HeldSet,
     /// The engine still tracks the pointer where it was before it came home, and has
     /// to be told before it routes again (`MouseEngine::begin_touch`).
     resync: bool,
-    rescue: RescueKeys,
-    /// The batch being composed; reused.
-    wire: Vec<Wire>,
+    /// Where the pointer is between this machine and the others, and the rules of
+    /// going from one to the other.
+    crossing: Crossing,
+}
+
+/// What the crossing rules are lent of a pipeline for one call: its pointer and
+/// the frame being dispatched, with the outputs they go to.
+struct Machine<'a, O> {
+    bufs: &'a mut PumpBuffers,
+    env: &'a mut EvdevCursor,
+    resync: &'a mut bool,
+    out: &'a mut O,
+}
+
+impl<O: Outputs> Platform for Machine<'_, O> {
+    fn remote_client(&self) -> Option<u64> {
+        self.out.remote_client()
+    }
+
+    fn remote_connected(&self) -> bool {
+        self.out.remote_connected()
+    }
+
+    fn send_remote(&mut self, batch: Vec<u8>) -> bool {
+        self.out.send_remote(batch)
+    }
+
+    fn grab_keyboards(&mut self) {
+        self.out.grab_keyboards();
+    }
+
+    fn release_keyboards(&mut self) {
+        self.out.release_keyboards();
+    }
+
+    fn hide_cursor(&mut self, from: Point<i32>) {
+        self.out.hide_cursor(from);
+    }
+
+    fn cursor_hiding_spot(&mut self) -> Option<Point<i32>> {
+        self.out.cursor_hiding_spot()
+    }
+
+    fn show_cursor(&mut self) {
+        self.out.show_cursor();
+    }
+
+    fn pointer(&self) -> Point<i32> {
+        self.env.virtual_pos
+    }
+
+    fn return_pointer(&mut self, home: Point<i32>) {
+        self.env.virtual_pos = home;
+        self.env.release_clip();
+        // Told before the engine routes again (`Pipeline::resync_with`).
+        *self.resync = true;
+    }
+
+    fn emit_pointer(&mut self, at: Point<i32>) {
+        emit_at(self.bufs, self.env.device, at, self.out);
+    }
+
+    fn pointer_pending(&self) -> bool {
+        self.bufs.pointer_pending()
+    }
+
+    fn emit_keyboard(&mut self) {
+        let out = &mut *self.out;
+        self.bufs.take_keyboard_frame(|frame| out.keyboard(frame));
+    }
+
+    fn take_remote_events(&mut self, mut take: impl FnMut(Input) -> bool) -> (i32, i32) {
+        let wheels = self.bufs.wheel_120ths();
+        self.bufs.retain_local(|ev| match ev.event_type() {
+            // Wheels are counted above; scancodes describe this machine's keyboard.
+            EventType::RELATIVE | EventType::MISC => false,
+            EventType::KEY if BTN_MOUSE_RANGE.contains(&ev.code()) => {
+                !take(Input::Button(ev.code(), Press::from_ev_key(ev.value())))
+            }
+            // Tablet tools and joystick buttons mean nothing over there.
+            EventType::KEY
+                if BTN_RANGE.contains(&ev.code())
+                    || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
+            {
+                true
+            }
+            EventType::KEY => !take(Input::Key(ev.code(), Press::from_ev_key(ev.value()))),
+            _ => true,
+        });
+        wheels
+    }
+}
+
+/// The pending buttons and wheels as one frame of the virtual pointer, at `p`.
+/// Clamped to the desktop the device spans: nothing emitted here may land outside it,
+/// whatever the virtual cursor is doing.
+fn emit_at(bufs: &mut PumpBuffers, d: Rect<i32>, p: Point<i32>, out: &mut impl Outputs) {
+    let ax = p.x().min(d.right() - 1).max(d.left()) - d.left();
+    let ay = p.y().min(d.bottom() - 1).max(d.top()) - d.top();
+    out.pointer(bufs.pointer_frame(ax, ay));
 }
 
 impl Pipeline {
@@ -210,46 +226,55 @@ impl Pipeline {
             sens,
             rem: (0.0, 0.0),
             debug,
-            side: Side::Local,
-            home,
-            sent: home,
-            parked: None,
-            host: String::new(),
-            client: None,
-            remote_held: HeldSet::default(),
             resync: false,
-            rescue: RescueKeys::default(),
-            wire: Vec::with_capacity(16),
+            crossing: Crossing::new(home),
         }
     }
 
+    /// The crossing rules, and what they are lent of this pipeline and `out`.
+    fn split<'a, O: Outputs>(&'a mut self, out: &'a mut O) -> (&'a mut Crossing, Machine<'a, O>) {
+        let Pipeline {
+            bufs,
+            env,
+            resync,
+            crossing,
+            ..
+        } = self;
+        (
+            crossing,
+            Machine {
+                bufs,
+                env,
+                resync,
+                out,
+            },
+        )
+    }
+
     pub(super) fn is_remote(&self) -> bool {
-        self.side == Side::Remote
+        self.crossing.is_remote()
     }
 
     /// Where the pointer is on this machine: the virtual cursor, or where it left
     /// from while it is away.
     pub(super) fn local_pos(&self) -> Point<i32> {
-        match self.side {
-            Side::Local => self.env.virtual_pos,
-            Side::Remote => self.home,
+        if self.crossing.is_remote() {
+            self.crossing.home()
+        } else {
+            self.env.virtual_pos
         }
     }
 
     /// The local position plus the pending buttons and wheels as one frame of the
-    /// virtual pointer. Clamped to the desktop the device spans: nothing emitted here
-    /// may land outside it, whatever the virtual cursor is doing.
+    /// virtual pointer, clamped to the desktop the device spans. While the pointer is
+    /// away, the frozen pointer's.
     pub(super) fn emit_local(&mut self, out: &mut impl Outputs) {
-        // A frame while the pointer is away — a release of a button pressed here — must
-        // not take it off what hides the cursor.
-        let p = match self.side {
-            Side::Remote => self.parked.unwrap_or(self.home),
-            Side::Local => self.local_pos(),
+        let p = if self.crossing.is_remote() {
+            self.crossing.frozen_at()
+        } else {
+            self.env.virtual_pos
         };
-        let d = self.env.device;
-        let ax = p.x().min(d.right() - 1).max(d.left()) - d.left();
-        let ay = p.y().min(d.bottom() - 1).max(d.top()) - d.top();
-        out.pointer(self.bufs.pointer_frame(ax, ay));
+        emit_at(&mut self.bufs, self.env.device, p, out);
     }
 
     /// The start of a cycle: catch up with the input stream's client and the layout,
@@ -260,24 +285,10 @@ impl Pipeline {
         shared: &'static Shared,
         out: &mut impl Outputs,
     ) -> Option<Rect<i32>> {
-        let client = out.remote_client();
-        let connected = client.is_some();
-        if self.is_remote() && !connected {
-            eprintln!(
-                "[LittleBigMouse.Hook] evdev: the input stream has no client, the pointer comes home"
-            );
-            self.go_home(None, out);
-        } else if self.is_remote() && client != self.client {
-            // The agent closed the stream and opened another between two cycles — it
-            // does after the other machine dropped input. The new client never read
-            // the `Enter`: what it is sent now would be ignored, with the keyboards
-            // still grabbed here. Its `Leave` is one it has nothing to do with.
-            eprintln!(
-                "[LittleBigMouse.Hook] evdev: the input stream has another client, the pointer comes home"
-            );
-            self.go_home(None, out);
-        }
-        self.check_rescue(shared, Instant::now(), out);
+        let connected = {
+            let (crossing, mut machine) = self.split(out);
+            crossing.begin_cycle(shared, &mut machine)
+        };
 
         // Routing-thread rule: never block. On contention nothing is updated and the
         // next cycle asks again.
@@ -291,17 +302,10 @@ impl Pipeline {
             // which the other machines are not in play yet. Rebuilding allocates, but
             // only on such a change, never per report.
             engine.layout.set_remote_enterable(connected);
-            if self.is_remote() {
-                let here = engine
-                    .layout
-                    .host_point(self.env.virtual_pos)
-                    .is_some_and(|p| p.host == Some(self.host.as_str()));
-                if !here {
-                    eprintln!(
-                        "[LittleBigMouse.Hook] evdev: the layout no longer has the machine the pointer is on, the pointer comes home"
-                    );
-                    self.go_home(Some(&mut engine), out);
-                }
+            {
+                let pos = self.env.virtual_pos;
+                let (crossing, mut machine) = self.split(out);
+                crossing.check_layout(&engine.layout, pos, &mut machine);
             }
             if self.resync {
                 self.resync_with(&mut engine);
@@ -317,32 +321,17 @@ impl Pipeline {
         try_device_bounds(shared, local)
     }
 
-    /// The end of a cycle: a keyboard that had a key held when the pointer left can be
-    /// grabbed once it has none; and a rescue held long enough fires.
+    /// The end of a cycle: see [`Crossing::end_cycle`].
     pub(super) fn end_cycle(&mut self, shared: &'static Shared, out: &mut impl Outputs) {
-        if self.is_remote() {
-            out.grab_keyboards();
-            if self.parked.is_none() {
-                if let Some(spot) = out.cursor_hiding_spot() {
-                    eprintln!(
-                        "[LittleBigMouse.Hook] evdev: the frozen pointer moves to ({},{}), onto what hides it",
-                        spot.x(),
-                        spot.y()
-                    );
-                    self.parked = Some(spot);
-                    self.emit_local(out);
-                }
-            }
-        }
-        self.check_rescue(shared, Instant::now(), out);
+        let (crossing, mut machine) = self.split(out);
+        crossing.end_cycle(shared, &mut machine);
     }
 
     /// The router is going away — Stop, pause, suspend, the rescue's unhook, quit: the
     /// pointer comes home while the devices are still there to say so.
     pub(super) fn shut_down(&mut self, out: &mut impl Outputs) {
-        if self.is_remote() {
-            self.go_home(None, out);
-        }
+        let (crossing, mut machine) = self.split(out);
+        crossing.shut_down(&mut machine);
     }
 
     /// Run the engine over the accumulated motion, then emit the frame where the
@@ -407,16 +396,16 @@ impl Pipeline {
             let routed = if self.resync {
                 (Routed::Contended, None)
             } else {
-                let remote = self.is_remote();
-                let Pipeline { env, host, .. } = self;
+                let Pipeline { env, crossing, .. } = self;
+                let driving = crossing.driving();
                 route_move_then(&shared.engine, env, candidate, |engine, env, handled| {
-                    locate(engine, env, candidate, handled, remote, host)
+                    locate(engine, env, candidate, handled, driving)
                 })
             };
             match routed {
                 (Routed::Contended, _) if !self.is_remote() => {
                     self.env.virtual_pos = self.env.clamp(candidate);
-                    self.home = self.env.virtual_pos;
+                    self.crossing.set_home(self.env.virtual_pos);
                     self.emit_local(out);
                     return;
                 }
@@ -448,365 +437,66 @@ impl Pipeline {
         self.dispatch(shared, place, out);
     }
 
-    /// Sends the frame where `place` says the pointer now is, crossing to or from
-    /// another machine first when it has just done so. `None`: it did not move.
+    /// Sends the frame where `place` says the pointer now is: see
+    /// [`Crossing::dispatch`].
     fn dispatch(&mut self, shared: &'static Shared, place: Option<Place>, out: &mut impl Outputs) {
-        match (self.side, place) {
-            (Side::Local, Some(Place::Enter { pixel, host })) => {
-                if !(out.remote_connected() && self.enter(shared, pixel, host, out)) {
-                    // Nobody to take it — the client left between the cycle's start
-                    // and this report: the border is a wall.
-                    self.go_home(None, out);
-                    self.local_leftovers(out);
-                }
-            }
-            (Side::Local, _) => self.local_frame(out),
-            (Side::Remote, None) => self.remote_frame(None, out),
-            (Side::Remote, Some(Place::Remote(pixel))) => self.remote_frame(Some(pixel), out),
-            (Side::Remote, Some(Place::Local)) => {
-                // The engine brought it back across a border: it landed where it is.
-                self.wire.clear();
-                self.wire.push(Wire::Leave);
-                self.send(out);
-                self.leave(out);
-                self.local_frame(out);
-            }
-            (Side::Remote, Some(Place::Enter { .. } | Place::Away)) => {
-                self.go_home(None, out);
-                self.local_leftovers(out);
-            }
-        }
-    }
-
-    /// The ordinary frame: everything pending, to this machine's devices.
-    fn local_frame(&mut self, out: &mut impl Outputs) {
-        self.home = self.env.virtual_pos;
-        self.emit_local(out);
-        self.bufs.take_keyboard_frame(|frame| out.keyboard(frame));
-    }
-
-    /// Crossing out. `false` when the `Enter` could not be queued: the pointer stays.
-    fn enter(
-        &mut self,
-        shared: &Shared,
-        pixel: Point<i32>,
-        host: String,
-        out: &mut impl Outputs,
-    ) -> bool {
-        // Read when it may be needed, and never waited for: a Load holding the lock
-        // leaves the shortcut that was last read.
-        if let Ok(text) = shared.rescue_shortcut.try_lock() {
-            self.rescue.set(&text);
-        }
-        self.rescue.reset();
-        self.side = Side::Remote;
-        self.host = host;
-        self.client = out.remote_client();
-        self.sent = pixel;
-        self.wire.clear();
-        self.wire.push(Wire::Enter {
-            x: pixel.x(),
-            y: pixel.y(),
-        });
-        self.take_remote_events(Instant::now());
-        if !self.send(out) {
-            self.side = Side::Local;
-            self.remote_held.clear();
-            return false;
-        }
-        eprintln!(
-            "[LittleBigMouse.Hook] evdev: the pointer is on {}",
-            self.host
-        );
-        self.parked = None;
-        out.hide_cursor(self.home);
-        out.grab_keyboards();
-        self.local_leftovers(out);
-        true
-    }
-
-    /// A frame while the pointer is away: its motion, and whatever it pressed or
-    /// released there, to the other machine; what it released of this one, here.
-    fn remote_frame(&mut self, pixel: Option<Point<i32>>, out: &mut impl Outputs) {
-        self.wire.clear();
-        if let Some(pixel) = pixel.filter(|&p| p != self.sent) {
-            self.sent = pixel;
-            self.wire.push(Wire::Motion {
-                x: pixel.x(),
-                y: pixel.y(),
-            });
-        }
-        self.take_remote_events(Instant::now());
-        if !self.send(out) {
-            eprintln!(
-                "[LittleBigMouse.Hook] evdev: the input stream took no more, the pointer comes home"
-            );
-            self.go_home(None, out);
-        }
-        self.local_leftovers(out);
-    }
-
-    /// Emits what a frame left for this machine while the pointer is away — releases
-    /// of what was pressed here — if anything.
-    fn local_leftovers(&mut self, out: &mut impl Outputs) {
-        if self.bufs.pointer_pending() {
-            self.emit_local(out);
-        }
-        self.bufs.take_keyboard_frame(|frame| out.keyboard(frame));
-    }
-
-    /// Moves this frame's buttons, wheels and keys that belong to the other machine
-    /// into the batch, leaving in the frame those that belong here.
-    fn take_remote_events(&mut self, now: Instant) {
-        let (horizontal, vertical) = self.bufs.wheel_120ths();
-        let Pipeline {
-            bufs,
-            wire,
-            remote_held,
-            rescue,
-            ..
-        } = self;
-        bufs.retain_local(|ev| match ev.event_type() {
-            // Wheels are counted above; scancodes describe this machine's keyboard.
-            EventType::RELATIVE | EventType::MISC => false,
-            EventType::KEY if BTN_MOUSE_RANGE.contains(&ev.code()) => {
-                !route_button(wire, remote_held, ev.code(), ev.value())
-            }
-            // Tablet tools and joystick buttons mean nothing over there.
-            EventType::KEY
-                if BTN_RANGE.contains(&ev.code())
-                    || BTN_TRIGGER_HAPPY_RANGE.contains(&ev.code()) =>
-            {
-                true
-            }
-            EventType::KEY => !route_key(wire, remote_held, rescue, ev.code(), ev.value(), now),
-            _ => true,
-        });
-        if (horizontal, vertical) != (0, 0) {
-            wire.push(Wire::Wheel {
-                horizontal,
-                vertical,
-            });
-        }
+        let (crossing, mut machine) = self.split(out);
+        crossing.dispatch(shared, place, &mut machine);
     }
 
     /// One key of an observed keyboard. `grabbed`: the compositor does not see it, so
     /// it is this process's to forward.
     pub(super) fn keyboard_key(&mut self, code: u16, value: i32, grabbed: bool, now: Instant) {
         self.env.track_ctrl(code, value);
-        if grabbed && self.is_remote() {
-            // Not taken: the release of a key this stream never pressed, which has
-            // nowhere to go — the compositor cannot receive from a grabbed keyboard.
-            route_key(
-                &mut self.wire,
-                &mut self.remote_held,
-                &mut self.rescue,
-                code,
-                value,
-                now,
-            );
+        if grabbed {
+            self.crossing
+                .grabbed_key(code, Press::from_ev_key(value), now);
         }
     }
 
     /// Sends the keys [`Self::keyboard_key`] collected from one keyboard's drain.
     pub(super) fn flush_keys(&mut self, shared: &'static Shared, out: &mut impl Outputs) {
-        if self.wire.is_empty() {
-            return;
-        }
-        if !self.send(out) {
-            eprintln!(
-                "[LittleBigMouse.Hook] evdev: the input stream took no more, the pointer comes home"
-            );
-            self.go_home(None, out);
-        }
-        self.check_rescue(shared, Instant::now(), out);
+        let (crossing, mut machine) = self.split(out);
+        crossing.flush_keys(shared, &mut machine);
     }
 
     /// Fires the rescue if its shortcut has been held long enough in the grabbed
-    /// stream: home first, so that the `Leave` releases the modifiers over there.
+    /// stream: see [`Crossing::check_rescue`].
+    #[cfg(test)]
     pub(super) fn check_rescue(
         &mut self,
         shared: &'static Shared,
         now: Instant,
         out: &mut impl Outputs,
     ) {
-        if self.is_remote() && self.rescue.due(now) {
-            self.go_home(None, out);
-            crate::daemon::rescue_fired(shared);
-        }
-    }
-
-    /// Encodes and queues the batch being composed. An empty one is not sent.
-    fn send(&mut self, out: &mut impl Outputs) -> bool {
-        if self.wire.is_empty() {
-            return true;
-        }
-        let mut batch = Vec::with_capacity(self.wire.len() * 9);
-        for event in &self.wire {
-            event.encode(&mut batch);
-        }
-        self.wire.clear();
-        out.send_remote(batch)
-    }
-
-    /// The other machine is no longer driven: what it holds pressed, its `Leave`
-    /// released.
-    fn leave(&mut self, out: &mut impl Outputs) {
-        self.side = Side::Local;
-        self.remote_held.clear();
-        self.rescue.reset();
-        self.parked = None;
-        out.show_cursor();
-        out.release_keyboards();
-        eprintln!("[LittleBigMouse.Hook] evdev: the pointer is back");
-    }
-
-    /// Brings the pointer back to the last position it had here, whatever the engine
-    /// thought. `engine` when its lock is already held; otherwise the engine is told
-    /// before it routes again.
-    fn go_home(&mut self, engine: Option<&mut MouseEngine>, out: &mut impl Outputs) {
-        if self.is_remote() {
-            self.wire.clear();
-            self.wire.push(Wire::Leave);
-            // When this fails the connection is closing, and its end is a Leave too.
-            self.send(out);
-            self.leave(out);
-        }
-        self.env.virtual_pos = self.home;
-        self.env.release_clip();
-        match engine {
-            Some(engine) => self.resync_with(engine),
-            None => self.resync = true,
-        }
-        self.emit_local(out);
+        let (crossing, mut machine) = self.split(out);
+        crossing.check_rescue(shared, now, &mut machine);
     }
 
     /// Drops the engine's crossing history and puts the cursor back at home: the next
     /// report starts afresh from the zone it is in.
     fn resync_with(&mut self, engine: &mut MouseEngine) {
         engine.begin_touch(&mut self.env);
-        self.env.virtual_pos = self.home;
+        self.env.virtual_pos = self.crossing.home();
         self.resync = false;
     }
 }
 
-/// Where a routed report leaves the pointer. Only a position outside this desktop is
-/// looked up: the other machines' desktops lie outside it, so a position inside is
-/// this machine's without asking.
+/// Where a routed report leaves the pointer: what the caller will commit — the
+/// engine's verdict, or the clamped candidate — located by [`crossing::locate`].
 fn locate(
     engine: &MouseEngine,
     env: &EvdevCursor,
     candidate: Point<i32>,
     handled: bool,
-    remote: bool,
-    host: &str,
+    driving: Option<&str>,
 ) -> Place {
-    // What the caller will commit: the engine's verdict, or the clamped candidate.
     let pos = if handled {
         env.virtual_pos
     } else {
         env.clamp(candidate)
     };
-    if !remote && env.device.contains(pos) {
-        return Place::Local;
-    }
-    match engine.layout.host_point(pos) {
-        Some(HostPoint { host: None, .. }) => Place::Local,
-        Some(HostPoint {
-            host: Some(there),
-            pixel,
-        }) if remote => {
-            if there == host {
-                Place::Remote(pixel)
-            } else {
-                Place::Away
-            }
-        }
-        Some(HostPoint {
-            host: Some(there),
-            pixel,
-        }) => Place::Enter {
-            pixel,
-            host: there.to_owned(),
-        },
-        None if remote => Place::Away,
-        None => Place::Local,
-    }
-}
-
-/// A mouse button while the pointer is away: `true` when it went into the batch.
-fn route_button(wire: &mut Vec<Wire>, held: &mut HeldSet, code: u16, value: i32) -> bool {
-    match value {
-        1 => {
-            held.insert(code);
-            wire.push(Wire::Button {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        // Released where it was pressed.
-        0 if held.remove(code) => {
-            wire.push(Wire::Button {
-                code,
-                pressed: false,
-            });
-            true
-        }
-        0 => false,
-        // A repeat goes where its press went; a button's means nothing anywhere.
-        _ => held.contains(code),
-    }
-}
-
-/// A key of the grabbed stream while the pointer is away: `true` when it was taken —
-/// into the batch, or kept back as the rescue's final key.
-fn route_key(
-    wire: &mut Vec<Wire>,
-    held: &mut HeldSet,
-    rescue: &mut RescueKeys,
-    code: u16,
-    value: i32,
-    now: Instant,
-) -> bool {
-    match rescue.filter(code, value, now) {
-        Verdict::Hold => return true,
-        Verdict::Release(kept) => {
-            held.insert(kept);
-            wire.push(Wire::Key {
-                code: kept,
-                pressed: true,
-            });
-        }
-        Verdict::Pass => {}
-    }
-    match value {
-        1 => {
-            held.insert(code);
-            wire.push(Wire::Key {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        0 if held.remove(code) => {
-            wire.push(Wire::Key {
-                code,
-                pressed: false,
-            });
-            true
-        }
-        0 => false,
-        // Autorepeat: the remote repeats an injected key only when told to.
-        _ if held.contains(code) => {
-            wire.push(Wire::Key {
-                code,
-                pressed: true,
-            });
-            true
-        }
-        _ => false,
-    }
+    crossing::locate(&engine.layout, pos, env.device.contains(pos), driving)
 }
 
 #[cfg(test)]
@@ -821,11 +511,12 @@ mod tests {
     use std::time::Duration;
 
     use evdev::{AbsoluteAxisCode, KeyCode, RelativeAxisCode};
+    use lbm_ipc::input::InputEvent as Wire;
     use lbm_ipc::input::{decode, read_batch};
 
     use super::super::frame::Frame;
-    use super::super::keys::HOLD;
     use crate::engine::event::MouseEventArg;
+    use crate::hook::crossing::keys::HOLD;
     use crate::ipc::input::{Driver, Outlet};
     use crate::zones::ZonesLayout;
 
@@ -1077,36 +768,6 @@ mod tests {
     }
 
     #[test]
-    fn keys_go_to_the_other_machine_only_while_the_pointer_is_there() {
-        let mut rig = Rig::new(true);
-        rig.type_key(KEY_A, 1);
-        rig.type_key(KEY_A, 0);
-        assert!(rig.out.sent.is_empty(), "typed here: {:?}", rig.out.sent);
-
-        rig.go_over();
-        rig.type_key(KEY_A, 1);
-        rig.type_key(KEY_A, 2);
-        rig.type_key(KEY_A, 0);
-        assert_eq!(
-            rig.out.sent[1..],
-            [
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: true
-                },
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: true
-                },
-                Wire::Key {
-                    code: KEY_A,
-                    pressed: false
-                },
-            ]
-        );
-    }
-
-    #[test]
     fn a_grabbed_mouses_own_keys_follow_the_pointer_too() {
         let mut rig = Rig::new(true);
         rig.go_over();
@@ -1206,19 +867,6 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_that_takes_no_more_brings_the_pointer_home() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.out.accepting = false;
-        rig.move_by(10, 0);
-
-        assert!(!rig.pipe.is_remote());
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-        assert_eq!(rig.local_cursor(), START);
-    }
-
-    #[test]
     fn a_layout_without_the_machine_brings_the_pointer_home() {
         let mut rig = Rig::new(true);
         rig.go_over();
@@ -1260,48 +908,6 @@ mod tests {
     }
 
     #[test]
-    fn going_away_brings_the_pointer_home_first() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.pipe.shut_down(&mut rig.out);
-        assert!(!rig.pipe.is_remote());
-        assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-        assert_eq!(rig.local_cursor(), START);
-    }
-
-    #[test]
-    fn the_rescue_held_over_there_brings_the_pointer_home_and_never_sends_its_key() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
-            rig.type_key(code, 1);
-        }
-        rig.type_key(KEY_M, 1);
-        rig.type_key(KEY_M, 2);
-        rig.pipe
-            .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.out);
-
-        assert!(!rig.pipe.is_remote());
-        assert!(
-            !rig.shared.want_hook.load(Ordering::SeqCst),
-            "the rescue's unhook was asked for"
-        );
-        assert_eq!(rig.out.sent.last(), Some(&Wire::Leave));
-        assert!(
-            !rig.out
-                .sent
-                .iter()
-                .any(|e| matches!(e, Wire::Key { code: KEY_M, .. })),
-            "{:?}",
-            rig.out.sent
-        );
-        assert_eq!(rig.out.releases, 1);
-        assert_eq!(rig.out.shows, 1);
-    }
-
-    #[test]
     fn a_button_pressed_here_is_released_here_even_from_over_there() {
         let mut rig = Rig::new(true);
         rig.cycle(&[key(BTN_LEFT, 1), syn()]);
@@ -1320,48 +926,6 @@ mod tests {
         let frame = rig.out.pointer.last().unwrap();
         assert!(frame.contains(&(1, BTN_LEFT, 0)), "{frame:?}");
         assert_eq!(rig.local_cursor(), START, "the local cursor did not move");
-    }
-
-    #[test]
-    fn a_button_pressed_over_there_is_released_there_by_the_leave() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.cycle(&[key(BTN_LEFT, 1), syn()]);
-        rig.move_by(-40, 0);
-        rig.cycle(&[key(BTN_LEFT, 0), syn()]);
-
-        assert_eq!(
-            rig.out.sent,
-            [
-                Wire::Enter { x: 0, y: 500 },
-                Wire::Button {
-                    code: BTN_LEFT,
-                    pressed: true
-                },
-                Wire::Leave,
-            ]
-        );
-    }
-
-    #[test]
-    fn a_key_held_over_there_is_released_there_by_the_leave_and_not_again() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.type_key(KEY_LEFTCTRL, 1);
-        rig.move_by(-40, 0);
-        rig.type_key(KEY_LEFTCTRL, 0);
-
-        assert_eq!(
-            rig.out.sent,
-            [
-                Wire::Enter { x: 0, y: 500 },
-                Wire::Key {
-                    code: KEY_LEFTCTRL,
-                    pressed: true
-                },
-                Wire::Leave,
-            ]
-        );
     }
 
     #[test]
@@ -1410,17 +974,6 @@ mod tests {
     }
 
     // --- the local cursor ----------------------------------------------------
-
-    #[test]
-    fn the_cursor_is_hidden_once_on_crossing_out_after_the_enter_is_queued() {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.move_by(10, 4);
-        rig.move_by(10, 4);
-        // From where the pointer last was here; the Enter was the first thing sent.
-        assert_eq!(rig.out.hides, [(START, 1)]);
-        assert_eq!(rig.out.shows, 0);
-    }
 
     #[test]
     fn the_cursor_is_never_hidden_while_the_pointer_stays_here() {
@@ -1486,26 +1039,6 @@ mod tests {
             assert_eq!(rig.out.shows, 1, "{way}: shown once only");
             assert_eq!(rig.out.hides.len(), 1, "{way}: hidden once, on the way out");
         }
-    }
-
-    #[test]
-    fn the_frozen_pointer_moves_onto_what_hides_it_once_it_is_in_place_and_comes_home_from_where_it_left(
-    ) {
-        let mut rig = Rig::new(true);
-        rig.go_over();
-        rig.move_by(5, 0);
-        assert!(rig.out.pointer.is_empty(), "nothing in place yet");
-
-        rig.out.spot = Some(Point::new(1915, 500));
-        rig.cycle(&[]);
-        assert_eq!(rig.local_cursor(), (1915, 500));
-        rig.cycle(&[]);
-        rig.move_by(5, 0);
-        assert_eq!(rig.out.pointer.len(), 1, "moved there once");
-
-        // Home is where it left, not where it hid.
-        rig.pipe.shut_down(&mut rig.out);
-        assert_eq!(rig.local_cursor(), START);
     }
 
     #[test]

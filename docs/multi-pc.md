@@ -81,7 +81,8 @@ Hook ↔ agent: the hook serves a second endpoint beside its command endpoint
 (`input_endpoint_beside`), single client, raw batches both ways. The command
 protocol only gains what configures it (`Load` already carries the zones).
 
-On the master (lot 6, evdev backend only; the details are in
+On the master (lot 6, evdev backend only; the rules are in
+`lbm-hook/src/hook/crossing/`, platform-neutral, and what evdev adds to them in
 `lbm-hook/src/hook/linux/evdev/pipeline.rs`):
 
 - The other machines' zones are **in play only while the input endpoint has a

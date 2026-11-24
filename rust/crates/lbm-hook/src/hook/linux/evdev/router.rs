@@ -20,6 +20,7 @@ use evdev::{uinput::VirtualDevice, Device, EventType, InputEvent};
 
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
+use crate::hook::crossing::Press;
 use crate::hook::linux::accel::{AccelConfig, PointerAccel};
 use crate::ipc::input::Driver;
 use crate::shared::Shared;
@@ -527,7 +528,9 @@ impl Router {
             };
             for ev in events {
                 if ev.event_type() == EventType::KEY {
-                    keyboard.held.track(ev.code(), ev.value());
+                    keyboard
+                        .held
+                        .track(ev.code(), Press::from_ev_key(ev.value()));
                     pipe.keyboard_key(ev.code(), ev.value(), grabbed, now);
                 }
             }

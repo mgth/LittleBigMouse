@@ -308,6 +308,12 @@ impl Injector for UinputInjector {
         Some(self.settled_at.unwrap_or_else(Instant::now))
     }
 
+    /// Held back only while the devices settle, before anything was written to
+    /// them: a press in the backlog never reached the system, nor its release.
+    fn discard(&mut self) {
+        self.backlog.take();
+    }
+
     fn catch_up(&mut self) {
         self.settled_at = None;
         let held = self.backlog.take();

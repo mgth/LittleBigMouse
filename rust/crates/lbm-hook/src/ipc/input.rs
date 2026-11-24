@@ -362,7 +362,9 @@ fn inject(mut inbox: mpsc::Receiver<Message>, mut injector: Box<dyn Injector>) {
     loop {
         // Input held back by the injector is put in when it is due, whether or not
         // more arrives; until then the stream is still read, never left to back up.
-        let message = match injector.due() {
+        // Once stopped, nothing held back is ever put in: it was discarded.
+        let due = if stopped { None } else { injector.due() };
+        let message = match due {
             None => match inbox.blocking_recv() {
                 Some(message) => message,
                 None => return,
@@ -386,6 +388,10 @@ fn inject(mut inbox: mpsc::Receiver<Message>, mut injector: Box<dyn Injector>) {
                 stopped = true;
                 current = None;
                 deliver(injector.as_mut(), session.release_all());
+                // What was held back never reached the system — releases included,
+                // when the presses are held back with them — and must not reach it
+                // after the caller is told injection stopped.
+                injector.discard();
                 // The hook is leaving: whatever the session's end parked must not stay
                 // hidden after it.
                 injector.unpark();
@@ -989,6 +995,104 @@ mod tests {
             state.written.extend(held);
             state.written_at.get_or_insert_with(Instant::now);
         }
+        fn discard(&mut self) {
+            self.state.lock().unwrap().held.clear();
+        }
+    }
+
+    impl Holding {
+        fn new(hold: Duration) -> Self {
+            Self {
+                hold,
+                state: Arc::default(),
+            }
+        }
+
+        async fn until_handed(&self, count: usize) {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while self.state.lock().unwrap().handed < count {
+                assert!(tokio::time::Instant::now() < deadline, "not handed {count}");
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    }
+
+    fn press_left() -> InputEvent {
+        InputEvent::Button {
+            code: BTN_LEFT,
+            pressed: true,
+        }
+    }
+
+    fn serve_holding(hold: Duration) -> (InputServer, String, Holding) {
+        let holding = Holding::new(hold);
+        let endpoint = endpoint();
+        let server = start(
+            endpoint.clone(),
+            Box::new(holding.clone()),
+            Arc::new(Outlet::default()),
+        )
+        .expect("binds");
+        (server, endpoint, holding)
+    }
+
+    /// Stopped while the devices settle: what was held back is dropped before the
+    /// caller hears injection stopped, and nothing is put in at the deadline either —
+    /// the press never reached the system, so neither may its release.
+    #[tokio::test]
+    async fn stopping_while_input_is_held_back_drops_it_for_good() {
+        let hold = Duration::from_millis(400);
+        let (server, endpoint, holding) = serve_holding(hold);
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, press_left()],
+        )
+        .await;
+        holding.until_handed(1).await;
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        assert!(holding.state.lock().unwrap().written.is_empty());
+        tokio::time::sleep(hold + Duration::from_millis(200)).await;
+        let state = holding.state.lock().unwrap();
+        assert!(
+            state.written.is_empty(),
+            "put in after the stop: {:?}",
+            state.written
+        );
+        assert!(state.held.is_empty());
+    }
+
+    /// Stopped with settled devices: the press reached the system, so its release does,
+    /// before the caller hears injection stopped.
+    #[tokio::test]
+    async fn stopping_with_settled_devices_releases_before_it_returns() {
+        let (server, endpoint, holding) = serve_holding(Duration::ZERO);
+        let mut agent = client(&endpoint).await;
+        send(
+            &mut agent,
+            &[InputEvent::Enter { x: 0, y: 0 }, press_left()],
+        )
+        .await;
+        holding.until_handed(1).await;
+        tokio::task::spawn_blocking(move || server.stop())
+            .await
+            .expect("stops");
+        assert_eq!(
+            holding.state.lock().unwrap().written,
+            [
+                Injection::MoveTo { x: 0, y: 0 },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                },
+                Injection::Button {
+                    code: BTN_LEFT,
+                    pressed: false
+                },
+            ]
+        );
     }
 
     /// A master's first crossing at 1 kHz while the receiving devices settle: every
@@ -997,10 +1101,7 @@ mod tests {
     #[tokio::test]
     async fn input_held_back_by_the_injector_neither_backs_the_stream_up_nor_waits_for_more() {
         const MOTIONS: i32 = 4 * QUEUE as i32;
-        let holding = Holding {
-            hold: Duration::from_millis(1500),
-            state: Arc::default(),
-        };
+        let holding = Holding::new(Duration::from_millis(1500));
         let endpoint = endpoint();
         let _server = start(
             endpoint.clone(),

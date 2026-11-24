@@ -83,6 +83,9 @@ pub trait Injector: Send + 'static {
     }
     /// Puts into the system what was held back, once [`Injector::due`] has passed.
     fn catch_up(&mut self) {}
+    /// Drops what was held back, unwritten: injection is stopping. Whatever was held
+    /// back never reached the system, so nothing there is left pressed by it.
+    fn discard(&mut self) {}
 }
 
 /// Hands a session's output to `injector`: each run of input in one [`Injector::inject`]

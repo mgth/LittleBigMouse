@@ -57,6 +57,28 @@ pub fn install(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);
 }
 
+/// Make an unframed button keep its size when the pointer reaches it.
+///
+/// egui lays a button out with the frame's stroke width in its margin only while the
+/// frame is drawn, so a button without a frame at rest grows by two strokes on hover
+/// and pushes its neighbours along. Here the frame is always there: at rest its fill
+/// and its stroke are transparent but keep their width, and the padding gives that
+/// width back so the button is the size it always was. Call it on the `Ui` the button
+/// is added to, which must be a child (`add_enabled` closure) so the style stays local.
+pub fn steady_at_rest<'a>(ui: &mut egui::Ui, button: egui::Button<'a>) -> egui::Button<'a> {
+    // A disabled button cannot be hovered and is laid out as it always was.
+    if !ui.is_enabled() {
+        return button.frame_when_inactive(false);
+    }
+    let padding = &mut ui.spacing_mut().button_padding;
+    *padding = (*padding - egui::vec2(1.0, 1.0)).max(egui::Vec2::ZERO);
+    let idle = &mut ui.visuals_mut().widgets.inactive;
+    idle.weak_bg_fill = Color32::TRANSPARENT;
+    idle.bg_fill = Color32::TRANSPARENT;
+    idle.bg_stroke = Stroke::new(1.0, Color32::TRANSPARENT);
+    button.frame_when_inactive(true)
+}
+
 pub fn toolbar() -> egui::Frame {
     egui::Frame::new()
         .fill(SURFACE)

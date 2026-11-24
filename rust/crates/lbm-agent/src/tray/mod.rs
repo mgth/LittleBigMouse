@@ -174,7 +174,9 @@ impl TrayModel {
         // stood still and this one came back: the user deserves to know why.
         for remote in state["InjectionBlocked"].as_array().into_iter().flatten() {
             let name = remote["Name"].as_str().unwrap_or("a remote");
-            self.state = format!("{} · {}", self.state, injection_blocked(name));
+            // Elevation is advised only for an integrity difference the remote saw.
+            let elevated = remote.get("Cause").is_none_or(|cause| cause == "Integrity");
+            self.state = format!("{}\n{}", self.state, injection_blocked(name, elevated));
         }
         // Another sharing tool moves the pointer whatever this engine does: said here,
         // where a user looks when the mouse leaves the screen with LittleBigMouse stopped.
@@ -238,12 +240,21 @@ pub async fn follow(
     }
 }
 
-/// What the user is told about a remote where Windows drops the input this machine sends.
-pub fn injection_blocked(name: &str) -> String {
-    format!(
-        "Windows blocks the mouse and keyboard on {name}: an elevated window has the focus \
-         (turn on \"Start with elevated privileges\" there)"
-    )
+/// What the user is told about a remote where Windows drops the input this machine sends:
+/// `elevated` when the remote saw a window of a higher integrity level in front, the only
+/// case where running it elevated is the way out.
+pub fn injection_blocked(name: &str, elevated: bool) -> String {
+    if elevated {
+        format!(
+            "Windows blocks the mouse and keyboard on {name}: an elevated window has the \
+             focus (turn on \"Start with elevated privileges\" there)"
+        )
+    } else {
+        format!(
+            "Windows blocks the mouse and keyboard on {name} for now (a secure desktop, such \
+             as a UAC prompt or the lock screen, may be showing there)"
+        )
+    }
 }
 
 #[cfg(test)]
@@ -377,12 +388,21 @@ mod tests {
     fn the_words_say_where_windows_blocks_the_input() {
         let (mut tray, _calls, _) = model();
         tray.show(&json!({ "Engine": "Running",
-            "InjectionBlocked": [{ "Name": "vm124", "Process": "osk.exe" }] }));
+            "InjectionBlocked": [{ "Name": "vm124", "Process": "osk.exe", "Cause": "Integrity" }] }));
         assert_eq!(
             tray.state(),
-            "Running · Windows blocks the mouse and keyboard on vm124: an elevated window \
+            "Running\nWindows blocks the mouse and keyboard on vm124: an elevated window \
              has the focus (turn on \"Start with elevated privileges\" there)"
         );
+        // A cause the remote did not see (a secure desktop): no advice to elevate.
+        tray.show(&json!({ "Engine": "Running",
+            "InjectionBlocked": [{ "Name": "vm124", "Process": "", "Cause": "Unknown" }] }));
+        assert_eq!(
+            tray.state(),
+            "Running\nWindows blocks the mouse and keyboard on vm124 for now (a secure \
+             desktop, such as a UAC prompt or the lock screen, may be showing there)"
+        );
+        assert!(!tray.state().contains("elevated"));
         // No longer blocked, and an older agent's state, say nothing about it.
         tray.show(&json!({ "Engine": "Running", "InjectionBlocked": [] }));
         assert_eq!(tray.state(), "Running");

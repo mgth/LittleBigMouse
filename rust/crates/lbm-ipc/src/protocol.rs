@@ -617,9 +617,7 @@ mod tests {
             Event::PointerLocked { locked: true },
             Event::PointerLocked { locked: false },
             Event::InjectionBlocked {
-                block: Some(crate::peer::InjectionBlock {
-                    process: "osk.exe".to_owned(),
-                }),
+                block: Some(crate::peer::InjectionBlock::elevated("osk.exe")),
             },
             Event::InjectionBlocked { block: None },
         ] {

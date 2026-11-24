@@ -2173,11 +2173,7 @@ async fn next_block(
 #[tokio::test]
 async fn a_remote_says_its_injection_is_blocked_only_to_a_master_that_hears_it() {
     use lbm_ipc::peer::{InjectionBlock, INJECTION_BLOCKED_CAPABILITY};
-    let osk = || {
-        Some(InjectionBlock {
-            process: "osk.exe".into(),
-        })
-    };
+    let osk = || Some(InjectionBlock::elevated("osk.exe"));
     for hears in [false, true] {
         let master_dir = tempfile::tempdir().unwrap();
         let master = Identity::load_or_create(master_dir.path()).unwrap();
@@ -2230,11 +2226,7 @@ async fn a_remote_says_its_injection_is_blocked_only_to_a_master_that_hears_it()
 async fn a_remote_whose_injection_is_blocked_brings_the_pointer_home_and_the_state_says_why() {
     use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
     use lbm_ipc::peer::InjectionBlock;
-    let osk = || {
-        Some(InjectionBlock {
-            process: "osk.exe".into(),
-        })
-    };
+    let osk = || Some(InjectionBlock::elevated("osk.exe"));
     let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
     let desk_dir = tempfile::tempdir().unwrap();
     pair(
@@ -2312,6 +2304,7 @@ async fn a_remote_whose_injection_is_blocked_brings_the_pointer_home_and_the_sta
         [lbm_agent::peers::BlockedRemote {
             name: "laptop".into(),
             process: "osk.exe".into(),
+            cause: lbm_ipc::peer::BlockCause::Integrity,
         }]
     );
 

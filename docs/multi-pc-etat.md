@@ -226,7 +226,10 @@ Windows actuel ne connaît pas les zones distantes.
   dire, le mouvement passant toujours (non essayé) ; entre deux sessions le premier
   plan n'est pas suivi, l'avertissement du maître reste donc celui de la dernière
   session jusqu'à la traversée suivante ; un jeton illisible est pris pour un niveau
-  supérieur. Le retour du pointeur chez le maître n'a été vu qu'en test (et par
+  supérieur. Un événement est traité en relisant le premier plan sous le même verrou
+  que les lots (il arrive en retard, d'une file). Un `SendInput` incomplet sans
+  différence d'intégrité vue (bureau sécurisé) est dit « cause inconnue », sans conseil
+  d'élévation. Le retour du pointeur chez le maître n'a été vu qu'en test (et par
   `peer_drive`, qui l'imite), pas avec un vrai maître.
   Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
   l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de

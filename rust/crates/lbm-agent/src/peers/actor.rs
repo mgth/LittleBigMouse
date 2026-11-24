@@ -981,10 +981,14 @@ impl Actor {
             // a screen nobody can act on — the same end of the hop as `InputReset`.
             Control::InjectionBlocked { block } if live.info.hello.role == Role::Remote => {
                 match &block {
-                    Some(block) => eprintln!(
+                    Some(block) if block.cause == lbm_ipc::peer::BlockCause::Integrity => eprintln!(
                         "[lbm-agent] multi-PC: Windows blocks the input sent to {}: {} has the focus there",
                         live.info.hello.name,
                         if block.process.is_empty() { "an elevated window" } else { &block.process }
+                    ),
+                    Some(_) => eprintln!(
+                        "[lbm-agent] multi-PC: Windows blocks the input sent to {}, cause unknown there",
+                        live.info.hello.name
                     ),
                     None => eprintln!(
                         "[lbm-agent] multi-PC: the input sent to {} is no longer blocked",

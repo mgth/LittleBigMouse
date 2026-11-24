@@ -14,10 +14,9 @@
 //! Between sessions the last word stands: the agent keeps a block said during a session
 //! until the next one begins and says otherwise.
 
-use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use lbm_ipc::peer::InjectionBlock;
+use lbm_ipc::peer::{BlockCause, InjectionBlock};
 use lbm_ipc::protocol::Event;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HMODULE, HWND, LPARAM, WPARAM};
 use windows::Win32::Security::{
@@ -35,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP,
 };
 
-use crate::remote::blocking::{self, Foreground, Integrity, Reporter};
+use crate::remote::blocking::{self, Foreground, Integrity, Watch};
 use crate::shared::Shared;
 
 /// Installs the event hook on the watcher's thread.
@@ -44,22 +43,23 @@ const WM_WATCH: u32 = WM_APP + 0x50;
 const WM_UNWATCH: u32 = WM_APP + 0x51;
 
 static SHARED: OnceLock<&'static Shared> = OnceLock::new();
-static REPORTER: Mutex<Reporter> = Mutex::new(Reporter::new());
-/// The foreground window last judged, so that [`input`] judges again only a new one.
-static LAST: AtomicIsize = AtomicIsize::new(0);
+/// The foreground last judged and what was said. Every observation — the session's
+/// start, an event, a batch — reads the foreground, judges it and says the result while
+/// holding this lock, so that two of them cannot say what they read out of order.
+static WATCH: Mutex<Watch> = Mutex::new(Watch::new());
 /// The watcher's thread id; `None` when it could not be made, and then only the
-/// session's start is checked.
+/// session's start and the batches are checked.
 static WATCHER: OnceLock<Option<u32>> = OnceLock::new();
 
 /// A driven session begins: the foreground is read now, the agent told if the session
 /// begins blocked (or no longer is), and the foreground followed until [`end`].
 pub fn begin(shared: &'static Shared) {
     let _ = SHARED.set(shared);
-    // SAFETY: no pointer.
-    let hwnd = unsafe { GetForegroundWindow() };
-    LAST.store(hwnd.0 as isize, Ordering::Relaxed);
-    let now = verdict(Some(hwnd));
-    say(lock().begin(now));
+    {
+        let mut watch = lock();
+        let hwnd = foreground_window();
+        say(watch.begin(hwnd.0 as isize, || verdict(hwnd)));
+    }
     if let Some(thread) = *WATCHER.get_or_init(spawn_watcher) {
         // SAFETY: posting to a thread of this process; a failure leaves it unwatched.
         let _ = unsafe { PostThreadMessageW(thread, WM_WATCH, WPARAM(0), LPARAM(0)) };
@@ -80,34 +80,42 @@ pub fn end() {
 /// sending while its pointer is frozen over there, so the next batch catches it. One
 /// `GetForegroundWindow` per batch otherwise — no timer, nothing between sessions.
 pub fn input() {
-    // SAFETY: no pointer.
-    let hwnd = unsafe { GetForegroundWindow() };
-    if LAST.swap(hwnd.0 as isize, Ordering::Relaxed) != hwnd.0 as isize {
-        say(lock().changed(verdict(Some(hwnd))));
-    }
+    let mut watch = lock();
+    let hwnd = foreground_window();
+    say(watch.batch(hwnd.0 as isize, || verdict(hwnd)));
 }
 
-/// `SendInput` put fewer events into the system than it was handed.
+/// The event hook says the foreground changed. Whatever window the event names, the
+/// foreground is read again now: the event was queued, and may be older than what a
+/// batch already saw (see [`Watch`]).
+fn changed() {
+    let mut watch = lock();
+    let hwnd = foreground_window();
+    say(watch.event(hwnd.0 as isize, || verdict(hwnd)));
+}
+
+/// `SendInput` put fewer events into the system than it was handed: a block whose cause
+/// this hook did not see, said as such.
 pub fn short() {
-    // Already said: nothing to read again, at a thousand batches a second.
-    if lock().said().is_some() {
-        return;
-    }
-    let process = match foreground(None) {
-        Foreground::Known { process, .. } | Foreground::Unreadable { process } => process,
-        Foreground::Nobody => String::new(),
-    };
-    say(lock().short(process));
+    let mut watch = lock();
+    say(watch.short());
 }
 
-fn lock() -> std::sync::MutexGuard<'static, Reporter> {
-    REPORTER.lock().unwrap_or_else(|p| p.into_inner())
+fn foreground_window() -> HWND {
+    // SAFETY: no pointer.
+    unsafe { GetForegroundWindow() }
 }
 
+fn lock() -> std::sync::MutexGuard<'static, Watch> {
+    WATCH.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Says `word`, if there is one. Called with the lock held, so that what is said goes
+/// out in the order it was observed.
 fn say(word: Option<Option<InjectionBlock>>) {
     let Some(block) = word else { return };
     match &block {
-        Some(block) => eprintln!(
+        Some(block) if block.cause == BlockCause::Integrity => eprintln!(
             "[LittleBigMouse.Hook] injection blocked: {} has the focus at a higher \
              integrity level than this hook",
             if block.process.is_empty() {
@@ -116,6 +124,9 @@ fn say(word: Option<Option<InjectionBlock>>) {
                 &block.process
             }
         ),
+        Some(_) => eprintln!(
+            "[LittleBigMouse.Hook] injection blocked: SendInput refused events, cause unknown"
+        ),
         None => eprintln!("[LittleBigMouse.Hook] injection no longer blocked"),
     }
     if let Some(shared) = SHARED.get() {
@@ -123,17 +134,15 @@ fn say(word: Option<Option<InjectionBlock>>) {
     }
 }
 
-/// What the window `hwnd` (the foreground when `None`) lets this hook inject.
-fn verdict(hwnd: Option<HWND>) -> Option<InjectionBlock> {
+/// What the window `hwnd` lets this hook inject.
+fn verdict(hwnd: HWND) -> Option<InjectionBlock> {
     static OURS: OnceLock<Option<Integrity>> = OnceLock::new();
     // SAFETY: the pseudo-handle of this process needs no closing.
     let ours = *OURS.get_or_init(|| token_integrity(unsafe { GetCurrentProcess() }));
     blocking::blocked(ours, &foreground(hwnd))
 }
 
-fn foreground(hwnd: Option<HWND>) -> Foreground {
-    // SAFETY: no pointer.
-    let hwnd = hwnd.unwrap_or_else(|| unsafe { GetForegroundWindow() });
+fn foreground(hwnd: HWND) -> Foreground {
     if hwnd.is_invalid() {
         return Foreground::Nobody;
     }
@@ -260,7 +269,7 @@ fn pump() {
                     )
                 };
                 // The foreground may have changed between `begin`'s reading and now.
-                input();
+                changed();
             }
             WM_UNWATCH if !hook.is_invalid() => {
                 // SAFETY: installed above.
@@ -282,14 +291,12 @@ fn pump() {
 unsafe extern "system" fn foreground_proc(
     _hook: HWINEVENTHOOK,
     _event: u32,
-    hwnd: HWND,
+    // The window the event names is not read: it may be stale (see `changed`).
+    _hwnd: HWND,
     _id_object: i32,
     _id_child: i32,
     _thread: u32,
     _time: u32,
 ) {
-    crate::hook::guard(|| {
-        LAST.store(hwnd.0 as isize, Ordering::Relaxed);
-        say(lock().changed(verdict(Some(hwnd))));
-    });
+    crate::hook::guard(changed);
 }

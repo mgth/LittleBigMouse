@@ -82,20 +82,22 @@ pub struct PeerEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<LinkProblem>,
     /// A remote linked to this machine says Windows drops the input this machine sends
-    /// it: an elevated window has the focus there (`Control::InjectionBlocked`). Kept
+    /// it, and why (`Control::InjectionBlocked`). Kept
     /// until it says otherwise or the link ends. Additive: absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub injection_blocked: Option<InjectionBlock>,
 }
 
 /// A remote where Windows drops the input this machine sends (the agent's state, for the
-/// tray): its name here, and the process whose window has the focus there.
+/// tray): its name here, the process whose window has the focus there, and why.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct BlockedRemote {
     pub name: String,
     #[serde(default)]
     pub process: String,
+    #[serde(default)]
+    pub cause: lbm_ipc::peer::BlockCause,
 }
 
 /// The linked remotes of `state` that say their injection is blocked.
@@ -115,6 +117,7 @@ pub fn blocked_remotes(state: &PeersState) -> Vec<BlockedRemote> {
                     p.peer.name.clone()
                 },
                 process: block.process.clone(),
+                cause: block.cause,
             })
         })
         .collect()

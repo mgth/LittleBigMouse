@@ -40,17 +40,36 @@ pub struct Peer {
     pub problem: Option<String>,
     /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
     pub driven: bool,
-    /// Windows drops the input this machine sends it: an elevated window has the focus
-    /// there, here the name of its process (empty when unknown). `None` when it is not
+    /// Windows drops the input this machine sends it, and why. `None` when it is not
     /// blocked, or does not say.
-    pub injection_blocked: Option<String>,
+    pub injection_blocked: Option<Blocked>,
     /// Its mouse and keyboard drive this machine now: its pointer crossed onto it (it
     /// is this machine's master).
     pub drives: bool,
 }
 
-/// What the page says of a remote where Windows drops the input this machine sends.
-pub fn injection_blocked(name: &str, process: &str) -> String {
+/// Why Windows drops the input this machine sends a remote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Blocked {
+    /// A window of a higher integrity level has the focus there: the name of its process
+    /// (empty when unknown).
+    Elevated(String),
+    /// Something the remote could not see: a secure desktop, most likely.
+    Unknown,
+}
+
+/// What the page says of a remote where Windows drops the input this machine sends. Only
+/// an integrity difference the remote saw advises running it elevated.
+pub fn injection_blocked(name: &str, blocked: &Blocked) -> String {
+    let process = match blocked {
+        Blocked::Elevated(process) => process,
+        Blocked::Unknown => {
+            return format!(
+                "Windows blocks the mouse and keyboard on {name} for now: a secure desktop, \
+                 such as a UAC prompt or the lock screen, may be showing there."
+            )
+        }
+    };
     let window = if process.is_empty() {
         "an elevated window".to_owned()
     } else {
@@ -481,10 +500,10 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
     if let Some(problem) = &peer.problem {
         ui.colored_label(ui.visuals().error_fg_color, problem);
     }
-    if let Some(process) = peer.injection_blocked.as_deref().filter(|_| peer.connected) {
+    if let Some(blocked) = peer.injection_blocked.as_ref().filter(|_| peer.connected) {
         ui.colored_label(
             ui.visuals().error_fg_color,
-            injection_blocked(name, process),
+            injection_blocked(name, blocked),
         );
     }
     if peer.pending {
@@ -596,11 +615,19 @@ mod tests {
     #[test]
     fn a_blocked_remote_is_named_with_the_window_and_the_way_out() {
         assert_eq!(
-            injection_blocked("vm124", "osk.exe"),
+            injection_blocked("vm124", &Blocked::Elevated("osk.exe".into())),
             "Windows blocks the mouse and keyboard on vm124: an elevated window (osk.exe) \
              has the focus. Turn on \"Start with elevated privileges\" on vm124."
         );
-        assert!(injection_blocked("vm124", "").contains(": an elevated window has the focus."));
+        assert!(
+            injection_blocked("vm124", &Blocked::Elevated(String::new()))
+                .contains(": an elevated window has the focus.")
+        );
+        // A short send with no foreground (a secure desktop): neither an elevated window
+        // nor the advice to elevate.
+        let unknown = injection_blocked("vm124", &Blocked::Unknown);
+        assert!(!unknown.contains("elevated"), "{unknown}");
+        assert!(unknown.contains("secure desktop"));
     }
 
     #[test]

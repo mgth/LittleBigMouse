@@ -389,17 +389,30 @@ mod tests {
     #[test]
     fn an_injection_block_names_the_process_and_its_end_is_a_null() {
         let blocked = Control::InjectionBlocked {
-            block: Some(lbm_ipc::peer::InjectionBlock {
-                process: "osk.exe".into(),
-            }),
+            block: Some(lbm_ipc::peer::InjectionBlock::elevated("osk.exe")),
         };
         let bytes = encode_control(&blocked).unwrap();
         let text = std::str::from_utf8(&bytes[5..]).unwrap();
         assert_eq!(
             text,
-            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe"}}"#
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe","Cause":"Integrity"}}"#
         );
         assert_eq!(serde_json::from_str::<Control>(text).unwrap(), blocked);
+        // Without a cause, the first one; one this version does not know, unknown.
+        let causeless: Control =
+            serde_json::from_str(r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe"}}"#)
+                .unwrap();
+        assert_eq!(causeless, blocked);
+        let unknown: Control = serde_json::from_str(
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"","Cause":"Hypervisor"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            unknown,
+            Control::InjectionBlocked {
+                block: Some(lbm_ipc::peer::InjectionBlock::unknown())
+            }
+        );
         let unblocked: Control =
             serde_json::from_str(r#"{"Type":"InjectionBlocked","Block":null}"#).unwrap();
         assert_eq!(unblocked, Control::InjectionBlocked { block: None });

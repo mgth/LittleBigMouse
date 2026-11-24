@@ -57,13 +57,9 @@ pub fn blocked(ours: Option<Integrity>, foreground: &Foreground) -> Option<Injec
     }
     match foreground {
         Foreground::Nobody => None,
-        Foreground::Unreadable { process } => Some(InjectionBlock {
-            process: process.clone(),
-        }),
+        Foreground::Unreadable { process } => Some(InjectionBlock::elevated(process.clone())),
         Foreground::Known { process, integrity } => {
-            (integrity.level > ours.level).then(|| InjectionBlock {
-                process: process.clone(),
-            })
+            (integrity.level > ours.level).then(|| InjectionBlock::elevated(process.clone()))
         }
     }
 }
@@ -112,18 +108,85 @@ impl Reporter {
 
     /// `SendInput` put fewer events into the system than it was handed: not a UIPI block
     /// (that one is silent) but something as final — a secure desktop (UAC, Ctrl+Alt+Del)
-    /// or a desktop this session does not own. Said once, as a block, if nothing was said
-    /// yet; what the foreground says next corrects it.
-    pub fn short(&mut self, process: String) -> Option<Option<InjectionBlock>> {
+    /// or a desktop this session does not own. Said once, as a block of unknown cause, if
+    /// nothing was said yet: no integrity difference was seen, so nothing may advise
+    /// elevation. What the foreground says next corrects it.
+    pub fn short(&mut self) -> Option<Option<InjectionBlock>> {
         if self.said.is_some() {
             return None;
         }
-        self.changed(Some(InjectionBlock { process }))
+        self.changed(Some(InjectionBlock::unknown()))
     }
 
     /// What was last said.
     pub fn said(&self) -> Option<&InjectionBlock> {
         self.said.as_ref()
+    }
+}
+
+/// The foreground as last judged and what was said of it: one per process, behind one
+/// lock, so that what the event hook and the injected batches observe is judged in the
+/// order it was read.
+///
+/// A WinEvent is delivered late, from a queue, naming the window that took the focus
+/// then. Judging that window would let an elevated one that held the focus a moment be
+/// said blocked after a batch already saw an ordinary one back in front, and the master
+/// would end a crossing that works. So the event only says "look again": the caller reads
+/// the foreground under the lock and passes what it reads now, as a batch does.
+#[derive(Debug, Default)]
+pub struct Watch {
+    /// The foreground window last judged (its handle as a number); 0 for none yet.
+    last: isize,
+    reporter: Reporter,
+}
+
+impl Watch {
+    pub const fn new() -> Self {
+        Self {
+            last: 0,
+            reporter: Reporter::new(),
+        }
+    }
+
+    /// A session begins with `window` in the foreground, judged by `judge`.
+    pub fn begin(
+        &mut self,
+        window: isize,
+        judge: impl FnOnce() -> Option<InjectionBlock>,
+    ) -> Option<Option<InjectionBlock>> {
+        self.last = window;
+        self.reporter.begin(judge())
+    }
+
+    /// A batch is about to be injected with `window` in the foreground: judged only if it
+    /// is not the window last judged.
+    pub fn batch(
+        &mut self,
+        window: isize,
+        judge: impl FnOnce() -> Option<InjectionBlock>,
+    ) -> Option<Option<InjectionBlock>> {
+        if window == self.last {
+            return None;
+        }
+        self.last = window;
+        self.reporter.changed(judge())
+    }
+
+    /// The event hook said the foreground changed; `window` is the foreground read now,
+    /// not the one the event named. Judged even if it is the window last judged: the
+    /// event may have been the only sign of a change and back.
+    pub fn event(
+        &mut self,
+        window: isize,
+        judge: impl FnOnce() -> Option<InjectionBlock>,
+    ) -> Option<Option<InjectionBlock>> {
+        self.last = window;
+        self.reporter.changed(judge())
+    }
+
+    /// See [`Reporter::short`].
+    pub fn short(&mut self) -> Option<Option<InjectionBlock>> {
+        self.reporter.short()
     }
 }
 
@@ -148,9 +211,7 @@ mod tests {
     }
 
     fn block(process: &str) -> Option<InjectionBlock> {
-        Some(InjectionBlock {
-            process: process.to_owned(),
-        })
+        Some(InjectionBlock::elevated(process))
     }
 
     #[test]
@@ -274,10 +335,17 @@ mod tests {
     }
 
     #[test]
-    fn a_short_send_is_a_block_only_when_nothing_was_said() {
+    fn a_short_send_is_a_block_of_unknown_cause_only_when_nothing_was_said() {
         let mut reporter = Reporter::default();
-        assert_eq!(reporter.short(String::new()), Some(block("")));
-        assert_eq!(reporter.short(String::new()), None, "once");
+        // A secure desktop: no foreground to name, no integrity seen. Not to be shown as
+        // an elevated window, nor to advise elevation.
+        let unknown = Some(InjectionBlock::unknown());
+        assert_eq!(reporter.short(), Some(unknown.clone()));
+        assert_eq!(
+            unknown.map(|b| b.cause),
+            Some(lbm_ipc::peer::BlockCause::Unknown)
+        );
+        assert_eq!(reporter.short(), None, "once");
         assert_eq!(
             reporter.changed(None),
             Some(None),
@@ -285,10 +353,57 @@ mod tests {
         );
         reporter.changed(block("osk.exe"));
         assert_eq!(
-            reporter.short(String::new()),
+            reporter.short(),
             None,
-            "a block already said keeps its name"
+            "a block already said keeps its name and cause"
         );
         assert_eq!(reporter.said(), block("osk.exe").as_ref());
+    }
+
+    #[test]
+    fn a_late_event_for_an_elevated_window_already_gone_says_nothing() {
+        const ORDINARY: isize = 1;
+        const ELEVATED: isize = 2;
+        let judge = |window: isize| {
+            move || {
+                if window == ELEVATED {
+                    block("osk.exe")
+                } else {
+                    None
+                }
+            }
+        };
+        let mut watch = Watch::new();
+        assert_eq!(watch.begin(ORDINARY, judge(ORDINARY)), None);
+        // osk.exe took the focus a moment and gave it back. A batch reads the ordinary
+        // window again: nothing changed for it.
+        assert_eq!(watch.batch(ORDINARY, judge(ORDINARY)), None);
+        // The event for osk.exe arrives now, from its queue: the foreground is read again
+        // and it is the ordinary window — no block is said, the crossing goes on.
+        assert_eq!(watch.event(ORDINARY, judge(ORDINARY)), None);
+        // A real change is said by whichever observes it first, once.
+        assert_eq!(
+            watch.event(ELEVATED, judge(ELEVATED)),
+            Some(block("osk.exe"))
+        );
+        assert_eq!(watch.batch(ELEVATED, judge(ELEVATED)), None);
+        assert_eq!(watch.batch(ORDINARY, judge(ORDINARY)), Some(None));
+    }
+
+    #[test]
+    fn a_batch_judges_only_a_new_window() {
+        let mut watch = Watch::new();
+        let mut judged = 0;
+        watch.begin(1, || None);
+        watch.batch(1, || {
+            judged += 1;
+            None
+        });
+        assert_eq!(judged, 0, "the same window is not judged again");
+        watch.batch(2, || {
+            judged += 1;
+            None
+        });
+        assert_eq!(judged, 1);
     }
 }

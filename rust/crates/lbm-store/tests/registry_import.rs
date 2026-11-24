@@ -175,6 +175,28 @@ fn legacy_locations_and_odd_values_read_as_in_csharp() {
     assert!(data.models.is_empty());
 }
 
+/// A 5.x that marks its model sizes intrinsic (#728, #730) writes `Size\Intrinsic`; the
+/// import must carry the mark, or the first v6 load would migrate the size once more.
+#[test]
+fn the_intrinsic_size_mark_imports_with_the_model() {
+    let mut tree = MemoryKey::new("");
+    for (pnp, mark) in [("MARKED", Some("1")), ("UNMARKED", None)] {
+        let size = tree.create(&format!(r"{DEFAULT_ROOT_KEY}\monitors\{pnp}\Size"));
+        size.set_string("Width", "336");
+        size.set_string("Height", "597");
+        if let Some(mark) = mark {
+            size.set_string("Intrinsic", mark);
+        }
+    }
+
+    let root = (&tree).open(DEFAULT_ROOT_KEY).unwrap();
+    let data = registry::read(Some(&root), LAYOUT_ID, &["MARKED", "UNMARKED"]);
+
+    assert_eq!(data.models["MARKED"].intrinsic_size, Some(true));
+    assert_eq!(data.models["MARKED"].width, Some(336.0));
+    assert_eq!(data.models["UNMARKED"].intrinsic_size, None);
+}
+
 /// C# `LayoutStoreKeyTests.MonitorId`-style ids: 29 characters each, nine of them make
 /// a layout id too long for a registry key name (#589).
 fn nine_monitor_layout(tree: &mut MemoryKey, key: &str, turned: usize) {

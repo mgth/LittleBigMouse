@@ -105,6 +105,29 @@ impl Layout {
     // Models           //
     //==================//
 
+    /// Captures [`MonitorModel::detected_size`] from the current size, unless a previous
+    /// load already did. Not an edit: the saved state is left alone.
+    ///
+    /// [`MonitorModel::detected_size`]: super::MonitorModel::detected_size
+    pub fn capture_detected_size(&mut self, pnp_code: &str) {
+        if let Some(model) = self.models.iter_mut().find(|m| m.pnp_code == pnp_code) {
+            let size = &model.physical_size;
+            model
+                .detected_size
+                .get_or_insert((size.width(), size.height()));
+        }
+    }
+
+    /// Sets [`MonitorModel::unresolved_stored_size`]. Not an edit: the saved state is
+    /// left alone, as it is store bookkeeping rather than something the user changed.
+    ///
+    /// [`MonitorModel::unresolved_stored_size`]: super::MonitorModel::unresolved_stored_size
+    pub fn set_unresolved_stored_size(&mut self, pnp_code: &str, size: Option<(f64, f64)>) {
+        if let Some(model) = self.models.iter_mut().find(|m| m.pnp_code == pnp_code) {
+            model.unresolved_stored_size = size;
+        }
+    }
+
     /// Edits a model's physical size and name. A change of width, height or
     /// borders marks the model — hence its monitors and the layout — unsaved; a
     /// border change is mirrored onto every monitor of the model that does not

@@ -18,7 +18,8 @@
 //! 2. [`stored_model_size`], 0x0 case — pre-EDID-fallback placeholder size (#419) must
 //!    not override the freshly computed one.
 //! 3. [`normalize_stored_size`] — pre-5.4.1 model sizes were stored ORIENTED to the
-//!    rotation at save time; they are transposed back to intrinsic (#507).
+//!    rotation at save time; they are transposed back to intrinsic (#507). Only sizes
+//!    without the `IntrinsicSize` mark go through it (#728, #730).
 //!
 //! The one-time top-up of the default exclusion list is a migration too, but it is
 //! stateful (it reads and writes files and a version counter) and lives with the list
@@ -92,22 +93,52 @@ pub fn legacy_whole_edge_section(
 /// Versions predating the EDID-less size fallback persisted the bogus 0x0 GDI
 /// placeholder for virtual displays (#419): a stored non-positive size must not
 /// override the computed one. A complete stored size then goes through
-/// [`normalize_stored_size`]; a half-valid one (one dimension only) is applied as-is,
-/// since a single dimension says nothing about orientation.
+/// [`normalize_stored_size`], unless `stored_intrinsic` says it was saved intrinsic
+/// already; a half-valid one (one dimension only) is applied as-is, since a single
+/// dimension says nothing about orientation.
 pub fn stored_model_size(
     intrinsic_width: f64,
     intrinsic_height: f64,
     stored_width: Option<f64>,
     stored_height: Option<f64>,
+    stored_intrinsic: bool,
 ) -> (Option<f64>, Option<f64>) {
     // `is > 0`: false for a NaN, like a missing value.
     let positive = |v: Option<f64>| v.filter(|v| *v > 0.0);
     match (positive(stored_width), positive(stored_height)) {
+        (Some(w), Some(h)) if stored_intrinsic => (Some(w), Some(h)),
         (Some(w), Some(h)) => {
             let (w, h) = normalize_stored_size(intrinsic_width, intrinsic_height, w, h);
             (Some(w), Some(h))
         }
         (w, h) => (w, h),
+    }
+}
+
+/// C# `LayoutMigrations.StoredSizeUnresolved`: whether an unmarked stored size is still
+/// waiting for its orientation migration — the detected size cannot decide (no usable
+/// dimensions yet, or a square) while the stored one has a shape to decide on. Such a
+/// size is applied as stored, and must be saved back UNMARKED until a detection can
+/// decide — or the user changes it — or a save made under a 0x0 first detection would
+/// freeze a pre-5.4.1 oriented size for good. A marked or a square stored size is never
+/// pending.
+pub fn stored_size_unresolved(
+    intrinsic_width: f64,
+    intrinsic_height: f64,
+    stored_width: Option<f64>,
+    stored_height: Option<f64>,
+    stored_intrinsic: bool,
+) -> bool {
+    let positive = |v: Option<f64>| v.filter(|v| *v > 0.0);
+    match (positive(stored_width), positive(stored_height)) {
+        (Some(w), Some(h)) => {
+            !stored_intrinsic
+                && w != h
+                && (intrinsic_width <= 0.0
+                    || intrinsic_height <= 0.0
+                    || intrinsic_width == intrinsic_height)
+        }
+        _ => false,
     }
 }
 
@@ -122,8 +153,15 @@ pub fn stored_model_size(
 /// by construction: when the stored orientation contradicts it, transpose the stored
 /// value — the portrait/landscape signal is robust to user-customized magnitudes (edits
 /// keep the panel aspect via `FixedAspectRatio`), which are preserved. Square or
-/// invalid sizes decide nothing. Once the layout is saved again the store holds the
-/// intrinsic size and this is a permanent no-op.
+/// invalid sizes decide nothing.
+///
+/// The test cannot tell an old oriented size from a deliberate one: a picture-by-picture
+/// half whose EDID describes the whole panel, or a size the user swapped by hand, is
+/// intrinsic AND contradicts the detected shape. Run on every load, it swapped those back
+/// at each start and each wake (#728, #730). It is therefore a ONE-TIME migration: a save
+/// marks the model `IntrinsicSize`, and a marked size never comes here (see
+/// [`stored_model_size`]). A size this test could not decide is not marked by the save
+/// that follows (see [`stored_size_unresolved`]).
 pub fn normalize_stored_size(
     intrinsic_width: f64,
     intrinsic_height: f64,

@@ -261,7 +261,8 @@
         "Right": 20,
         "Bottom": 20
       },
-      "PnpName": "HISENSE"
+      "PnpName": "HISENSE",
+      "IntrinsicSize": true
     }
   },
   "options.json": {

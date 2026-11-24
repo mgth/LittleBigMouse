@@ -579,6 +579,221 @@ public class LayoutPersistenceTests
         Assert.Equal(338, monitor.Model.PhysicalSize.Height);
     }
 
+    [Fact]
+    public void Load_IntrinsicMarkedSize_IsAppliedEvenWhenItContradictsTheDetectedShape()
+    {
+        // A picture-by-picture half: the EDID describes the whole 16:9 panel (detected
+        // 600x340), the half the user measured is taller than wide. Saved by a version that
+        // marks its sizes intrinsic, it is not an old oriented size and must not be swapped
+        // (#730).
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 300, Height = 340, IntrinsicSize = true };
+
+        var layout = NewLayout(out var monitor, out _); // fresh intrinsic model: 600x340
+        NewPersistence(store).Load(layout);
+
+        Assert.Equal(300, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(340, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void Save_MarksTheModelSizeIntrinsic()
+    {
+        var store = new FakeStore();
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out _, out _);
+        persistence.Load(layout);
+        persistence.Save(layout);
+
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+    }
+
+    [Fact]
+    public void SizeEditedAcrossTheDetectedShape_SurvivesSaveAndReload()
+    {
+        // #728 / #730 end to end: the user corrects a size so that its shape contradicts the
+        // detected one, saves; every later load (start, wake, display change) used to swap
+        // it back through the pre-5.4.1 migration.
+        var store = new FakeStore();
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _); // detected 600x340
+        persistence.Load(layout);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 340;
+        monitor.Model.PhysicalSize.Height = 600;
+        persistence.Save(layout);
+
+        var reloaded = NewLayout(out var again, out _); // detected 600x340 again
+        persistence.Load(reloaded);
+
+        Assert.Equal(340, again.Model.PhysicalSize.Width);
+        Assert.Equal(600, again.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void Load_UnmarkedContradictingSize_IsStillMigratedOnce()
+    {
+        // A store written before the mark: the pre-5.4.1 migration still applies, and the
+        // next save writes the migrated size with the mark, so it is never re-examined.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _);
+        persistence.Load(layout);
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+
+        persistence.Save(layout);
+        Assert.Equal(598, store.Models[Pnp].Width);
+        Assert.Equal(338, store.Models[Pnp].Height);
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+    }
+
+    [Theory]
+    // Detected size without dimensions (EDID not read yet) or square: undecided.
+    [InlineData(0, 0)]
+    [InlineData(500, 500)]
+    public void UndecidedMigration_IsNotFrozenBySave_AndRunsAtTheNextDetection(
+        double firstWidth, double firstHeight)
+    {
+        // #794 review: an unmarked pre-5.4.1 portrait size, a first detection that cannot
+        // decide, a save without touching the size, then a detection with real dimensions.
+        // The save must not mark the size, so the second load still migrates it.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = firstWidth;
+        monitor.Model.PhysicalSize.Height = firstHeight;
+        persistence.Load(first);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Width);
+        persistence.Save(first);
+        Assert.Null(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(598, again.Model.PhysicalSize.Width);
+        Assert.Equal(338, again.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void UndecidedMigration_SurvivesAReloadOfTheSameModel()
+    {
+        // #794 review, the Undo path: a reload of the same model object must not take the
+        // stored size it already applied for a detection. Border edit, Undo (Load on the
+        // same layout), border edit, save: the size is still the undecided stored one.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = 0;
+        monitor.Model.PhysicalSize.Height = 0;
+        persistence.Load(first);
+        monitor.Model.PhysicalSize.TopBorder = 17;
+        persistence.Load(first);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Width);
+        monitor.Model.PhysicalSize.TopBorder = 18;
+        persistence.Save(first);
+        Assert.Null(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(598, again.Model.PhysicalSize.Width);
+        Assert.Equal(338, again.Model.PhysicalSize.Height);
+        Assert.Equal(18, again.Model.PhysicalSize.TopBorder);
+    }
+
+    [Fact]
+    public void Reload_MigratesAgainstTheDetectedSize_NotTheCurrentOne()
+    {
+        // Undo after a size edit: the unmarked stored size is migrated against the
+        // detection (600x340), not against what the user had typed meanwhile.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var layout = NewLayout(out var monitor, out _); // detected 600x340
+        persistence.Load(layout);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 200;
+        monitor.Model.PhysicalSize.Height = 700;
+        persistence.Load(layout);
+
+        Assert.Equal(598, monitor.Model.PhysicalSize.Width);
+        Assert.Equal(338, monitor.Model.PhysicalSize.Height);
+    }
+
+    [Fact]
+    public void UndecidedMigration_AUserCorrectionIsMarked()
+    {
+        // The user's own size is intrinsic whatever the detection could tell.
+        var store = new FakeStore();
+        store.Models[Pnp] = new ModelDto { Width = 338, Height = 598 };
+        var persistence = NewPersistence(store);
+
+        var first = NewLayout(out var monitor, out _);
+        monitor.Model.PhysicalSize.Width = 0;
+        monitor.Model.PhysicalSize.Height = 0;
+        persistence.Load(first);
+        monitor.Model.PhysicalSize.FixedAspectRatio = false;
+        monitor.Model.PhysicalSize.Width = 300;
+        persistence.Save(first);
+        Assert.True(store.Models[Pnp].IntrinsicSize);
+
+        var second = NewLayout(out var again, out _); // detected 600x340
+        persistence.Load(second);
+
+        Assert.Equal(300, again.Model.PhysicalSize.Width);
+        Assert.Equal(598, again.Model.PhysicalSize.Height);
+    }
+
+    [Theory]
+    // Undecided: unmarked, stored with a shape, detected without one.
+    [InlineData(0, 0, 338, 598, false, true)]
+    [InlineData(500, 500, 338, 598, false, true)]
+    // Decided by the detection, or nothing to decide.
+    [InlineData(600, 340, 338, 598, false, false)]
+    [InlineData(0, 0, 500, 500, false, false)]
+    [InlineData(0, 0, 0, 0, false, false)]
+    // Marked: never pending.
+    [InlineData(0, 0, 338, 598, true, false)]
+    public void StoredSizeUnresolved_Cases(
+        double detectedW, double detectedH, double storedW, double storedH, bool marked, bool expected)
+    {
+        Assert.Equal(expected,
+            LayoutMigrations.StoredSizeUnresolved(detectedW, detectedH, storedW, storedH, marked));
+    }
+
+    [Theory]
+    // Unmarked: the orientation migration decides.
+    [InlineData(600, 340, 340, 600, false, 600, 340)]
+    // Marked intrinsic: applied as stored, whatever the detected shape.
+    [InlineData(600, 340, 340, 600, true, 340, 600)]
+    [InlineData(340, 600, 600, 340, true, 600, 340)]
+    public void StoredModelSize_MarkedIntrinsicSkipsTheOrientationMigration(
+        double intrinsicW, double intrinsicH, double storedW, double storedH, bool marked,
+        double expectedW, double expectedH)
+    {
+        var (w, h) = LayoutMigrations.StoredModelSize(intrinsicW, intrinsicH, storedW, storedH, marked);
+        Assert.Equal(expectedW, w);
+        Assert.Equal(expectedH, h);
+    }
+
+    [Fact]
+    public void StoredModelSize_MarkedPlaceholderStillDoesNotOverride()
+    {
+        // The #419 guard is about the value, not its provenance.
+        var (w, h) = LayoutMigrations.StoredModelSize(600, 340, 0, 0, storedIntrinsic: true);
+        Assert.Null(w);
+        Assert.Null(h);
+    }
+
     [Theory]
     // Square intrinsic or stored size: orientation is undecidable, keep as stored.
     [InlineData(500, 500, 340, 600, 340, 600)]

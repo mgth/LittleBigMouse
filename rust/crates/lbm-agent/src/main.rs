@@ -92,7 +92,10 @@ fn main() -> ExitCode {
     };
     // Before the instance lock: the relaunched agent takes it the moment this one leaves.
     #[cfg(windows)]
-    if !options.dump_displays && options.serve_fake_hook.is_none() && relaunch_elevated() {
+    if !options.dump_displays
+        && options.serve_fake_hook.is_none()
+        && relaunch_elevated(options.config_dir.as_deref())
+    {
         return ExitCode::SUCCESS;
     }
     if options.dump_displays {
@@ -423,11 +426,19 @@ fn import_registry(layout_id: &str, store: &JsonLayoutStore) {
 /// C#'s startup elevation (#512, #400): when `StartElevated` is set and this user can
 /// elevate, one UAC consent relaunches this agent elevated — and this one leaves without
 /// taking the instance lock. A refused consent keeps it running unelevated.
+///
+/// The option is read where the agent will read its profiles: `--config-dir` when one
+/// is given, so a run on a throwaway configuration follows its own `StartElevated`
+/// rather than the user's.
 #[cfg(windows)]
-fn relaunch_elevated() -> bool {
+fn relaunch_elevated(config_dir: Option<&std::path::Path>) -> bool {
     use lbm_agent::elevation;
 
-    let store = JsonLayoutStore::new(lbm_paths::config_dir());
+    let store = JsonLayoutStore::new(
+        config_dir
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(lbm_paths::config_dir),
+    );
     if !elevation::should_relaunch(
         elevation::elevation(),
         elevation::start_elevated_requested(&store),

@@ -423,8 +423,7 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-- Autres outils de partage (PR #814, branche `feat/concurrent-input-sharing-v6`) : la ligne
-  « Autres outils de partage » ci-dessus et sa faiblesse.
+Aucun : toutes les PR de la série (#806 à #811, #813, #814) sont fusionnées dans `v6`.
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

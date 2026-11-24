@@ -155,20 +155,24 @@ Binaire séparé, le plus petit possible ; plomberie SCM par le crate `windows-s
 
 Tout ce que fait aujourd'hui l'esclave Windows de `lbm-hook`, et rien de plus.
 
-- Le module `lbm-hook/src/remote` (`Session`, `SendInputInjector`, `hider`, `keymap`,
-  `coordinates`, `parking`) sort dans une bibliothèque `lbm-inject`, utilisée par le hook
-  (chemin sans service, inchangé) et par le binaire `lbm-inject`. Mêmes règles des deux
-  côtés : rien avant `Enter`, tout relâché à la fin du flux, marque `INJECTED` dans
-  `dwExtraInfo` que le hook local laisse passer.
-- Lit les lots sur le tube hérité ; pas de réseau, pas de fichier, pas de configuration.
+- Un second binaire du paquet `lbm-hook` (`src/inject_main.rs`), qui réutilise son module
+  `remote` (`Session`, `SendInputInjector`, `hider`, `keymap`, `coordinates`, `parking`)
+  sans rien changer au hook. Sortir ce module dans une bibliothèque à part, comme
+  proposé d'abord, l'aurait arraché à ce dont il dépend dans le hook (énumération des
+  écrans, uinput sous Linux, état partagé) pour un gain nul : ce qui est *lié* au binaire
+  n'est pas ce qu'il *exécute*, et seul `remote::stream::pump` lit son entrée. Mêmes
+  règles des deux côtés : rien avant `Enter`, tout relâché à la fin du flux, marque
+  `INJECTED` dans `dwExtraInfo` que le hook local laisse passer.
+- Lit les lots sur son entrée standard, le tube hérité ; pas de réseau, pas de fichier,
+  pas de configuration.
 - **Suit le bureau d'entrée sans scrutation** : le thread d'injection, qui n'a aucune
-  fenêtre (condition de `SetThreadDesktop`), s'attache au bureau d'entrée
-  (`OpenInputDesktop` + `SetThreadDesktop`) à chaque `Enter`, à l'événement
-  `EVENT_SYSTEM_DESKTOPSWITCH` (`SetWinEventHook` hors contexte, sur un thread à boucle
-  de messages) et, en filet, quand `SendInput` en injecte moins que demandé : il se
-  rattache puis renvoie le lot une fois. L'événement seul ne suffit pas à l'essai sur le
-  premier plan (manqué une fois sur six, PR #818) ; le filet par lot couvre le reste.
-  *(À vérifier : que `SendInput` échoue bien, et non en silence, hors du bureau d'entrée.)*
+  fenêtre ni crochet (condition de `SetThreadDesktop`), s'attache au bureau d'entrée
+  (`OpenInputDesktop` + `SetThreadDesktop`) à chaque `Enter` et quand `SendInput` en
+  injecte moins que demandé : il se rattache, et seulement si le bureau a changé, renvoie
+  une fois le reste du lot (`remote::stream::send_following`). Pas d'abonnement à
+  `EVENT_SYSTEM_DESKTOPSWITCH` dans cette étape : les deux déclencheurs suffisent tant que
+  `SendInput` échoue franchement hors du bureau d'entrée. *(À vérifier sur la vm124 ; si
+  l'échec est silencieux, l'événement devient nécessaire.)*
 - Le masquage du pointeur (`hider`) garde sa fenêtre, sur un **autre thread**, attaché à
   `winsta0\default` ; sur le bureau sécurisé il n'y a rien à masquer.
 - La détection UIPI de la PR #818 (`foreground`) n'a plus d'objet ici : SYSTEM est au-dessus
@@ -243,10 +247,9 @@ Liste de contrôle pour la relecture de chaque PR :
 ## 5. Étapes de code (PR vers `v6`, jamais empilées)
 
 1. **Cette conception.**
-2. `lbm-inject` en bibliothèque : déplacement de `lbm-hook/src/remote`, sans changement de
-   comportement ; tests existants déplacés. Puis le binaire `lbm-inject` (lots sur un
-   handle hérité, rattachement au bureau d'entrée) avec ses tests purs (décision de
-   rattachement, renvoi unique d'un lot).
+2. Le binaire `lbm-inject` (lots sur l'entrée standard, rattachement au bureau d'entrée),
+   avec ses tests purs (boucle de lecture et relâchements, renvoi unique d'un lot) ;
+   `lbm_ipc::input::read_batch_blocking`.
 3. `lbm-service` : SCM, suivi des sessions (automate pur et testé : quelle session, quand
    lancer, quand arrêter), lancement de l'injecteur, vérification `admin_only` du dossier
    et du magasin, `trust`/`untrust`.

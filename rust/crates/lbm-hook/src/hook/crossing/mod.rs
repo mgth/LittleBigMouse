@@ -410,13 +410,16 @@ impl Crossing {
             );
             self.locked = false;
         }
-        let revision = shared.pointer_lock_revision.load(Ordering::SeqCst);
+        let revision = shared.shortcuts_revision.load(Ordering::SeqCst);
         if self.toggle_revision != Some(revision) {
             // Never waited for: a contended read is tried again next cycle.
             if let (Ok(text), Ok(rescue)) = (
                 shared.pointer_lock_shortcut.try_lock(),
                 shared.rescue_shortcut.try_lock(),
             ) {
+                // At once, even with the pointer over there: a rescue changed by a
+                // reload in the middle of a crossing is the one held down now.
+                self.rescue.set(&rescue);
                 let rescue_changed = self.toggle.avoid(&rescue);
                 let changed = self.toggle.set(&text) || rescue_changed;
                 self.toggle_revision = Some(revision);

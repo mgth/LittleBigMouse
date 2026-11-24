@@ -825,9 +825,7 @@ mod tests {
         const KEY_L: u16 = 38;
         if rig.shared.pointer_lock_shortcut.lock().unwrap().is_empty() {
             *rig.shared.pointer_lock_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
-            rig.shared
-                .pointer_lock_revision
-                .fetch_add(1, Ordering::SeqCst);
+            rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
             rig.cycle(&[]);
         }
         for (code, value) in [

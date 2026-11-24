@@ -240,7 +240,7 @@ impl Rig {
     fn set_lock_shortcut(&mut self, text: &str) {
         *self.shared.pointer_lock_shortcut.lock().unwrap() = text.to_owned();
         self.shared
-            .pointer_lock_revision
+            .shortcuts_revision
             .fetch_add(1, Ordering::SeqCst);
         self.cycle(None, &[]);
     }
@@ -648,4 +648,35 @@ fn taking_the_shortcut_away_lets_a_lock_go() {
     rig.set_lock_shortcut("Ctrl+Alt+K");
     assert!(!rig.crossing.is_locked());
     rig.come_back((1910, 500));
+}
+
+#[test]
+fn a_rescue_changed_to_the_lock_shortcut_during_a_crossing_still_brings_the_pointer_home() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    // A layout reload moves the rescue onto the pointer lock's keys, as the daemon
+    // adopts it, while the keyboards are grabbed over there.
+    *rig.shared.rescue_shortcut.lock().unwrap() = "Ctrl+Alt+L".to_owned();
+    rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    rig.cycle(None, &[]);
+
+    rig.type_key(KEY_LEFTCTRL, Press::Down);
+    rig.type_key(KEY_LEFTALT, Press::Down);
+    rig.type_key(KEY_L, Press::Down);
+    assert!(!rig.crossing.is_locked(), "the rescue's keys lock nothing");
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.crossing.is_remote(),
+        "the new rescue brought the pointer home"
+    );
+    assert!(
+        !rig.m
+            .sent
+            .iter()
+            .any(|e| matches!(e, Wire::Key { code: KEY_L, .. })),
+        "{:?}",
+        rig.m.sent
+    );
 }

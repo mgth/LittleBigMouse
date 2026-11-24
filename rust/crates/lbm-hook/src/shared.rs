@@ -50,9 +50,10 @@ pub struct Shared {
     /// The shortcut that locks the pointer on the machine it is on
     /// (`Command::PointerLock`); empty, the default, when there is none.
     pub pointer_lock_shortcut: Mutex<String>,
-    /// Bumped each time [`Self::pointer_lock_shortcut`] changes: the routing thread
-    /// reads the text again only then.
-    pub pointer_lock_revision: AtomicU32,
+    /// Bumped each time [`Self::pointer_lock_shortcut`] or [`Self::rescue_shortcut`]
+    /// changes: the routing thread reads them again only then, and reads both, because
+    /// the pointer lock's may never be the rescue's.
+    pub shortcuts_revision: AtomicU32,
     /// Opt-in Windows touchscreen/mouse separation.
     pub touch_mouse_independent: AtomicBool,
     pub restore_keyboard_focus: AtomicBool,
@@ -128,7 +129,7 @@ impl Shared {
             touch_generation: AtomicU32::new(0),
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
             pointer_lock_shortcut: Mutex::new(String::new()),
-            pointer_lock_revision: AtomicU32::new(0),
+            shortcuts_revision: AtomicU32::new(0),
             rescue_unavailable: Mutex::new(None),
             unhook_requests: AtomicU32::new(0),
             // C++ Hooker defaults, until a layout overrides them.

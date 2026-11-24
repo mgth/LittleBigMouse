@@ -104,11 +104,70 @@ fn partial_updates_preserve_other_screens_and_the_global_style() {
     windows_wallpaper::apply_with(&shell, &screens()[..1], dir.path()).unwrap();
     assert_eq!(shell.position.get(), 4);
     assert_eq!(shell.writes.borrow().len(), 1);
+    // L is enumerated first and R is the primary: the shell paints R's slot on L.
     let output = shell.outputs.borrow();
-    assert_eq!(output[1].wallpaper, "old-right");
-    let image = image::open(&output[0].wallpaper).unwrap().to_rgba8();
+    assert_eq!(output[0].wallpaper, "old-left");
+    let image = image::open(&output[1].wallpaper).unwrap().to_rgba8();
     assert_eq!(image.dimensions(), (4, 6));
     assert_eq!(image.get_pixel(0, 0).0, [0x12, 0x34, 0x56, 255]);
+}
+/// `outputs` holds what each slot's own path files; which monitor shows it is the paint
+/// order: the primary first, then the others in filing order (mgth/LittleBigMouse#789).
+fn shown_on(shell: &Fake, id: &str) -> image::RgbaImage {
+    let outputs = shell.outputs.borrow();
+    let primary = outputs.iter().position(|o| o.x == 0 && o.y == 0);
+    let painted = lbm_wallpaper::slots::paint_order(primary, outputs.len());
+    let shown = outputs.iter().position(|o| o.id == id).unwrap();
+    let slot = painted.iter().position(|&j| j == shown).unwrap();
+    image::open(&outputs[slot].wallpaper).unwrap().to_rgba8()
+}
+#[test]
+fn every_screen_shows_its_own_image_when_the_primary_is_not_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let shell = Fake::new(4);
+    windows_wallpaper::apply_with(&shell, &screens(), dir.path()).unwrap();
+    assert_eq!(
+        shell
+            .writes
+            .borrow()
+            .iter()
+            .map(|w| w.0.as_str())
+            .collect::<Vec<_>>(),
+        ["R", "L"]
+    );
+    assert_eq!(shown_on(&shell, "L").dimensions(), (4, 6));
+    assert_eq!(
+        shown_on(&shell, "L").get_pixel(0, 0).0,
+        [0x12, 0x34, 0x56, 255]
+    );
+    assert_eq!(shown_on(&shell, "R").dimensions(), (8, 4));
+    assert_eq!(
+        shown_on(&shell, "R").get_pixel(0, 0).0,
+        [0xab, 0xcd, 0xef, 255]
+    );
+}
+#[test]
+fn a_primary_enumerated_first_is_filed_under_its_own_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let shell = Fake::new(4);
+    shell.outputs.borrow_mut().reverse();
+    windows_wallpaper::apply_with(&shell, &screens(), dir.path()).unwrap();
+    let outputs = shell.outputs.borrow();
+    assert_eq!(outputs[0].id, "R");
+    assert_eq!(
+        image::open(&outputs[0].wallpaper)
+            .unwrap()
+            .to_rgba8()
+            .dimensions(),
+        (8, 4)
+    );
+    assert_eq!(
+        image::open(&outputs[1].wallpaper)
+            .unwrap()
+            .to_rgba8()
+            .dimensions(),
+        (4, 6)
+    );
 }
 #[test]
 fn spanning_requires_every_screen_and_failures_restore_previous_state() {

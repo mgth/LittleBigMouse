@@ -53,7 +53,13 @@ public class WindowsLayoutFactory : ILayoutFactory, IDisposable
     {
         // Refresh the OS device tree (formerly MainService's UpdateDevices()).
         if (_monitors is SystemMonitorsService concrete) concrete.UpdateDevices();
-        return _newLayout().UpdateFrom(_monitors, _persistence);
+        var layout = _newLayout().UpdateFrom(_monitors, _persistence);
+
+        // The construction reads the wallpaper through the device tree, by device path; the
+        // refresh gate below skips the rebinding when the wallpaper is unchanged, so a rebuilt
+        // layout must rebind here or its preview stays in device-path order.
+        layout.RebindPaintedImages(WindowsWallpaperReader.ReadImagePath());
+        return layout;
     }
 
     /// <inheritdoc/>

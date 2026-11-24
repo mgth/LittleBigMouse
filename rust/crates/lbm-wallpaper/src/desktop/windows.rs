@@ -1,14 +1,21 @@
 use super::{Entry, Repeat};
-use crate::Style;
+use crate::{
+    slots::{self, SlotRead, SlotRect},
+    Style,
+};
 use lbm_layout::geo::Rect;
 use windows::{
     core::{PCWSTR, PWSTR},
     Win32::{
+        Foundation::E_FAIL,
         System::Com::{
             CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
             COINIT_APARTMENTTHREADED,
         },
-        UI::Shell::{DesktopWallpaper, IDesktopWallpaper},
+        UI::{
+            Shell::{DesktopWallpaper, IDesktopWallpaper},
+            WindowsAndMessaging::{GetSystemMetrics, SM_CMONITORS},
+        },
     },
 };
 struct Apartment;
@@ -47,42 +54,68 @@ fn read() -> windows::core::Result<Vec<Entry>> {
         };
         let color = desktop.GetBackgroundColor()?.0;
         let color = [color as u8, (color >> 8) as u8, (color >> 16) as u8, 255];
-        let mut entries = Vec::new();
+        // The shell paints slot k on another monitor than the one its path names
+        // (crate::slots): read every slot in place, failures kept as holes, then give each
+        // monitor the image of the slot painted on it.
+        let mut reads = Vec::new();
         for index in 0..desktop.GetMonitorDevicePathCount()? {
             // The list holds every monitor Windows remembers, attached or not, and the
             // calls below fail (E_FAIL) for one that is not on the desktop right now.
             // That monitor has no wallpaper to report; the others still do. Seen on a
-            // machine behind a KVM: one stale path made the whole reading fail.
+            // machine behind a KVM: one stale path made the whole reading fail. The
+            // monitor count tells such a stale entry from an active monitor we failed to
+            // read (crate::slots::plan).
             let Ok(id) = desktop.GetMonitorDevicePathAt(index).and_then(string) else {
+                reads.push(SlotRead::Unknown);
                 continue;
             };
-            let id: Vec<_> = id.encode_utf16().chain(Some(0)).collect();
-            let id = PCWSTR(id.as_ptr());
-            let Ok(bounds) = desktop.GetMonitorRECT(id) else {
+            let wide: Vec<_> = id.encode_utf16().chain(Some(0)).collect();
+            let pid = PCWSTR(wide.as_ptr());
+            let Ok(bounds) = desktop.GetMonitorRECT(pid) else {
+                reads.push(SlotRead::Unknown);
                 continue;
             };
-            if bounds.right <= bounds.left || bounds.bottom <= bounds.top {
-                continue;
-            }
             // No picture readable for this monitor (a slideshow between two images, for
             // one) is the background colour, not a failure of the whole desktop.
             let path = desktop
-                .GetWallpaper(id)
+                .GetWallpaper(pid)
                 .and_then(string)
                 .unwrap_or_default();
-            entries.push(Entry {
-                bounds: Rect::new(
-                    bounds.left.into(),
-                    bounds.top.into(),
-                    (bounds.right - bounds.left).into(),
-                    (bounds.bottom - bounds.top).into(),
-                ),
-                path: (!path.is_empty()).then(|| path.into()),
-                style,
-                repeat: Repeat::Both,
-                color,
-            });
+            let rect = SlotRect {
+                left: bounds.left,
+                top: bounds.top,
+                right: bounds.right,
+                bottom: bounds.bottom,
+            };
+            reads.push(SlotRead::from_parts(Some(id), Some(rect), Some(path)));
         }
+        let active = usize::try_from(GetSystemMetrics(SM_CMONITORS)).unwrap_or(0);
+        let Some(plan) = slots::plan(&reads, active) else {
+            return Err(windows::core::Error::new(
+                E_FAIL,
+                "The desktop's monitor list does not match its monitor count.",
+            ));
+        };
+        let entries = plan
+            .pairs
+            .into_iter()
+            .map(|(filed, painted)| {
+                let r = painted.rect;
+                let path = filed.image.unwrap_or_default();
+                Entry {
+                    bounds: Rect::new(
+                        r.left.into(),
+                        r.top.into(),
+                        (r.right - r.left).into(),
+                        (r.bottom - r.top).into(),
+                    ),
+                    path: (!path.is_empty()).then(|| path.into()),
+                    style,
+                    repeat: Repeat::Both,
+                    color,
+                }
+            })
+            .collect();
         Ok(entries)
     }
 }

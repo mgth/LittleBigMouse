@@ -1,4 +1,6 @@
 #nullable enable
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using HLab.ColorTools;
 using HLab.Sys.Monitors;
@@ -47,6 +49,73 @@ internal static class WindowsWallpaperMapping
             layout.PhysicalSources
                 .FirstOrDefault(s => s.DeviceId == monitor.Id)
                 ?.Source.UpdateWallpaperFrom(monitor, registryPath);
+        }
+
+        RebindPaintedImages(layout, registryPath);
+    }
+
+    /// <summary>
+    /// The Win32 tree binds a slot's image to the monitor its device path names, while the shell
+    /// paints it on another monitor — see <see cref="WallpaperSlotOrder"/>. Rebind the preview
+    /// paths to what is actually on screen; without it the editor preview shows the two screens
+    /// swapped on exactly the layouts where the desktop itself is now correct.
+    /// <para>
+    /// Runs after every read of the wallpaper into the model: the in-place refresh above, and
+    /// the layout construction (<see cref="WindowsLayoutFactory.Create"/>), which reads through
+    /// the device tree too and would otherwise put the preview back in device-path order.
+    /// </para>
+    /// </summary>
+    internal static void RebindPaintedImages(this MonitorsLayout layout, string registryPath)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        IDesktopWallpaper desktop;
+        try
+        {
+            desktop = (IDesktopWallpaper)new DesktopWallpaperClass();
+        }
+        catch (Exception)
+        {
+            return; // No COM: keep the plain read-back.
+        }
+
+        if (WallpaperSlotOrder.Read(desktop) is not { } reads) return;
+        if (WallpaperSlotOrder.Plan(reads, WallpaperSlotOrder.ActiveMonitorCount()) is not { } plan) return;
+
+        RebindPaintedImages(plan, layout.PhysicalSources.Select(s => s.Source), registryPath);
+    }
+
+    /// <summary>
+    /// Gives each source the image of the slot painted on it, for the certain pairs of
+    /// <paramref name="plan"/>. A source painted by a hole, or by a slot whose image could not be
+    /// read, keeps the device-path read-back.
+    /// <para>
+    /// An empty image is a solid colour, or the fade transient during a change. The registry path
+    /// stands in for the transient, as in <see cref="UpdateWallpaperFrom"/>, except when another
+    /// slot already paints that very image: then the registry is only repeating it, and the empty
+    /// slot really is a solid colour. Without that check a photo/solid-colour pair previews the
+    /// photo twice.
+    /// </para>
+    /// </summary>
+    internal static void RebindPaintedImages(WallpaperSlotOrder.SlotPlan plan, IEnumerable<DisplaySource> sources,
+        string? registryPath)
+    {
+        var shown = plan.Slots
+            .Where(s => s.ImagePath is { Length: > 0 })
+            .Select(s => s.ImagePath!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var fallback = registryPath is { Length: > 0 } path && !shown.Contains(path) ? path : "";
+
+        var list = sources.ToList();
+        foreach (var (filed, painted) in plan.Pairs)
+        {
+            if (filed.ImagePath is not { } image) continue;
+
+            var source = list.FirstOrDefault(s => WallpaperSlotOrder.Covers(painted.Rect, s.InPixel.Bounds));
+            if (source is null) continue;
+
+            source.WallpaperPath = image.Length > 0 ? image : fallback;
         }
     }
 

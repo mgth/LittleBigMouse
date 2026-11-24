@@ -16,6 +16,7 @@
 
 pub mod desktop;
 pub mod render;
+pub mod slots;
 /// A size in pixels. Integers, and the division that makes them truncates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Size {

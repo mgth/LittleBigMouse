@@ -1,4 +1,8 @@
 //! Windows has one global positioning mode. Exact-size images preserve independent styles.
+//!
+//! The shell paints the image filed under slot `k` on another monitor than the one slot
+//! `k`'s path names (`lbm_wallpaper::slots`): each screen's image is filed under the slot
+//! painted on it, and the rollback writes every slot it touched back to what it held.
 use crate::{desktop::ScreenWallpaper, wallpaper_job::image_file};
 use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,7 +30,15 @@ pub fn apply_with(
     }
     let outputs = shell.outputs()?;
     let position = shell.position()?;
-    let mut planned = Vec::new();
+    // `filing[j]`: the slot whose image the shell paints on `outputs[j]`.
+    let primary = outputs.iter().position(|o| o.x == 0 && o.y == 0);
+    let painted = lbm_wallpaper::slots::paint_order(primary, outputs.len());
+    let mut filing = vec![0; outputs.len()];
+    for (k, &j) in painted.iter().enumerate() {
+        filing[j] = k;
+    }
+    // (the output the screen shows on, the slot it is filed under, the image).
+    let mut planned: Vec<(&Output, &Output, String)> = Vec::new();
     for screen in screens {
         let matches: Vec<_> = outputs
             .iter()
@@ -36,9 +48,7 @@ pub fn apply_with(
             return Err("Wallpaper output is missing or ambiguous; reload the displays.".into());
         }
         let output = matches[0];
-        if planned
-            .iter()
-            .any(|(o, _): &(&Output, String)| o.id == output.id)
+        if planned.iter().any(|(o, _, _)| o.id == output.id)
             || screen
                 .expected_size
                 .is_some_and(|size| size != (output.width, output.height))
@@ -61,8 +71,13 @@ pub fn apply_with(
             screen.style
         };
         let pixels = lbm_wallpaper::render::one(image, style, output.width, output.height, fill)?;
+        let index = outputs
+            .iter()
+            .position(|o| std::ptr::eq(o, output))
+            .expect("the output comes from this list");
         planned.push((
             output,
+            &outputs[filing[index]],
             image_file(dir, &pixels)?.to_string_lossy().into_owned(),
         ));
     }
@@ -78,15 +93,16 @@ pub fn apply_with(
         if global {
             shell.set_position(2)?;
         }
-        for (output, path) in &planned {
-            shell.set_wallpaper(&output.id, path)?;
+        for (_, slot, path) in &planned {
+            shell.set_wallpaper(&slot.id, path)?;
         }
         Ok(())
     })();
     if let Err(error) = result {
         let mut restored = true;
-        for (output, _) in &planned {
-            restored &= shell.set_wallpaper(&output.id, &output.wallpaper).is_ok();
+        // `wallpaper` is what the slot's own path held: write it back through that path.
+        for (_, slot, _) in &planned {
+            restored &= shell.set_wallpaper(&slot.id, &slot.wallpaper).is_ok();
         }
         if global {
             restored &= shell.set_position(position).is_ok();

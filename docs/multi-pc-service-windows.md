@@ -71,8 +71,11 @@ maître par maître.
 - Magasin : `%ProgramData%\LittleBigMouse\service\trusted-masters.json`, dossier créé par
   l'installeur avec une DACL explicite, sans héritage : SYSTEM et Administrateurs en
   contrôle total, rien d'autre (pas même la lecture pour les utilisateurs : elle n'est
-  pas nécessaire). Le service **refuse de démarrer** si la DACL du dossier ou du fichier
-  laisse écrire quelqu'un d'autre (même contrôle que `lbm-agent/src/admin_only.rs`, réutilisé).
+  pas nécessaire). Si la DACL du dossier ou du fichier laisse écrire quelqu'un d'autre
+  (même contrôle que `lbm-agent/src/admin_only.rs`, sorti dans `lbm-admin-only`), le
+  service le dit et **ne fait confiance à aucun maître** ; c'est son propre dossier
+  d'installation mal protégé qui l'empêche de démarrer. Un dossier créé d'avance par un
+  utilisateur (`%ProgramData%` le permet) échoue à ce contrôle : refus, jamais confiance.
 - Contenu : empreintes de certificat de maître (`MachineId` de `lbm-net`) et le nom
   affiché au moment de l'approbation. Rien d'autre : pas de chemin, pas de commande.
 - Écriture : seulement par `lbm-service.exe trust <empreinte>` / `untrust`, lancé élevé.

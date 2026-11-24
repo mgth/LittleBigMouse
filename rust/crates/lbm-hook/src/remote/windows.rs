@@ -58,8 +58,10 @@ pub struct SendInputInjector {
     /// What this injector runs as: the hook, or `lbm-inject`.
     mode: Mode,
     /// Releases the system refused, put in again ahead of the next batch
-    /// ([`super::stream::keep_releases`]).
+    /// ([`super::stream::settle`]).
     unsent: Vec<INPUT>,
+    /// The keys and buttons whose press went in and whose release has not.
+    down: Vec<Switch>,
 }
 
 enum Mode {
@@ -87,6 +89,7 @@ impl SendInputInjector {
             hider: hider::Hider::default(),
             mode,
             unsent: Vec::new(),
+            down: Vec::new(),
         }
     }
 
@@ -127,7 +130,7 @@ impl SendInputInjector {
                 sent
             }
         };
-        super::stream::keep_releases(&mut self.unsent, &self.inputs[sent..], is_release);
+        super::stream::settle(&mut self.down, &mut self.unsent, &self.inputs, sent, switch);
         self.inputs.clear();
     }
 
@@ -217,21 +220,56 @@ fn button(code: u16, pressed: bool) -> Option<(MOUSE_EVENT_FLAGS, u32)> {
     })
 }
 
-/// A key or button going up: what must reach the system even late
-/// ([`super::stream::keep_releases`]).
-fn is_release(input: &INPUT) -> bool {
+/// A key or a mouse button, as far as [`super::stream::settle`] tells them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Switch {
+    Key {
+        vk: u16,
+        scan: u16,
+        extended: bool,
+    },
+    /// 0 left, 1 right, 2 middle, 3 and 4 the X buttons.
+    Button(u8),
+}
+
+/// Which key or button `input` presses or releases, and whether it presses it.
+fn switch(input: &INPUT) -> Option<(Switch, bool)> {
     if input.r#type == INPUT_KEYBOARD {
         // SAFETY: the union member the type says.
-        let flags = unsafe { input.Anonymous.ki.dwFlags };
-        return flags.contains(KEYEVENTF_KEYUP);
+        let ki = unsafe { input.Anonymous.ki };
+        let key = Switch::Key {
+            vk: ki.wVk.0,
+            scan: ki.wScan,
+            extended: ki.dwFlags.contains(KEYEVENTF_EXTENDEDKEY),
+        };
+        return Some((key, !ki.dwFlags.contains(KEYEVENTF_KEYUP)));
     }
-    if input.r#type == INPUT_MOUSE {
-        // SAFETY: as above.
-        let flags = unsafe { input.Anonymous.mi.dwFlags };
-        let up = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_MIDDLEUP | MOUSEEVENTF_XUP;
-        return flags.0 & up.0 != 0;
+    if input.r#type != INPUT_MOUSE {
+        return None;
     }
-    false
+    // SAFETY: as above.
+    let mi = unsafe { input.Anonymous.mi };
+    let x = if mi.mouseData == XBUTTON2 as u32 {
+        4
+    } else {
+        3
+    };
+    [
+        (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 0),
+        (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, 1),
+        (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, 2),
+        (MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, x),
+    ]
+    .into_iter()
+    .find_map(|(down, up, button)| {
+        if mi.dwFlags.contains(down) {
+            Some((Switch::Button(button), true))
+        } else if mi.dwFlags.contains(up) {
+            Some((Switch::Button(button), false))
+        } else {
+            None
+        }
+    })
 }
 
 impl Injector for SendInputInjector {
@@ -412,30 +450,58 @@ mod tests {
     }
 
     #[test]
-    fn releases_are_told_from_presses() {
-        let key = |flags| INPUT {
+    fn keys_and_buttons_are_told_apart_and_presses_from_releases() {
+        let key = |scan, flags| INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
                 ki: KEYBDINPUT {
+                    wScan: scan,
                     dwFlags: flags,
                     ..Default::default()
                 },
             },
         };
-        let mouse = |flags| INPUT {
+        let mouse = |flags, data| INPUT {
             r#type: INPUT_MOUSE,
             Anonymous: INPUT_0 {
                 mi: MOUSEINPUT {
                     dwFlags: flags,
+                    mouseData: data,
                     ..Default::default()
                 },
             },
         };
-        assert!(is_release(&key(KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE)));
-        assert!(!is_release(&key(KEYEVENTF_SCANCODE)));
-        assert!(is_release(&mouse(MOUSEEVENTF_XUP)));
-        assert!(is_release(&mouse(MOUSEEVENTF_LEFTUP)));
-        assert!(!is_release(&mouse(MOUSEEVENTF_LEFTDOWN)));
-        assert!(!is_release(&mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)));
+        let a = Switch::Key {
+            vk: 0,
+            scan: 30,
+            extended: false,
+        };
+        assert_eq!(switch(&key(30, KEYEVENTF_SCANCODE)), Some((a, true)));
+        assert_eq!(
+            switch(&key(30, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP)),
+            Some((a, false))
+        );
+        assert_ne!(
+            switch(&key(30, KEYEVENTF_SCANCODE | KEYEVENTF_EXTENDEDKEY))
+                .unwrap()
+                .0,
+            a
+        );
+        assert_eq!(
+            switch(&mouse(MOUSEEVENTF_LEFTUP, 0)),
+            Some((Switch::Button(0), false))
+        );
+        assert_eq!(
+            switch(&mouse(MOUSEEVENTF_XDOWN, XBUTTON1 as u32)),
+            Some((Switch::Button(3), true))
+        );
+        assert_eq!(
+            switch(&mouse(MOUSEEVENTF_XUP, XBUTTON2 as u32)),
+            Some((Switch::Button(4), false))
+        );
+        assert_eq!(
+            switch(&mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0)),
+            None
+        );
     }
 }

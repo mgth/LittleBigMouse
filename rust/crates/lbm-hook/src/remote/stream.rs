@@ -59,16 +59,46 @@ pub fn send_following(
     (sent + send(sent)).min(count)
 }
 
-/// Keeps, out of what did not go in (`unsent`, the tail of a batch), the releases.
+/// Settles a batch of which the first `sent` inputs went in: `down` follows the keys
+/// and buttons whose press went in, and `kept` gets the releases among the rest whose
+/// press did.
 ///
 /// The [`Session`] stops tracking a key the moment it hands its release over, so a
-/// release the system refused — the secure desktop came up between the press and
-/// the release — would leave the key down for good, and the end of the stream would
-/// not know to lift it. Such releases are kept and put in again ahead of the next
-/// batch, and when the injector parks or leaves. Presses and motions are not kept:
-/// input put in late is input nobody typed.
-pub fn keep_releases<T: Copy>(kept: &mut Vec<T>, unsent: &[T], is_release: impl Fn(&T) -> bool) {
-    kept.extend(unsent.iter().copied().filter(|input| is_release(input)));
+/// release the system refused — the secure desktop came up between the press and the
+/// release — would leave the key down for good, and the end of the stream would not
+/// know to lift it. Such a release is kept and put in again ahead of the next batch,
+/// and when the injector parks or leaves. A release whose press never went in is not
+/// kept (nothing is down), nor one for a key that already has one waiting: `kept`
+/// holds at most one release per key or button, however long the system refuses.
+/// Presses and motions are never kept: input put in late is input nobody typed.
+///
+/// `switch` says which key or button an input is about (`K`), and whether it presses
+/// it; `None` for anything else. `all` starts with what `kept` held, put in first.
+pub fn settle<T: Copy, K: PartialEq + Copy>(
+    down: &mut Vec<K>,
+    kept: &mut Vec<T>,
+    all: &[T],
+    sent: usize,
+    switch: impl Fn(&T) -> Option<(K, bool)>,
+) {
+    let sent = sent.min(all.len());
+    for input in &all[..sent] {
+        match switch(input) {
+            Some((key, true)) if !down.contains(&key) => down.push(key),
+            Some((key, false)) => down.retain(|held| *held != key),
+            _ => {}
+        }
+    }
+    for input in &all[sent..] {
+        if let Some((key, false)) = switch(input) {
+            let waiting = kept
+                .iter()
+                .any(|other| switch(other).is_some_and(|(k, _)| k == key));
+            if down.contains(&key) && !waiting {
+                kept.push(*input);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -248,46 +278,71 @@ mod tests {
 
     /// What a Windows injector does around `SendInput`, with the inputs as
     /// `(code, pressed)` and `accepts` saying how many of the call go in.
-    fn put(kept: &mut Vec<(u16, bool)>, batch: &[(u16, bool)], accepts: usize) -> Vec<(u16, bool)> {
+    fn put(
+        down: &mut Vec<u16>,
+        kept: &mut Vec<(u16, bool)>,
+        batch: &[(u16, bool)],
+        accepts: usize,
+    ) -> Vec<(u16, bool)> {
         let mut all = std::mem::take(kept);
         all.extend_from_slice(batch);
         let sent = accepts.min(all.len());
-        keep_releases(kept, &all[sent..], |&(_, pressed)| !pressed);
+        settle(down, kept, &all, sent, |&(code, pressed)| {
+            Some((code, pressed))
+        });
         all[..sent].to_vec()
     }
 
     #[test]
     fn a_modifier_whose_release_alone_is_refused_is_released_with_the_next_batch() {
         const CTRL: u16 = 29;
-        let mut kept = Vec::new();
-        assert_eq!(put(&mut kept, &[(CTRL, true)], 1), [(CTRL, true)]);
+        let (mut down, mut kept) = (Vec::new(), Vec::new());
+        assert_eq!(
+            put(&mut down, &mut kept, &[(CTRL, true)], 1),
+            [(CTRL, true)]
+        );
         // The secure desktop came up: the release does not go in.
-        assert!(put(&mut kept, &[(CTRL, false)], 0).is_empty());
+        assert!(put(&mut down, &mut kept, &[(CTRL, false)], 0).is_empty());
         assert_eq!(kept, [(CTRL, false)]);
         // Back on a desktop that takes input: the release goes first.
         assert_eq!(
-            put(&mut kept, &[(KEY_A, true)], 2),
+            put(&mut down, &mut kept, &[(KEY_A, true)], 2),
             [(CTRL, false), (KEY_A, true)]
         );
         assert!(kept.is_empty());
+        assert_eq!(down, [KEY_A]);
     }
 
     #[test]
-    fn only_releases_are_kept_from_what_did_not_go_in() {
-        let mut kept = Vec::new();
-        put(
-            &mut kept,
-            &[(1, true), (2, false), (3, true), (4, false)],
-            1,
-        );
-        assert_eq!(kept, [(2, false), (4, false)]);
+    fn a_release_whose_press_never_went_in_is_not_kept() {
+        let (mut down, mut kept) = (Vec::new(), Vec::new());
+        for _ in 0..5 {
+            put(&mut down, &mut kept, &[(KEY_A, true), (KEY_A, false)], 0);
+        }
+        assert!(kept.is_empty());
+        assert!(down.is_empty());
+        // The system takes input again: nothing is put in that nobody typed.
+        assert_eq!(put(&mut down, &mut kept, &[(2, true)], 1), [(2, true)]);
+    }
+
+    #[test]
+    fn one_release_waits_per_key_however_many_batches_are_refused() {
+        let (mut down, mut kept) = (Vec::new(), Vec::new());
+        put(&mut down, &mut kept, &[(KEY_A, true)], 1);
+        for _ in 0..5 {
+            put(&mut down, &mut kept, &[(KEY_A, true), (KEY_A, false)], 0);
+        }
+        assert_eq!(kept, [(KEY_A, false)]);
+        assert_eq!(put(&mut down, &mut kept, &[], 1), [(KEY_A, false)]);
+        assert!(kept.is_empty() && down.is_empty());
     }
 
     #[test]
     fn a_release_refused_twice_is_kept_once() {
-        let mut kept = Vec::new();
-        put(&mut kept, &[(1, false)], 0);
-        put(&mut kept, &[], 0);
+        let (mut down, mut kept) = (Vec::new(), Vec::new());
+        put(&mut down, &mut kept, &[(1, true)], 1);
+        put(&mut down, &mut kept, &[(1, false)], 0);
+        put(&mut down, &mut kept, &[], 0);
         assert_eq!(kept, [(1, false)]);
     }
 }

@@ -208,6 +208,7 @@ impl Injector for SendInputInjector {
         if self.inputs.is_empty() {
             return;
         }
+        foreground::input();
         let sent = unsafe { SendInput(&self.inputs, std::mem::size_of::<INPUT>() as i32) };
         // A UIPI block is silent: `SendInput` counts what it dropped as sent, which is
         // why the foreground is watched. Fewer than asked is a desktop this process

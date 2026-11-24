@@ -39,6 +39,7 @@ qui va le pointeur quand il y entre.
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
+| Fenêtre élevée chez l'esclave (PR #818) | `lbm-hook/src/remote/blocking.rs`, `remote/windows/foreground.rs`, `Control::InjectionBlocked`, page Machines, tray | Le hook esclave Windows compare l'intégrité du premier plan à la sienne (suivi par `EVENT_SYSTEM_FOREGROUND` pendant une session pilotée seulement), le dit au maître derrière la capacité `InjectionBlocked` ; le maître l'affiche (« Windows blocks the mouse and keyboard on … ») et ramène son pointeur au lieu de le laisser figé |
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
@@ -69,6 +70,7 @@ trouvés pendant l'essai.
 | Esclave Linux (KWin 6, deux écrans d'échelles 1,66 et 1,25) : pointeur au pixel, clics gauche/droit/milieu, molette verticale et horizontale haute résolution, touches étendues, relâchement au `Leave` (bouton puis touches en ordre inverse) et à la chute du lien (1 ms si le maître meurt, 3 s par keepalive s'il se fige) | Vérifié avec `peer_drive`, après les deux correctifs de la PR #807 |
 | Fonds en direct, esclave Windows : diaporama, `SystemParametersInfo`, `IDesktopWallpaper`, clic dans Paramètres, Spotlight, passage en diaporama | Vérifié sur la vm124 : nouvelle vignette chez le maître en 1 à 2 s |
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
+| Avertissement « fenêtre élevée » (PR #818) : hook esclave non élevé, clavier visuel (`osk.exe`, High + UIAccess) mis au premier plan par son icône de la barre des tâches | Vérifié sur la vm124 : blocage signalé à l'instant où `osk.exe` prend le focus (~300 ms après le survol de l'icône), redit au début de la session suivante ; curseur effectivement figé. Même chose, naturellement, avec la console `mmc.exe` élevée du mainteneur au premier plan. Hook élevé : rien de signalé, tout passe. `SendInput` renvoie le compte complet et `GetLastError` = 0 malgré le blocage. Essayé hook seul (à côté de l'agent du mainteneur, que le mutex d'instance empêche de doubler), pas la chaîne réseau jusqu'au maître, couverte par les tests sur boucle locale |
 | Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
@@ -190,6 +192,19 @@ Windows actuel ne connaît pas les zones distantes.
   administrateur à jeton fractionné, un agent élevé dont le hook hérite du niveau
   d'intégrité (`lbm-agent/src/elevation.rs`). **Essayé sur la vm124** : depuis un agent
   non élevé, rien ne passe, pas même le mouvement ; depuis un agent élevé, tout passe.
+  Depuis la PR #818, LBM le dit : le hook compare le niveau d'intégrité (et l'UIAccess)
+  du processus au premier plan au sien, le maître affiche « Windows blocks the mouse and
+  keyboard on <esclave>: an elevated window has the focus » avec la sortie (« Start with
+  elevated privileges ») et ramène son pointeur au lieu de le laisser figé. Le premier
+  plan est suivi par `EVENT_SYSTEM_FOREGROUND` pendant la session, et chaque lot injecté
+  le compare à celui déjà jugé : à l'essai, l'événement a manqué une fois sur quatre
+  (le crochet de focus du hook aussi), d'où ce filet. Limites : seul le **premier plan**
+  compte — un clic sur une fenêtre élevée qui n'a pas le focus peut être jeté sans rien
+  dire, le mouvement passant toujours (non essayé) ; entre deux sessions le premier
+  plan n'est pas suivi, l'avertissement du maître reste donc celui de la dernière
+  session jusqu'à la traversée suivante ; un jeton illisible est pris pour un niveau
+  supérieur. Le retour du pointeur chez le maître n'a été vu qu'en test (et par
+  `peer_drive`, qui l'imite), pas avec un vrai maître.
   Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
   l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de
   `--config-dir`, et les chemins relatifs n'étaient pas rendus absolus avant la relance élevée (PR #811). Le refus de l'invite UAC n'a pas été observé. Un utilisateur standard reste sans solution hors

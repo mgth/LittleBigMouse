@@ -8,9 +8,13 @@
 //! pump messages: a thread of its own, made at the first session and kept for the
 //! process's life, idle in `GetMessageW` the rest of the time.
 //!
+//! Each batch injected also compares the foreground window with the one last judged
+//! ([`input`]): a net for an event that does not come.
+//!
 //! Between sessions the last word stands: the agent keeps a block said during a session
 //! until the next one begins and says otherwise.
 
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use lbm_ipc::peer::InjectionBlock;
@@ -41,6 +45,8 @@ const WM_UNWATCH: u32 = WM_APP + 0x51;
 
 static SHARED: OnceLock<&'static Shared> = OnceLock::new();
 static REPORTER: Mutex<Reporter> = Mutex::new(Reporter::new());
+/// The foreground window last judged, so that [`input`] judges again only a new one.
+static LAST: AtomicIsize = AtomicIsize::new(0);
 /// The watcher's thread id; `None` when it could not be made, and then only the
 /// session's start is checked.
 static WATCHER: OnceLock<Option<u32>> = OnceLock::new();
@@ -49,7 +55,10 @@ static WATCHER: OnceLock<Option<u32>> = OnceLock::new();
 /// begins blocked (or no longer is), and the foreground followed until [`end`].
 pub fn begin(shared: &'static Shared) {
     let _ = SHARED.set(shared);
-    let now = verdict(None);
+    // SAFETY: no pointer.
+    let hwnd = unsafe { GetForegroundWindow() };
+    LAST.store(hwnd.0 as isize, Ordering::Relaxed);
+    let now = verdict(Some(hwnd));
     say(lock().begin(now));
     if let Some(thread) = *WATCHER.get_or_init(spawn_watcher) {
         // SAFETY: posting to a thread of this process; a failure leaves it unwatched.
@@ -62,6 +71,19 @@ pub fn end() {
     if let Some(Some(thread)) = WATCHER.get() {
         // SAFETY: as in `begin`.
         let _ = unsafe { PostThreadMessageW(*thread, WM_UNWATCH, WPARAM(0), LPARAM(0)) };
+    }
+}
+
+/// A batch is about to be injected: if the foreground is not the window last judged, it
+/// is judged now. A net under the event hook, which on the vm124 once let a change to
+/// `osk.exe` go by unreported (the hook's own focus hook missed it too): the master keeps
+/// sending while its pointer is frozen over there, so the next batch catches it. One
+/// `GetForegroundWindow` per batch otherwise — no timer, nothing between sessions.
+pub fn input() {
+    // SAFETY: no pointer.
+    let hwnd = unsafe { GetForegroundWindow() };
+    if LAST.swap(hwnd.0 as isize, Ordering::Relaxed) != hwnd.0 as isize {
+        say(lock().changed(verdict(Some(hwnd))));
     }
 }
 
@@ -238,7 +260,7 @@ fn pump() {
                     )
                 };
                 // The foreground may have changed between `begin`'s reading and now.
-                say(lock().changed(verdict(None)));
+                input();
             }
             WM_UNWATCH if !hook.is_invalid() => {
                 // SAFETY: installed above.
@@ -266,5 +288,8 @@ unsafe extern "system" fn foreground_proc(
     _thread: u32,
     _time: u32,
 ) {
-    crate::hook::guard(|| say(lock().changed(verdict(Some(hwnd)))));
+    crate::hook::guard(|| {
+        LAST.store(hwnd.0 as isize, Ordering::Relaxed);
+        say(lock().changed(verdict(Some(hwnd))));
+    });
 }

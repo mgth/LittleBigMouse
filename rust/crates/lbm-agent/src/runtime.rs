@@ -106,6 +106,12 @@ pub struct Agent<W> {
     bound: Option<bool>,
     /// The exclusion list the hook was last handed; `None` on a fresh connection.
     excluded: Option<Vec<String>>,
+    /// The desktop the hook was last told, by a `Load` or on its own; `None` on a
+    /// fresh connection.
+    desktop_told: Option<lbm_ipc::protocol::Desktop>,
+    /// Whether the hook of this connection has said it is one of ours: nothing is
+    /// told before (`HookSignal::Greeted`).
+    hook_greeted: bool,
     /// Retire prepared work when a newer request or rebuilt layout replaces it.
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
@@ -188,6 +194,8 @@ impl<W: AgentWorld> Agent<W> {
             shortcut_unavailable: None,
             bound: None,
             excluded: None,
+            desktop_told: None,
+            hook_greeted: false,
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
             desktop: std::sync::Arc::new(crate::desktop::NoDesktop),
@@ -1350,6 +1358,29 @@ impl<W: AgentWorld> Agent<W> {
         self.excluded = Some(excluded);
     }
 
+    /// The desktop, for a hook that has had no `Load` carrying it — a stopped engine
+    /// on a machine another one drives: its injector places the remote pointer on
+    /// this desktop, and without one injects no pointer at all. Arms nothing.
+    fn tell_desktop(&mut self) {
+        // An enabled layout is on its way to the hook with its desktop (`Load`).
+        if self.world.layout().is_some_and(|l| l.enabled) {
+            return;
+        }
+        let Some(desktop) = self.world.desktop() else {
+            return;
+        };
+        if self.desktop_told == Some(desktop) {
+            return;
+        }
+        eprintln!(
+            "[lbm-agent] -> Desktop ({},{} {}x{})",
+            desktop.left, desktop.top, desktop.width, desktop.height
+        );
+        self.hook
+            .send(protocol::frame(&[Command::Desktop { desktop }]));
+        self.desktop_told = Some(desktop);
+    }
+
     fn tell_binding(&mut self) {
         let Some(bound) = self.world.bound_to_agent() else {
             return;
@@ -1543,6 +1574,8 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.bound = None;
                         self.excluded = None;
+                        self.desktop_told = None;
+                        self.hook_greeted = false;
                         self.hook_zones_unknown();
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
@@ -1559,6 +1592,8 @@ impl<W: AgentWorld> Agent<W> {
                         // for the whole of this connection and not only once it runs.
                         self.tell_binding();
                         self.tell_excluded();
+                        self.hook_greeted = true;
+                        self.tell_desktop();
                         self.hook_greeted_with(&layout);
                         Input::Hook(HookEvent::Greeted(layout))
                     }
@@ -1595,6 +1630,7 @@ impl<W: AgentWorld> Agent<W> {
                         eprintln!("[lbm-agent] hook connection lost");
                         self.forward("Dead", "");
                         self.hook_connected = false;
+                        self.hook_greeted = false;
                         self.shortcut_unavailable = None;
                         self.on_the_wire = None;
                         self.hook_zones_unknown();
@@ -1664,6 +1700,10 @@ impl<W: AgentWorld> Agent<W> {
         for effect in effects {
             self.apply(effect);
         }
+        // After the effects: a Load among them has told the hook already.
+        if self.hook_connected && self.hook_greeted {
+            self.tell_desktop();
+        }
         // Every rebuild is this machine's display change, decided by the reconciler:
         // the masters it is a remote of hear of it from here, with no watcher of its own.
         if self.reconciler.rebuild_count() != rebuilds {
@@ -1713,6 +1753,9 @@ impl<W: AgentWorld> Agent<W> {
                         desktop: self.world.desktop(),
                         id: Some(id),
                     };
+                    if let Command::Load { desktop, .. } = &load {
+                        self.desktop_told = *desktop;
+                    }
                     // A foreign layout is simulated: loaded, never run.
                     let frame = if foreign {
                         protocol::frame(&[load])
@@ -1746,6 +1789,7 @@ impl<W: AgentWorld> Agent<W> {
                     "[lbm-agent] -> Preview ({} zones)",
                     zones.matches("<Zone ").count()
                 );
+                self.desktop_told = self.world.desktop();
                 self.hook.send(protocol::frame(&[
                     Command::Load {
                         zones: zones.clone(),

@@ -326,6 +326,8 @@ async fn connection<S>(
                     // way, and a fake that treated an empty list as "nothing said"
                     // would hide a user clearing their exclusions.
                     Command::Excluded { processes } => s.excluded = Some(processes),
+                    // Arms nothing: only recorded, with every other command.
+                    Command::Desktop { .. } => {}
                     Command::Unknown => {}
                 }
             }

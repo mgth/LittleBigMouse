@@ -534,3 +534,65 @@ async fn the_engine_is_told_whether_it_belongs_to_this_agent() {
     let _ = stop.send(());
     let _ = agent.await;
 }
+
+/// A machine another one drives may keep its own engine stopped: its hook is told the
+/// desktop all the same — the remote pointer is placed on it, and without one no pointer
+/// is injected at all — and is never handed a layout to run.
+#[tokio::test]
+async fn a_stopped_engine_still_tells_the_hook_its_desktop() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let world = FakeWorld {
+        layout: Some(LayoutState {
+            enabled: false,
+            is_virtual: false,
+            saved: true,
+        }),
+        bound: false,
+        record: Arc::new(Mutex::new(Record::default())),
+    };
+
+    let (hook, signals) = HookClient::spawn(endpoint.clone());
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let agent = tokio::spawn(async move {
+        let mut agent = Agent::new(world, quick(), hook, inputs);
+        agent
+            .run(signals, inputs_rx, async {
+                let _ = stopped.await;
+            })
+            .await;
+    });
+
+    let desktop = Command::Desktop {
+        desktop: lbm_ipc::protocol::Desktop {
+            left: 0,
+            top: 0,
+            width: 3840,
+            height: 1080,
+        },
+    };
+    let told = |fake: &FakeHook| fake.received().iter().filter(|c| **c == desktop).count();
+    until("the desktop is told", || told(&fake) == 1).await;
+    // Long enough for the boot's rebuild and its Stop to have gone out too.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let received = fake.received();
+    assert_eq!(told(&fake), 1, "told once: {received:?}");
+    assert!(
+        !received
+            .iter()
+            .any(|c| matches!(c, Command::Load { .. } | Command::Run)),
+        "nothing to route: {received:?}"
+    );
+    assert!(!fake.hooked());
+
+    // A hook that comes back is a new connection: told again.
+    drop(fake);
+    let fake = rebind(&endpoint).await;
+    until("the new hook is told the desktop", || told(&fake) == 1).await;
+    assert!(!fake.hooked());
+
+    stop.send(()).unwrap();
+    agent.await.unwrap();
+}

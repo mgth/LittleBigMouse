@@ -197,7 +197,7 @@ Windows actuel ne connaît pas les zones distantes.
   keyboard on <esclave>: an elevated window has the focus » avec la sortie (« Start with
   elevated privileges ») et ramène son pointeur au lieu de le laisser figé. Le premier
   plan est suivi par `EVENT_SYSTEM_FOREGROUND` pendant la session, et chaque lot injecté
-  le compare à celui déjà jugé : à l'essai, l'événement a manqué une fois sur quatre
+  le compare à celui déjà jugé : à l'essai, l'événement a manqué une fois sur six
   (le crochet de focus du hook aussi), d'où ce filet. Limites : seul le **premier plan**
   compte — un clic sur une fenêtre élevée qui n'a pas le focus peut être jeté sans rien
   dire, le mouvement passant toujours (non essayé) ; entre deux sessions le premier

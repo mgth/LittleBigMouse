@@ -17,7 +17,9 @@ dans son layout en millimètres, à côté des siens. C'est le moteur habituel d
 LittleBigMouse qui route le pointeur sur l'ensemble ; l'esclave ne fait qu'injecter.
 
 Un écran connu des deux machines (KVM, ou moniteur câblé sur deux entrées) est **un seul
-moniteur à deux sources**. Sa source active dit quelle machine il affiche, et donc à
+moniteur à deux sources**, à condition que les deux machines lui lisent la même clé de
+dalle (constructeur, produit et numéro de série de l'EDID). Sans numéro de série
+exploitable, ou derrière un KVM qui masque l'EDID, ce sont deux moniteurs distincts. Sa source active dit quelle machine il affiche, et donc à
 qui va le pointeur quand il y entre.
 
 ## Ce qui est livré
@@ -37,7 +39,8 @@ qui va le pointeur quand il y entre.
 Règle de sûreté tenue partout : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
-reste reconnu pendant que le clavier est capturé.
+reste reconnu pendant que le clavier est capturé. Une panne y échappe encore : le hook
+de l'esclave qui redémarre seul (voir « Faiblesses connues »).
 
 ## Ce qui a été essayé pour de bon
 
@@ -69,6 +72,14 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 ## Faiblesses connues
 
+- **Hook de l'esclave redémarré en pleine traversée.** Quand seul le hook de l'esclave
+  perd sa connexion à son agent, le lien réseau avec le maître reste en vie et l'agent
+  de l'esclave n'envoie pas d'`InputReset` (il ne le fait que pour un débordement de
+  file, `peers/actor.rs`). Le maître garde donc son clavier capturé et continue
+  d'envoyer ; le nouveau hook ignore tout jusqu'au prochain `Enter`. La saisie est
+  perdue jusqu'à ce que l'utilisateur revienne et retraverse, ou use du raccourci de
+  secours. À corriger : dire `InputReset` aussi quand la connexion au hook tombe
+  pendant une session.
 - La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
   hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
   mauvais. Le corriger demande un identifiant de layout dans la réponse.
@@ -85,10 +96,18 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 | | Maître | Esclave |
 |---|---|---|
-| **Linux, evdev** (accès `/dev/uinput`) | Livré, vérifié sous KDE Wayland | Livré, jamais essayé |
-| **Linux, portail Wayland ou X11** (sans evdev) | Absent : les zones distantes ne sont jamais franchissables | Sans objet (l'injection passe par uinput) |
+| **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, jamais essayé sur matériel |
+| **Linux, backend portail Wayland ou X11** | Absent : les zones distantes ne sont jamais franchissables | Livré si `/dev/uinput` est accessible en écriture, jamais essayé sur matériel |
 | **Windows** | Absent | Livré, vérifié |
 | **macOS** | Absent | Absent |
+
+Prérequis des rôles Linux, qui ne sont pas les mêmes :
+
+- **maître** : le backend evdev, donc `/dev/uinput` accessible en écriture **et** au
+  moins une souris physique lisible (`evdev/devices.rs`, `available`) ;
+- **esclave** : seulement `/dev/uinput` accessible en écriture. L'injecteur est installé
+  par le hook quel que soit le backend de capture locale ; une machine qui route sa
+  propre souris par le portail ou X11 peut donc être esclave.
 
 Et par fonction annexe :
 
@@ -100,7 +119,7 @@ Et par fonction annexe :
 | Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Sans objet tant qu'il n'y a pas de maître Windows |
 | Curseur rangé, côté esclave | Rien de visible | Oui |
 | DDC/CI | `ddcutil` | dxva2 |
-| Profil conservé à travers un KVM | Oui (l'id du moniteur est la clé de dalle) | Non : Windows nomme ses moniteurs autrement |
+| Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines (l'id du moniteur est alors cette clé) ; sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil | Non : Windows nomme ses moniteurs autrement |
 
 ## Reste à faire pour un support Linux/Windows universel
 
@@ -139,18 +158,23 @@ Windows actuel ne connaît pas les zones distantes.
   sous Windows, dont les ids locaux ont une autre forme. Sans cela, un KVM crée un
   nouveau profil à chaque bascule.
 - **Fenêtres élevées** : à vérifier — un hook bas niveau d'un processus non élevé ne
-  reçoit vraisemblablement pas l'entrée destinée à une fenêtre élevée.
+  reçoit vraisemblablement pas l'entrée destinée à une fenêtre élevée. `StartElevated`
+  (voir plus bas) est la piste existante.
 
 ### 3. Esclave Windows : les deux trous
 
-- **Fenêtres élevées** : `SendInput` depuis un processus non élevé est refusé par une
-  fenêtre élevée au premier plan. Le pointeur bouge, les clics et les touches non.
+- **Fenêtres élevées** : mouvements, clics et touches passent tous par le même
+  `SendInput`, soumis à UIPI : depuis un hook non élevé, rien n'est garanti quand une
+  fenêtre élevée a le focus. Une option existe déjà : `StartElevated` lance, pour un
+  administrateur à jeton fractionné, un agent élevé dont le hook hérite du niveau
+  d'intégrité (`lbm-agent/src/elevation.rs`). **À essayer** pour l'injection multi-PC
+  avant d'écrire quoi que ce soit ; un utilisateur standard reste sans solution.
 - **Bureau sécurisé** (UAC, écran de verrouillage, Ctrl+Alt+Suppr) : hors d'atteinte
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
   le développement : la machine était verrouillée.
 
-Les deux se règlent ensemble par un composant de service ; c'est un chantier à part,
-avec ses propres questions de sécurité.
+Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
+couvrirait aussi les fenêtres élevées pour un utilisateur standard.
 
 ### 4. Maîtres Linux sans evdev
 
@@ -158,9 +182,12 @@ Le backend evdev demande l'accès à `/dev/uinput`. Sans lui, LittleBigMouse ret
 le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 - **X11** : faisable (XInput2 donne le mouvement brut, `XGrabKeyboard` la capture).
-- **Portail Wayland** : le portail ne donne ni mouvement relatif au-delà du bord ni
-  capture du clavier. Le portail `InputCapture` est fait pour cela (c'est ce qu'utilise
-  Deskflow), mais c'est un backend à écrire en entier, et son support dépend du
+- **Portail Wayland** : le backend existant (`hook/linux/portal.rs`) ouvre déjà une
+  session `org.freedesktop.portal.InputCapture`, se connecte à EIS et reçoit les
+  déplacements relatifs pendant la capture. Il ne demande aujourd'hui que le pointeur.
+  Reste à demander et traiter le clavier, à rendre les zones distantes franchissables
+  pour ce backend et à relayer les événements pendant le séjour sur l'écran distant —
+  d'où l'intérêt de l'automate de traversée partagé (point 2). Le support dépend du
   compositeur.
 
 À mon avis, documenter « le maître Linux demande evdev » suffit dans un premier temps.
@@ -229,9 +256,10 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. Sortir l'automate de traversée du module evdev.
 3. Maître Windows.
-4. Corrélation `Loaded`, retour d'erreur vers l'interface, règle de pare-feu dans
-   l'installeur.
-5. Service Windows pour le bureau sécurisé et les fenêtres élevées.
+4. `InputReset` quand le hook de l'esclave tombe, corrélation `Loaded`, retour d'erreur
+   vers l'interface, règle de pare-feu dans l'installeur.
+5. Fenêtres élevées par `StartElevated` (à essayer), puis service Windows pour le
+   bureau sécurisé.
 6. Plusieurs esclaves, presse-papiers.
 7. GNOME, X11, portail `InputCapture`.
 8. macOS esclave, si quelqu'un peut l'essayer.

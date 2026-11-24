@@ -66,15 +66,31 @@ public class WallpaperManager : ReactiveObject, IDisposable
         this.RaisePropertyChanged(nameof(Mode));
         this.RaisePropertyChanged(nameof(SpanImagePath));
 
-        if (Current?.HasContent == true) RequestApply();
+        if (Current?.HasContent == true) ForceApply();
     }
 
-    /// <summary>Screens moved in the editor: re-slice on save, not on every drag.</summary>
+    /// <summary>Screens moved in the editor: re-slice on save, never on every drag.</summary>
     void OnLayoutChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(IMonitorsLayout.Saved)) return;
         if (_layout?.Saved != true) return;
-        if (Current is { Mode: WallpaperMode.Span, HasContent: true }) RequestApply();
+        if (Current is { Mode: WallpaperMode.Span, HasContent: true }) ForceApply();
+    }
+
+    /// <summary>
+    /// Apply regardless of the last applied signature. Needed whenever the display topology
+    /// may have changed (a rebuilt layout, or the editor pushing new geometry to the OS):
+    /// slice files are content-addressed, so identical geometry yields identical paths and the
+    /// signature gate would skip the rewrite — but the OS rebuilds its image-to-monitor
+    /// association on a topology change, and only a fresh write re-establishes the mapping.
+    /// Skipping it leaves the desktop painting the slices on the wrong monitors (the classic
+    /// "the two screens are swapped" symptom, which the editor preview never shows because it
+    /// does not read the OS assignment back).
+    /// </summary>
+    void ForceApply()
+    {
+        _lastAppliedSignature = null;
+        RequestApply();
     }
 
     LayoutWallpaperSettings? Current
@@ -182,11 +198,11 @@ public class WallpaperManager : ReactiveObject, IDisposable
             if (screen.Kind == ScreenWallpaperKind.Image)
             {
                 if (screen.ImagePath is { Length: > 0 } path && File.Exists(path))
-                    screens.Add(new ScreenWallpaper(bounds, path, screen.Style, null));
+                    screens.Add(new ScreenWallpaper(bounds, path, screen.Style, null, monitor.ActiveSource.Source.InterfacePath));
             }
             else
             {
-                screens.Add(new ScreenWallpaper(bounds, null, screen.Style, ParseColor(screen.Color)));
+                screens.Add(new ScreenWallpaper(bounds, null, screen.Style, ParseColor(screen.Color), monitor.ActiveSource.Source.InterfacePath));
             }
         }
         return screens;
@@ -222,7 +238,8 @@ public class WallpaperManager : ReactiveObject, IDisposable
         return monitors
             .Where(m => files.ContainsKey(m.Id))
             .Select(m => new ScreenWallpaper(
-                m.ActiveSource.Source.InPixel.Bounds, files[m.Id], WallpaperStyle.Stretch, null))
+                m.ActiveSource.Source.InPixel.Bounds, files[m.Id], WallpaperStyle.Stretch, null,
+                m.ActiveSource.Source.InterfacePath))
             .ToList();
     }
 

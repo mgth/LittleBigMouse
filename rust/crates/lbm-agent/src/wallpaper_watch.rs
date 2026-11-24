@@ -161,6 +161,38 @@ pub fn plasma_config(
     (session.is_kde() || file.exists()).then_some(file)
 }
 
+/// The directories to watch for `file` and the names that matter in them: its own, and
+/// those of what it points to when it is a link.
+///
+/// The link is read hop by hop on top of being resolved, because resolving fails as soon
+/// as the target is missing — and a target a dotfile manager removes and writes again is
+/// exactly when the directory it comes back in must still be watched.
+#[cfg(target_os = "linux")]
+fn places(
+    file: &std::path::Path,
+) -> (
+    std::collections::BTreeSet<std::path::PathBuf>,
+    std::collections::BTreeSet<std::ffi::OsString>,
+) {
+    /// More hops than any real chain; a loop of links ends here.
+    const HOPS: usize = 8;
+    let (mut dirs, mut names) =
+        crate::watch::events::watched(std::slice::from_ref(&file.to_path_buf()));
+    let mut at = file.to_path_buf();
+    for _ in 0..HOPS {
+        let Ok(to) = std::fs::read_link(&at) else {
+            break;
+        };
+        // Relative to the link's own directory; `join` keeps an absolute target as it is.
+        at = at.parent().map_or(to.clone(), |dir| dir.join(&to));
+        if let (Some(dir), Some(name)) = (at.parent(), at.file_name()) {
+            dirs.insert(dir.to_path_buf());
+            names.insert(name.to_os_string());
+        }
+    }
+    (dirs, names)
+}
+
 /// Says `changes` whenever `file` is written or replaced, until the watch is dropped.
 ///
 /// The directory is watched, not the file: a desktop saves by writing beside the file and
@@ -183,7 +215,7 @@ pub fn watch_file(file: &std::path::Path, changes: Changes) -> std::io::Result<W
     }
 
     let file = file.to_path_buf();
-    let mut target = events::watched(std::slice::from_ref(&file));
+    let mut target = places(&file);
     let mut fd = tokio::io::unix::AsyncFd::new(events::inotify(&target.0)?)?;
     let reader = tokio::spawn(async move {
         let mut buf = vec![0u8; 16 * 1024];
@@ -212,7 +244,7 @@ pub fn watch_file(file: &std::path::Path, changes: Changes) -> std::io::Result<W
             // resolved when the watch was installed is then the wrong place to look, so
             // it is resolved again — on this event, and before saying the change, so
             // that the reading it asks for is taken with the new place already watched.
-            let now = events::watched(std::slice::from_ref(&file));
+            let now = places(&file);
             if now != target {
                 match events::inotify(&now.0).and_then(tokio::io::unix::AsyncFd::new) {
                     Ok(moved) => {
@@ -453,6 +485,58 @@ mod tests {
             assert!(
                 said(&mut received).await,
                 "a write to the new target was not seen"
+            );
+        }
+
+        /// A dotfile manager removing the target and writing it again, the link left as
+        /// it is: for a while it points at nothing, and that directory is still the one
+        /// where the configuration comes back.
+        #[tokio::test]
+        async fn a_link_left_dangling_is_still_watched_for_its_target_coming_back() {
+            let config = tempfile::tempdir().unwrap();
+            let dotfiles = tempfile::tempdir().unwrap();
+            let file = config.path().join(PLASMA_CONFIG);
+            let real = dotfiles.path().join("appletsrc");
+            std::fs::write(&real, "[Containments][1]\n").unwrap();
+            std::os::unix::fs::symlink(&real, &file).unwrap();
+            let (changes, mut received) = channel();
+            let _watching = watch_file(&file, changes).expect("no inotify watch to test with");
+
+            std::fs::remove_file(&real).unwrap();
+            assert!(said(&mut received).await, "the target going was not seen");
+            while received.try_recv().is_ok() {}
+
+            std::fs::write(&real, "[Containments][1]\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "the target coming back was not seen"
+            );
+            // Creation and write are separate events; let both be handled.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            while received.try_recv().is_ok() {}
+
+            std::fs::write(&real, "[Containments][1][Wallpaper]\nImage=back\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "a write through the link was not seen"
+            );
+        }
+
+        /// The same before any watch: a link installed ahead of what it points to.
+        #[tokio::test]
+        async fn a_link_that_never_had_a_target_is_watched_for_its_first_one() {
+            let config = tempfile::tempdir().unwrap();
+            let dotfiles = tempfile::tempdir().unwrap();
+            let file = config.path().join(PLASMA_CONFIG);
+            let real = dotfiles.path().join("appletsrc");
+            std::os::unix::fs::symlink(&real, &file).unwrap();
+            let (changes, mut received) = channel();
+            let _watching = watch_file(&file, changes).expect("no inotify watch to test with");
+
+            std::fs::write(&real, "[Containments][1][Wallpaper]\nImage=first\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "the target appearing was not seen"
             );
         }
 

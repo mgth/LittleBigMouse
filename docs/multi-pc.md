@@ -296,7 +296,8 @@ by the window itself; a remote's are on another desktop, so the remote sends the
     wallpaper is configured. The session (`XDG_CURRENT_DESKTOP`) says this is Plasma,
     not the file: a Plasma that has not saved its configuration yet is watched for the
     first time it does. A file that is a link (a dotfile manager's) is followed to
-    where it points, and followed again when the link appears or changes. plasmashell's `wallpaperChanged` D-Bus signal is not used:
+    where it points, followed again when the link appears or changes, and still
+    watched there while the target is missing. plasmashell's `wallpaperChanged` D-Bus signal is not used:
     it is emitted by its `setWallpaper` method only, not by the settings dialog. What
     Plasma changes without writing its configuration — the next picture of a slide
     show — is not seen, nor read: the reader reads that configuration.

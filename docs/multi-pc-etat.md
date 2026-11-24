@@ -180,12 +180,14 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 - Maître Windows : un pointeur qui donne des positions absolues (tablette, bureau à
   distance, souris d'une VM vue par RustDesk) n'a pas de déplacement à donner ; le
-  pointeur de l'esclave saute avec lui. Le raccourci de secours et celui du verrou sont
-  cherchés par scancode à leur place sur un clavier US pendant que le pointeur est
-  parti : sur un clavier AZERTY, le `M` attendu est la touche marquée `,` (ici, c'est
-  `RegisterHotKey`, qui suit la disposition). La branche `claude/mpc-lock-rescue-fix`
-  règle ce cas pour evdev (`Letters`) ; il restera à remplir `Letters` sous Windows par
-  `MapVirtualKeyEx` sur la disposition du premier plan. Une fenêtre élevée qui prend le
+  pointeur de l'esclave saute avec lui. Pendant que le pointeur est parti, les touches
+  sont lues par scancode : la lettre du secours et celle du verrou sont cherchées sur la
+  disposition de la fenêtre au premier plan (`MapVirtualKeyEx`, relue quand elle change,
+  `Letters` de la PR #826) ; ici, le secours reste à `RegisterHotKey`, qui suit la
+  disposition, et les touches lues par le hook clavier ne le déclenchent pas une seconde
+  fois (`rescue_bound_by_desktop`). Couvert par un test AZERTY, jamais essayé avec un
+  vrai clavier AZERTY (la frappe de l'essai visait les touches par leur place US). Une
+  fenêtre élevée qui prend le
   focus ramène le pointeur sans que l'interface le dise (seule une ligne du journal du
   hook). Le maître et l'esclave d'une même machine partageraient la fenêtre qui cache
   le curseur (un seul hider par processus).
@@ -266,7 +268,7 @@ Ce qui a été tranché, et pourquoi :
   de la fenêtre avancée à l'arrivée du client (jamais d'attente dans le hook).
 - **Automate** : `hook::ll_master` implémente `Platform` ; une « trame » est un
   événement, passé ou avalé. Secours, pointeur verrouillé et verrous fonctionnent comme
-  sous Linux (essayés), au défaut de disposition près (« Faiblesses connues »).
+  sous Linux (essayés) ; la lettre des raccourcis suit la disposition du premier plan.
 - **Identité des moniteurs** : PR à part (#827), l'id Windows calculé sur l'EDID de
   l'esclave.
 - **Fenêtres élevées** côté maître : vérifié, un hook non élevé ne voit rien de
@@ -277,9 +279,8 @@ Ce qui a été tranché, et pourquoi :
   utilisateur standard, le service Windows.
 
 Reste : un essai avec une vraie souris et un vrai clavier, face à un esclave Windows et
-à un esclave Linux qui injecte ; la disposition du clavier pour le secours et le verrou
-une fois `claude/mpc-lock-rescue-fix` fusionnée ; dire dans l'interface qu'une fenêtre
-élevée a ramené le pointeur.
+à un esclave Linux qui injecte, et avec un clavier AZERTY pour les raccourcis ; dire
+dans l'interface qu'une fenêtre élevée a ramené le pointeur.
 
 ### 3. Esclave Windows : les deux trous
 
@@ -516,7 +517,7 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
 3. ~~Maître Windows~~ (PR #828 ; reste l'essai avec de vrais périphériques et un
-   esclave Windows, et la disposition du clavier pour les raccourcis).
+   esclave Windows).
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave

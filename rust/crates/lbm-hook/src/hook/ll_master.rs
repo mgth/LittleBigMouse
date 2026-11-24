@@ -652,7 +652,7 @@ impl<D: Desk, L: Link> LlMaster<D, L> {
             crossing.grabbed_key(code, press, now);
             Verdict::Swallow
         } else {
-            crossing.observed_key(code, press);
+            crossing.observed_key(code, press, now);
             let held = m.here.iter().position(|key| key.code == code);
             match (press, held) {
                 (Press::Down, None) => {
@@ -1162,6 +1162,30 @@ mod tests {
         rig.master.on_tick(rig.shared);
         assert!(!rig.master.is_remote(), "the rescue brought it home");
         assert!(rig.sent().contains(&Wire::Leave));
+    }
+
+    #[test]
+    fn on_a_french_keyboard_the_rescue_is_its_m_key_over_there() {
+        let mut rig = Rig::new(true);
+        *rig.shared.rescue_shortcut.lock().unwrap() = "Ctrl+Alt+Shift+M".to_owned();
+        let mut places = [None; 26];
+        places[(b'M' - b'A') as usize] = Some(39);
+        *rig.shared.letters.lock().unwrap() =
+            crate::hook::crossing::keys::Letters::from_places(places);
+        rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+        rig.go_over();
+        let hold = crate::hook::crossing::keys::HOLD + std::time::Duration::from_millis(50);
+        let start = Instant::now().checked_sub(hold).unwrap();
+        // The key marked M on that keyboard, where US has ';'.
+        for (code, vk) in [(29, 0xA2), (56, 0xA4), (42, 0xA0), (39, 0x4D)] {
+            rig.master.desk.keys_down.push(vk);
+            assert_eq!(
+                rig.master.on_key(rig.shared, Some(code), vk, true, start),
+                Verdict::Swallow
+            );
+        }
+        rig.master.on_tick(rig.shared);
+        assert!(!rig.master.is_remote(), "the rescue brought it home");
     }
 
     #[test]

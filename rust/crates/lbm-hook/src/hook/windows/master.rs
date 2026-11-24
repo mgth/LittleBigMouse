@@ -44,7 +44,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use lbm_ipc::input::Locks;
 
 use crate::geometry::{Point, Rect};
-use crate::hook::crossing::keys::key_of_virtual_key;
+use crate::hook::crossing::keys::{key_of_virtual_key, Letters};
 use crate::hook::crossing::Press;
 use crate::hook::ll_master::{Desk, LlMaster, Verdict};
 use crate::ipc::input::Driver;
@@ -242,6 +242,8 @@ thread_local! {
     static TIMER: Cell<usize> = const { Cell::new(0) };
     /// The foreground window last judged while the pointer is away.
     static JUDGED: Cell<isize> = const { Cell::new(0) };
+    /// The keyboard layout the shortcut letters were last read in.
+    static LAYOUT: Cell<isize> = const { Cell::new(0) };
 }
 
 /// Runs `f` on the master, made at the first call. `None` when it is busy: the event
@@ -313,6 +315,48 @@ fn set_keyboard_hook(wanted: bool) {
         }
         KEYBOARD.with(|k| k.set(HHOOK(std::ptr::null_mut())));
         eprintln!("[LittleBigMouse.Hook] multi-PC: the keyboard hook is removed");
+    }
+}
+
+/// Where the keyboard layout of the window in the foreground puts the letters of the
+/// shortcuts. While the pointer is away, the keys are read by scancode, below any
+/// layout: the `M` of the rescue is the key right of `L` on a French keyboard, not the
+/// one right of `N`. Read again only when the layout changed: three calls that do not
+/// leave user mode otherwise.
+fn refresh_letters(shared: &Shared) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyboardLayout, MapVirtualKeyExW, MAPVK_VK_TO_VSC,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    // SAFETY: no pointer but the optional out one, not given.
+    let layout = unsafe {
+        let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        GetKeyboardLayout(thread)
+    };
+    if LAYOUT.with(Cell::get) == layout.0 as isize {
+        return;
+    }
+    LAYOUT.with(|l| l.set(layout.0 as isize));
+    let mut places = [None; 26];
+    for (i, place) in places.iter_mut().enumerate() {
+        // SAFETY: plain query.
+        let scan = unsafe { MapVirtualKeyExW(0x41 + i as u32, MAPVK_VK_TO_VSC, layout) };
+        *place = linux_key(scan as u16, false);
+    }
+    let letters = Letters::from_places(places);
+    let mut current = shared.letters.lock().unwrap_or_else(|p| p.into_inner());
+    if *current != letters {
+        *current = letters;
+        shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+        eprintln!(
+            "[LittleBigMouse.Hook] keyboard layout: shortcut letters read from layout {:#x}{}",
+            layout.0 as usize,
+            if letters == Letters::US {
+                " (as on a US keyboard)"
+            } else {
+                ""
+            }
+        );
     }
 }
 
@@ -434,9 +478,15 @@ pub(super) fn away_event(
 /// routed it, `None` when there is no machine to drive and the hook routes it as it
 /// always did.
 pub(super) fn local_move(shared: &'static Shared, report: (i32, i32)) -> Option<bool> {
-    with(|master| master.on_move(shared, Point::new(report.0, report.1)))
-        .flatten()
-        .map(|v| v == Verdict::Swallow)
+    with(|master| {
+        if master.active(shared) {
+            // Read here, where the pointer may cross out next.
+            refresh_letters(shared);
+        }
+        master.on_move(shared, Point::new(report.0, report.1))
+    })
+    .flatten()
+    .map(|v| v == Verdict::Swallow)
 }
 
 /// A button (Linux code and press) or a wheel turn (horizontal, vertical, in 120ths).
@@ -508,6 +558,12 @@ fn key(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     } else {
         linux_key(kb.scanCode as u16, extended)
     };
-    with(|master| master.on_key(shared, linux, vk, down, Instant::now()) == Verdict::Swallow)
-        .unwrap_or(false)
+    with(|master| {
+        if !master.is_remote() {
+            // A layout switched by its own shortcut is the next key's.
+            refresh_letters(shared);
+        }
+        master.on_key(shared, linux, vk, down, Instant::now()) == Verdict::Swallow
+    })
+    .unwrap_or(false)
 }

@@ -15,6 +15,10 @@
 //! Script, positions in the remote's desktop pixels and codes as Linux input codes:
 //! `enter X Y`, `move X Y`, `leave`, `click|press|release left|right|middle|CODE`,
 //! `key|keydown|keyup CODE`, `wheel H V` (1/120ths of a notch), `sleep MS`.
+//! `rulers N` asks the remote to draw "Rulers on screens" on all its screens, measuring
+//! its `N`th screen (0 first), as a master's editor computes them from the `Displays` it
+//! was sent; `norulers` takes them down. While it sleeps it prints what the remote says
+//! of them (`OverlayFailed`).
 //!
 //! It opens no input device and drives nothing on this machine: everything it sends is
 //! typed on the command line.
@@ -38,6 +42,8 @@ const DISPLAYS_PATIENCE: Duration = Duration::from_secs(10);
 enum Step {
     Send(Vec<InputEvent>),
     Sleep(Duration),
+    /// Rulers measuring the remote's screen of that index; `None` takes them down.
+    Rulers(Option<usize>),
 }
 
 fn number<T: std::str::FromStr>(
@@ -113,6 +119,14 @@ fn script(words: Vec<String>) -> Result<Vec<Step>, String> {
                 horizontal: number(&mut words, "wheel")?,
                 vertical: number(&mut words, "wheel")?,
             }],
+            "rulers" => {
+                steps.push(Step::Rulers(Some(number(&mut words, "rulers")?)));
+                continue;
+            }
+            "norulers" => {
+                steps.push(Step::Rulers(None));
+                continue;
+            }
             "sleep" => {
                 steps.push(Step::Sleep(Duration::from_millis(number(
                     &mut words, "sleep",
@@ -191,6 +205,7 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
         }
     })
     .await;
+    let mut screens = Vec::new();
     match displays {
         Ok(Ok((revision, displays))) => {
             let json = serde_json::json!({ "Revision": revision, "Displays": displays });
@@ -198,10 +213,12 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                 "{}",
                 serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?
             );
+            screens = displays;
         }
         Ok(Err(error)) => return Err(error),
         Err(_) => println!("no Displays within {DISPLAYS_PATIENCE:?}; playing the script anyway"),
     }
+    let mut revision = 0;
 
     for step in steps {
         match step {
@@ -212,7 +229,38 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                     .await
                     .map_err(|e| format!("cannot send: {e}"))?;
             }
-            Step::Sleep(duration) => tokio::time::sleep(duration).await,
+            Step::Sleep(duration) => {
+                let _ = tokio::time::timeout(duration, async {
+                    while let Some(event) = link.next().await {
+                        match event {
+                            Event::Control(Control::OverlayFailed { revision, error }) => {
+                                println!("<- rulers {revision} not shown: {error}")
+                            }
+                            Event::Control(Control::Displays { revision, displays }) => {
+                                println!("<- Displays {revision}: {} screen(s)", displays.len())
+                            }
+                            Event::Closed(reason) => {
+                                println!("<- the link ended: {reason:?}");
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                })
+                .await;
+            }
+            Step::Rulers(measured) => {
+                let bands = match measured {
+                    Some(index) => rulers(&peer.fingerprint, &peer.hello.name, &screens, index)?,
+                    None => Vec::new(),
+                };
+                revision += 1;
+                println!("-> Overlay {revision}: {} band(s)", bands.len());
+                sender
+                    .control(&Control::Overlay { revision, bands })
+                    .await
+                    .map_err(|e| format!("cannot send: {e}"))?;
+            }
         }
     }
     sender.close("the script is over").await;
@@ -227,4 +275,30 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
     .await;
     println!("bye");
     Ok(())
+}
+
+/// "Rulers on screens" for the remote's screens, measuring the `index`th, as a master's
+/// editor computes them: its screens merged into a layout of their own, placed as the
+/// remote places them, and `lbm_overlay::scene::from_layout`.
+fn rulers(
+    machine_id: &str,
+    name: &str,
+    screens: &[lbm_ipc::peer::PeerDisplay],
+    index: usize,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut layout = lbm_layout::model::Layout::new(Default::default());
+    lbm_display::peer::merge_peer(&mut layout, machine_id, name, screens);
+    layout.set_locations_from_system_configuration(false);
+    layout.anchor_on_primary();
+    let measured = layout
+        .monitors()
+        .get(index)
+        .map(|m| m.id.clone())
+        .ok_or_else(|| format!("the remote has no screen {index}"))?;
+    let bands =
+        lbm_overlay::scene::from_layout(&layout, lbm_overlay::Mode::Rulers, Some(&measured))?;
+    bands
+        .iter()
+        .map(|band| serde_json::to_value(band).map_err(|e| e.to_string()))
+        .collect()
 }

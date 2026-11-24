@@ -3,6 +3,7 @@
 //! systems are tested on either.
 
 use std::io::Cursor;
+use std::path::PathBuf;
 
 /// Text as it crosses: lines ended by `\n`, whatever ended them here.
 pub fn text_to_wire(text: &str) -> String {
@@ -98,6 +99,90 @@ pub fn is_png(bytes: &[u8]) -> bool {
     bytes.starts_with(b"\x89PNG\r\n\x1a\n")
 }
 
+/// The local files of a `text/uri-list` (RFC 2483: one URI a line, `#` for a comment):
+/// what is not a `file:` URI of this machine is left out.
+pub fn paths_from_uri_list(list: &[u8]) -> Vec<PathBuf> {
+    String::from_utf8_lossy(list)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| url::Url::parse(line).ok())
+        .filter(|url| url.scheme() == "file")
+        .filter_map(|url| url.to_file_path().ok())
+        .collect()
+}
+
+/// `paths` as a `text/uri-list`, lines ended by `\r\n` as the RFC says.
+pub fn uri_list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .filter_map(|path| url::Url::from_file_path(path).ok())
+        .map(|url| format!("{url}\r\n"))
+        .collect()
+}
+
+/// `paths` as GNOME's file managers copy them (`x-special/gnome-copied-files`).
+pub fn gnome_copied_files(paths: &[PathBuf]) -> String {
+    let uris: Vec<String> = paths
+        .iter()
+        .filter_map(|path| url::Url::from_file_path(path).ok())
+        .map(|url| url.to_string())
+        .collect();
+    format!("copy\n{}", uris.join("\n"))
+}
+
+/// The size of a `DROPFILES` header, which `CF_HDROP` starts with.
+const DROPFILES: usize = 20;
+
+/// The paths of a `CF_HDROP`: a `DROPFILES` header (offset of the list, a point, two
+/// flags, the last saying wide characters), then the paths, each ended by a NUL, the
+/// list by another.
+pub fn paths_from_dropfiles(bytes: &[u8]) -> Vec<PathBuf> {
+    if bytes.len() < DROPFILES {
+        return Vec::new();
+    }
+    let offset = u32::from_le_bytes(bytes[0..4].try_into().expect("4 bytes")) as usize;
+    let wide = u32::from_le_bytes(bytes[16..20].try_into().expect("4 bytes")) != 0;
+    let Some(list) = bytes.get(offset..) else {
+        return Vec::new();
+    };
+    let names: Vec<String> = if wide {
+        let units: Vec<u16> = list
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect();
+        units
+            .split(|unit| *unit == 0)
+            .take_while(|name| !name.is_empty())
+            .map(String::from_utf16_lossy)
+            .collect()
+    } else {
+        list.split(|byte| *byte == 0)
+            .take_while(|name| !name.is_empty())
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .collect()
+    };
+    names.into_iter().map(PathBuf::from).collect()
+}
+
+/// `paths` as a `CF_HDROP`, wide characters.
+pub fn dropfiles(paths: &[PathBuf]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(DROPFILES as u32).to_le_bytes());
+    bytes.extend_from_slice(&[0; 12]); // the point, and not in a non-client area
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    for path in paths {
+        for unit in path.to_string_lossy().encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        bytes.extend_from_slice(&[0, 0]);
+    }
+    bytes.extend_from_slice(&[0, 0]);
+    bytes
+}
+
 fn png(picture: &image::DynamicImage) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     picture
@@ -153,6 +238,41 @@ mod tests {
         assert_eq!(read.get_pixel(1, 0).0, [255, 255, 255, 255]);
         assert_eq!(read.get_pixel(0, 1).0, [0, 0, 255, 255]);
         assert_eq!(read.get_pixel(1, 1).0, [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn a_drop_list_reads_back_its_paths() {
+        let paths = vec![
+            PathBuf::from("C:\\Users\\me\\été.txt"),
+            PathBuf::from("D:\\b"),
+        ];
+        assert_eq!(paths_from_dropfiles(&dropfiles(&paths)), paths);
+        assert!(paths_from_dropfiles(&[1, 2]).is_empty());
+        // A narrow list, as an older application may set it.
+        let mut narrow = vec![0u8; 20];
+        narrow[0] = 20;
+        narrow.extend_from_slice(b"C:\\a\0C:\\b\0\0");
+        assert_eq!(
+            paths_from_dropfiles(&narrow),
+            [PathBuf::from("C:\\a"), PathBuf::from("C:\\b")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_uri_list_holds_the_local_files_and_reads_back() {
+        let paths = vec![PathBuf::from("/home/me/été 1.txt"), PathBuf::from("/tmp/b")];
+        let list = uri_list(&paths);
+        assert_eq!(
+            list,
+            "file:///home/me/%C3%A9t%C3%A9%201.txt\r\nfile:///tmp/b\r\n"
+        );
+        assert_eq!(paths_from_uri_list(list.as_bytes()), paths);
+        assert_eq!(
+            paths_from_uri_list(b"# comment\nhttps://example.org/\nfile:///x\n"),
+            [PathBuf::from("/x")]
+        );
+        assert_eq!(gnome_copied_files(&paths[1..]), "copy\nfile:///tmp/b");
     }
 
     #[test]

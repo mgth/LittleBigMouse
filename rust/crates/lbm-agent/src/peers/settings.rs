@@ -41,6 +41,13 @@ pub struct Settings {
     /// The largest clipboard that crosses, either way. Absent: 64 MiB.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clipboard_max_bytes: Option<u64>,
+    /// The largest set of files that crosses, either way. Absent: 4 GiB.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clipboard_files_max_bytes: Option<u64>,
+    /// Where the files of another machine are fetched to before they are pasted.
+    /// Absent: `Downloads/LittleBigMouse` in the user's home.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clipboard_folder: Option<PathBuf>,
 }
 
 fn default_port() -> u16 {
@@ -57,6 +64,8 @@ impl Default for Settings {
             clipboard_send: false,
             clipboard_receive: false,
             clipboard_max_bytes: None,
+            clipboard_files_max_bytes: None,
+            clipboard_folder: None,
         }
     }
 }
@@ -70,6 +79,13 @@ impl Settings {
             max_bytes: self
                 .clipboard_max_bytes
                 .unwrap_or(super::clipboard::DEFAULT_MAX_BYTES),
+            files_max_bytes: self
+                .clipboard_files_max_bytes
+                .unwrap_or(super::clipboard::DEFAULT_FILES_MAX_BYTES),
+            reception: self
+                .clipboard_folder
+                .clone()
+                .unwrap_or_else(super::clipboard_files::default_reception),
         }
     }
 

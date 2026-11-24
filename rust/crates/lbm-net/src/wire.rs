@@ -169,18 +169,35 @@ pub enum Control {
     /// `serial` on the sender. Nothing of the content: it crosses only when an
     /// application on the other side reads it (`ClipboardRequest`). Empty `formats` says
     /// the sender holds nothing it shares any more.
+    ///
+    /// With [`ClipFormat::Files`], `files` lists what was copied, folders walked: what
+    /// the other side needs to ask for each file and to know the size of all before it
+    /// asks.
     ClipboardOffer {
         serial: u64,
         #[serde(default)]
         formats: Vec<ClipFormat>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<ClipFile>,
     },
     /// The answer to a `ClipboardOffer`: `format` of what was offered under `serial`,
     /// please, as the bulk transfer numbered `transfer` (numbered by the asker). Answered
     /// by bulk frames of that transfer, the last one marked, or by `ClipboardAbort`.
+    ///
+    /// For [`ClipFormat::Files`], one file at a time and in ranges: `item` is its index
+    /// in the offer's `files`, and the transfer carries `length` bytes from `offset` (to
+    /// the file's end without `length`). The asker asks for the next range once it has
+    /// written the last: that is all the flow control a large file needs.
     ClipboardRequest {
         serial: u64,
         format: ClipFormat,
         transfer: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item: Option<u32>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        offset: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        length: Option<u64>,
     },
     /// Either way: the transfer numbered `transfer` ends without its data — the sender
     /// cannot give it (`reason` says why), or the asker no longer wants it.
@@ -210,10 +227,31 @@ pub enum ClipFormat {
     Text,
     /// A PNG picture.
     Png,
+    /// Files and folders, listed in the offer and carried one file at a time.
+    Files,
     /// A format this build does not know: a newer peer offers more, and what this one
     /// knows of the offer is still worth taking.
     #[serde(other)]
     Unknown,
+}
+
+/// One entry of a [`ClipFormat::Files`] offer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ClipFile {
+    /// Where it goes, relative to wherever it is pasted: its name, after the names of
+    /// the folders copied around it, separated by `/` whatever the system. A folder
+    /// comes before what is in it.
+    pub path: String,
+    /// Its size in bytes; 0 for a folder.
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub folder: bool,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 /// One piece of a bulk transfer.
@@ -540,15 +578,44 @@ mod tests {
             Control::ClipboardOffer {
                 serial: 4,
                 formats: vec![ClipFormat::Text, ClipFormat::Png],
+                files: vec![],
             },
             Control::ClipboardOffer {
                 serial: 5,
                 formats: vec![],
+                files: vec![],
+            },
+            Control::ClipboardOffer {
+                serial: 6,
+                formats: vec![ClipFormat::Files],
+                files: vec![
+                    ClipFile {
+                        path: "photos".into(),
+                        size: 0,
+                        folder: true,
+                    },
+                    ClipFile {
+                        path: "photos/été.jpg".into(),
+                        size: 3_000_000,
+                        folder: false,
+                    },
+                ],
             },
             Control::ClipboardRequest {
                 serial: 4,
                 format: ClipFormat::Png,
                 transfer: 9,
+                item: None,
+                offset: 0,
+                length: None,
+            },
+            Control::ClipboardRequest {
+                serial: 6,
+                format: ClipFormat::Files,
+                transfer: 10,
+                item: Some(1),
+                offset: 4 << 20,
+                length: Some(4 << 20),
             },
             Control::ClipboardAbort {
                 transfer: 9,
@@ -566,7 +633,8 @@ mod tests {
             newer,
             Control::ClipboardOffer {
                 serial: 1,
-                formats: vec![ClipFormat::Text, ClipFormat::Unknown]
+                formats: vec![ClipFormat::Text, ClipFormat::Unknown],
+                files: vec![],
             }
         );
     }

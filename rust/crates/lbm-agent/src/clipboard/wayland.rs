@@ -54,6 +54,8 @@ const TEXT_OFFERED: [&str; 5] = [
     "TEXT",
 ];
 const PNG: &str = "image/png";
+const URI_LIST: &str = "text/uri-list";
+const GNOME_FILES: &str = "x-special/gnome-copied-files";
 
 /// The format a MIME type of an offer is read as, if it is one shared.
 fn format_of(mime: &str) -> Option<ClipFormat> {
@@ -61,6 +63,8 @@ fn format_of(mime: &str) -> Option<ClipFormat> {
         Some(ClipFormat::Text)
     } else if mime == PNG {
         Some(ClipFormat::Png)
+    } else if mime == URI_LIST {
+        Some(ClipFormat::Files)
     } else {
         None
     }
@@ -85,6 +89,7 @@ fn mime_for(format: ClipFormat, mimes: &[String]) -> Option<&str> {
     let wanted: &[&str] = match format {
         ClipFormat::Text => &TEXT_READ,
         ClipFormat::Png => &[PNG],
+        ClipFormat::Files => &[URI_LIST],
         ClipFormat::Unknown => &[],
     };
     wanted
@@ -97,6 +102,7 @@ fn mimes_offered(format: ClipFormat) -> &'static [&'static str] {
     match format {
         ClipFormat::Text => &TEXT_OFFERED,
         ClipFormat::Png => &[PNG],
+        ClipFormat::Files => &[URI_LIST, GNOME_FILES],
         ClipFormat::Unknown => &[],
     }
 }
@@ -248,12 +254,20 @@ fn spawn_read(
             let result = match read {
                 Err(error) => Err(format!("the clipboard cannot be read: {error}")),
                 Ok(_) if data.len() > limit => Err(super::too_large(limit)),
-                Ok(_) => Ok(match format {
+                Ok(_) => match format {
                     ClipFormat::Text => {
-                        convert::text_to_wire(&String::from_utf8_lossy(&data)).into_bytes()
+                        Ok(convert::text_to_wire(&String::from_utf8_lossy(&data)).into_bytes())
                     }
-                    _ => data,
-                }),
+                    ClipFormat::Files => {
+                        let paths = convert::paths_from_uri_list(&data);
+                        if paths.is_empty() {
+                            Err("no file of this machine was copied".to_owned())
+                        } else {
+                            Ok(crate::peers::clipboard_files::lines_of(&paths))
+                        }
+                    }
+                    _ => Ok(data),
+                },
             };
             let _ = reply.send(result);
         });
@@ -264,13 +278,23 @@ fn spawn_read(
 
 /// Writes what another machine sent into the pipe an application reads, on a thread of
 /// its own: the content is asked for first, and may take a while to come.
-fn spawn_write(fd: OwnedFd, answer: oneshot::Receiver<Data>) {
+fn spawn_write(fd: OwnedFd, mime: String, answer: oneshot::Receiver<Data>) {
     let spawned = std::thread::Builder::new()
         .name("clipboard-write".to_owned())
         .spawn(move || {
             let mut file = std::fs::File::from(fd);
             match answer.blocking_recv() {
                 Ok(Ok(data)) => {
+                    let data = if mime == URI_LIST || mime == GNOME_FILES {
+                        let paths = crate::peers::clipboard_files::paths_of(&data);
+                        if mime == URI_LIST {
+                            convert::uri_list(&paths).into_bytes()
+                        } else {
+                            convert::gnome_copied_files(&paths).into_bytes()
+                        }
+                    } else {
+                        data
+                    };
                     let _ = file.write_all(&data);
                 }
                 Ok(Err(error)) => eprintln!("{LOG}: nothing to paste: {error}"),
@@ -499,7 +523,7 @@ impl Dispatch<ExtDataControlSourceV1, ()> for State {
                     format,
                     reply,
                 });
-                spawn_write(fd, answer);
+                spawn_write(fd, mime_type, answer);
             }
             ext_data_control_source_v1::Event::Cancelled => {
                 // Another application took the clipboard: its selection follows.
@@ -532,7 +556,11 @@ mod tests {
             ])),
             [ClipFormat::Text, ClipFormat::Png]
         );
-        assert_eq!(formats_of(&mimes(&["image/jpeg", "text/uri-list"])), []);
+        assert_eq!(formats_of(&mimes(&["image/jpeg"])), []);
+        assert_eq!(
+            formats_of(&mimes(&["text/uri-list", "text/plain"])),
+            [ClipFormat::Files, ClipFormat::Text]
+        );
         assert_eq!(
             formats_of(&mimes(&["text/plain;charset=utf-8", SECRET])),
             []
@@ -552,7 +580,7 @@ mod tests {
 
     #[test]
     fn what_is_offered_reads_back_as_the_same_formats() {
-        for format in [ClipFormat::Text, ClipFormat::Png] {
+        for format in [ClipFormat::Text, ClipFormat::Png, ClipFormat::Files] {
             let offered = mimes(mimes_offered(format));
             assert_eq!(formats_of(&offered), [format]);
         }

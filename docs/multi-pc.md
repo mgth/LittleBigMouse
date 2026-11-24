@@ -424,6 +424,22 @@ sees it.
   reason (the clipboard changed since, the bound, sending off). The clipboard does not
   follow the pointer: syncing at the crossing would tie it to the input path, and the
   on-demand transfer already keeps an unread copy off the network.
+- **Files** (palier 3): `Files` is `text/uri-list` (and `x-special/gnome-copied-files`
+  when offered) under Wayland, `CF_HDROP` on Windows. The offer lists every entry,
+  folders walked, links not followed (`Files: [{ Path: "photos/2026/a.jpg", Size,
+  Folder }]`, `/`-separated, a folder before its content), within a bound for the whole
+  set (`ClipboardFilesMaxBytes`, 4 GiB by default, 10 000 entries). Both systems' file
+  clipboards hold paths, not content, so the receiver fetches every file first, range by
+  range (`ClipboardRequest { Item, Offset, Length }`, at most 4 MiB a range, the next one
+  asked once the last is written), into a folder of its own under the reception folder
+  (`ClipboardFolder`, `Downloads/LittleBigMouse` by default), then hands the application
+  those paths; it copies from there. A name that would land outside that folder (`..`,
+  an absolute path, a drive) refuses the whole offer; names Windows cannot hold are made
+  fit there. The fetch starts at the first read and is not tied to it: the reader may
+  give up first (a Qt application under Wayland after one second without data, Windows
+  after 30 s), and a paste once the files are here gets them at once. A fetch is stopped,
+  and what it wrote removed, when the offer is replaced or its machine leaves; what a fetch
+  finished stays, as a paste may be copying from it.
 - **Formats** (palier 1): `Text` (UTF-8, `\n` line ends; `CF_UNICODETEXT` with `\r\n` on
   Windows, `text/plain;charset=utf-8` and its aliases under Wayland) and `Png` (`image/png`;
   on Windows the registered `PNG` format when the source offers one, else `CF_DIB`

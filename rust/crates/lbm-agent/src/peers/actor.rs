@@ -930,6 +930,10 @@ impl Actor {
         match wake {
             Wake::Clipboard(event) => self.sharing.clipboard(event, &peers),
             Wake::Patience(transfer) => self.sharing.patience(transfer, &peers),
+            Wake::Listed(serial, formats, listed) => {
+                self.sharing.listed(serial, formats, listed, &peers)
+            }
+            Wake::Fetched(local, fetched) => self.sharing.fetched(local, fetched),
         }
     }
 

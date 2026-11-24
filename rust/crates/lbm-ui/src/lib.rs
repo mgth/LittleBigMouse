@@ -300,10 +300,18 @@ pub fn bottom_bar_with_agent(
         // came to apply something; here it is one toggle among four, and the consequence
         // has to be readable before it is pressed rather than felt afterwards.
         if ui
-            .add_enabled(
-                can(state, Press::Live),
-                egui::Button::selectable(state.live, label(Press::Live)),
-            )
+            .add_enabled(can(state, Press::Live), |ui: &mut egui::Ui| {
+                let live = egui::Button::selectable(state.live, label(Press::Live));
+                if state.live {
+                    return ui.add(live);
+                }
+                // The row's style is put back, or it would reach what is drawn next.
+                let style = ui.style().clone();
+                let live = theme::steady_at_rest(ui, live);
+                let response = ui.add(live);
+                ui.set_style(style);
+                response
+            })
             .on_hover_text(
                 "Feed each edit to the mouse engine as you make it, so the layout can be \
                  felt before it is kept. This runs the engine: the cursor follows the \

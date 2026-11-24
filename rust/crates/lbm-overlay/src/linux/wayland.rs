@@ -235,13 +235,11 @@ impl Host {
         layer.set_size(r.width as u32, r.height as u32);
         // -1 includes panel-exclusive areas: these instruments follow physical screen edges.
         layer.set_exclusive_zone(-1);
-        layer.set_keyboard_interactivity(
-            if matches!(band.content, crate::scene::Content::Guide { .. }) {
-                KeyboardInteractivity::None
-            } else {
-                KeyboardInteractivity::OnDemand
-            },
-        );
+        layer.set_keyboard_interactivity(if band.interactive() {
+            KeyboardInteractivity::OnDemand
+        } else {
+            KeyboardInteractivity::None
+        });
         let region = self.compositor.create_region(&q, ());
         for r in crate::input::regions(&logical) {
             region.add(r.x, r.y, r.width, r.height);
@@ -882,6 +880,7 @@ mod tests {
                     measured_mm: 698.,
                 },
                 selected: None,
+                passive: false,
             }),
             ..Default::default()
         }

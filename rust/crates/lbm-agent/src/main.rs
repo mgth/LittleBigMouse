@@ -86,6 +86,12 @@ fn options_from(args: Vec<String>) -> Option<Options> {
 }
 
 fn main() -> ExitCode {
+    // The surfaces of the rulers a master asks this machine to draw (peers/overlay.rs):
+    // the overlay library runs them in this same binary, as a child of its own.
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
+        std::process::exit(lbm_overlay::linux::run_host());
+    }
     let Some(options) = options() else {
         eprintln!("{USAGE}");
         return ExitCode::from(2);

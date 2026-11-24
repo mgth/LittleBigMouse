@@ -16,6 +16,9 @@ lbm-ipc = { path = "../lbm-ipc" }
 lbm-layout = { path = "../lbm-layout" }
 # The multi-PC network (docs/multi-pc.md): identity, pairing store, links.
 lbm-net = { path = "../lbm-net" }
+# The rulers a master asks a remote to draw on its screens (peers/overlay.rs). On Linux
+# the surfaces live in a helper process, this binary run as `--screen-overlay-host`.
+lbm-overlay = { path = "../lbm-overlay" }
 lbm-store = { path = "../lbm-store" }
 # The document the hook reads, so the fake hook can decide a Load exactly as the
 # daemon does instead of guessing from the text (already in the graph via lbm-engine).

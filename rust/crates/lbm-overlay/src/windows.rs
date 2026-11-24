@@ -73,9 +73,7 @@ fn capture<T>(change: impl FnOnce(&mut Capture) -> T) -> T {
 }
 unsafe extern "system" fn procedure(hwnd: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     let band = BANDS.with(|b| b.borrow().get(&(hwnd.0 as isize)).cloned());
-    let interactive = band
-        .as_ref()
-        .is_some_and(|b| !matches!(b.content, crate::scene::Content::Guide { .. }));
+    let interactive = band.as_ref().is_some_and(Band::interactive);
     match message {
         WM_NCHITTEST => LRESULT(if interactive {
             HTCLIENT as isize
@@ -233,10 +231,10 @@ impl Window {
             CreateWindowExW(
                 WS_EX_LAYERED
                     | WS_EX_TOOLWINDOW
-                    | if matches!(band.content, crate::scene::Content::Guide { .. }) {
-                        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
-                    } else {
+                    | if band.interactive() {
                         WINDOW_EX_STYLE::default()
+                    } else {
+                        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
                     },
                 CLASS,
                 w!("LittleBigMouse screen overlay"),
@@ -346,6 +344,73 @@ pub struct Native {
     windows: Vec<Window>,
     owner: HWND,
     _ui_thread: PhantomData<Rc<()>>,
+    /// The owner this backend made itself ([`crate::Manager::standalone`]), destroyed
+    /// after the windows it owns: last field, dropped last.
+    _hidden_owner: Option<HiddenOwner>,
+}
+
+/// A window never shown, for a process without one to own the overlays: owned popups
+/// stay off the taskbar and out of Alt+Tab, and go with their owner.
+struct HiddenOwner(HWND);
+impl HiddenOwner {
+    fn new() -> Result<Self, String> {
+        static OWNER_CLASS: OnceLock<Result<(), String>> = OnceLock::new();
+        const NAME: windows::core::PCWSTR = w!("LittleBigMouse.ScreenOverlay.Owner");
+        unsafe extern "system" fn owner_procedure(
+            hwnd: HWND,
+            message: u32,
+            w: WPARAM,
+            l: LPARAM,
+        ) -> LRESULT {
+            DefWindowProcW(hwnd, message, w, l)
+        }
+        OWNER_CLASS
+            .get_or_init(|| {
+                // SAFETY: static class name and callback outlive every window of the class.
+                unsafe {
+                    let instance = GetModuleHandleW(None).map_err(|e| e.to_string())?;
+                    let class = WNDCLASSW {
+                        hInstance: instance.into(),
+                        lpszClassName: NAME,
+                        lpfnWndProc: Some(owner_procedure),
+                        ..Default::default()
+                    };
+                    if RegisterClassW(&class) == 0 {
+                        Err(fail("Cannot register the overlays' owner"))
+                    } else {
+                        Ok(())
+                    }
+                }
+            })
+            .clone()?;
+        // SAFETY: as for the overlay windows; this one is never shown.
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW,
+                NAME,
+                w!("LittleBigMouse screen overlays"),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                GetModuleHandleW(None).map_err(|e| e.to_string())?,
+                None,
+            )
+            .map_err(|e| e.to_string())?
+        };
+        Ok(Self(hwnd))
+    }
+}
+impl Drop for HiddenOwner {
+    fn drop(&mut self) {
+        // SAFETY: created by this thread, destroyed once.
+        unsafe {
+            let _ = DestroyWindow(self.0);
+        }
+    }
 }
 impl Backend for Native {
     fn take_input(&mut self) -> Vec<Input> {
@@ -392,6 +457,17 @@ impl Backend for Native {
 }
 
 impl crate::Manager<Native> {
+    /// Overlays for a process with no window of its own, owned by a hidden window made
+    /// for them on the calling thread, which must pump its messages.
+    pub fn standalone() -> Result<Self, String> {
+        let owner = HiddenOwner::new()?;
+        Ok(Self::new(Native {
+            owner: owner.0,
+            _hidden_owner: Some(owner),
+            ..Default::default()
+        }))
+    }
+
     /// The live HWND supplied by eframe. Owned popups follow its minimize/close lifetime.
     pub fn set_owner(&mut self, owner: isize) {
         let owner = HWND(owner as *mut std::ffi::c_void);

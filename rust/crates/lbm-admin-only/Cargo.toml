@@ -1,0 +1,18 @@
+[package]
+name = "lbm-admin-only"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Whether a program may run with more rights than its users: only SYSTEM, Administrators and TrustedInstaller can replace it"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+]
+
+[dev-dependencies]
+tempfile.workspace = true

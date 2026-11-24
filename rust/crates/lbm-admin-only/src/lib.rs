@@ -2,7 +2,7 @@
 //! Administrators and TrustedInstaller can replace it, or anything loaded from its
 //! folder — the C# `AdminOnlyPath`, the same rules.
 //!
-//! An elevated logon task ([`crate::schtask`]) runs its program with full rights and no UAC
+//! An elevated logon task (`lbm_agent::schtask`) runs its program with full rights and no UAC
 //! prompt. If that program sits in a folder the user can write to (a folder chosen at the
 //! root of a drive inherits "Authenticated Users: Modify", a portable copy runs from
 //! Downloads), any program running as the user, unelevated, can swap the exe or drop a DLL

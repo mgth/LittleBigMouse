@@ -1,0 +1,27 @@
+[package]
+name = "lbm-service"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The Windows service of the multi-PC mode: injects a master's input on the secure desktop and above the user's windows"
+
+[dependencies]
+lbm-admin-only = { path = "../lbm-admin-only" }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+]
+
+[dev-dependencies]
+# The trial example writes batches the way the service will.
+lbm-ipc = { path = "../lbm-ipc" }

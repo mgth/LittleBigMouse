@@ -1,6 +1,6 @@
 # Mode multi-PC : état du travail et reste à faire
 
-État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `f8aea09c`), après la fusion des PR #800 (le mode)
+État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `5f489dea`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
 Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
@@ -67,7 +67,7 @@ rôle du maître (lignes marquées d'une PR : correctifs encore ouverts).
 | Esclave Linux (KWin 6, deux écrans d'échelles 1,66 et 1,25) : pointeur au pixel, clics gauche/droit/milieu, molette verticale et horizontale haute résolution, touches étendues, relâchement au `Leave` (bouton puis touches en ordre inverse) et à la chute du lien (1 ms si le maître meurt, 3 s par keepalive s'il se fige) | Vérifié avec `peer_drive`, après les deux correctifs de la PR #807 |
 | Fonds en direct, esclave Windows : diaporama, `SystemParametersInfo`, `IDesktopWallpaper`, clic dans Paramètres, Spotlight, passage en diaporama | Vérifié sur la vm124 : nouvelle vignette chez le maître en 1 à 2 s |
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
-| Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811, ouverte) |
+| Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
@@ -185,7 +185,7 @@ Windows actuel ne connaît pas les zones distantes.
   non élevé, rien ne passe, pas même le mouvement ; depuis un agent élevé, tout passe.
   Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
   l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de
-  `--config-dir` (PR #811 ; la relance avec un chemin relatif à un lecteur reste à valider, voir « Travaux en cours »). Un utilisateur standard reste sans solution hors
+  `--config-dir`, et les chemins relatifs n'étaient pas rendus absolus avant la relance élevée (PR #811). Le refus de l'invite UAC n'a pas été observé. Un utilisateur standard reste sans solution hors
   service Windows.
 - **Bureau sécurisé** (UAC, écran de verrouillage, Ctrl+Alt+Suppr) : hors d'atteinte
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
@@ -224,14 +224,16 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
 - **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
   viendrait après.
-- **Pare-feu Windows** : PR #811, ouverte. L'installeur
+- ~~**Pare-feu Windows**~~ : fait (PR #811). L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
   `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
   d'un nouveau réseau sous Windows 11 : une règle « Privé » y resterait inactive ; à
-  confirmer par le mainteneur), et la retire à la désinstallation. L'essai a révélé que
+  rediscuter si besoin), et la retire à la désinstallation. L'essai a révélé que
   l'installeur v6 **n'embarquait pas `lbm-agent.exe`** et que la désinstallation
-  tuait le hook avant l'agent, qui le relançait ; les deux sont corrigés. Non essayés :
-  la mise à jour par-dessus une installation, la signature de `lbm-agent.exe`.
+  tuait le hook avant l'agent, qui le relançait ; les deux sont corrigés. La CI copie
+  désormais l'agent à côté de l'interface et la release signée exige sa signature :
+  **la configuration SignPath doit inclure `lbm-agent.exe`** (à faire à la main). Non
+  essayée : la mise à jour par-dessus une installation précédente.
 - ~~**Retour d'erreur vers l'interface**~~ : PR #808.
 - **Profil désactivé au premier lien** : décider si un esclave nouvellement appairé
   doit activer son profil d'office.
@@ -386,8 +388,8 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
 3. Maître Windows.
-4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), règle
-   de pare-feu dans l'installeur (#811).
+4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
+   de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
    Windows ») ; reste le service Windows pour le bureau sécurisé.
 6. Presse-papiers, palier 1 (texte et image), puis palier 2.
@@ -403,7 +405,6 @@ les sections ci-dessus en tiennent compte.
 | Sujet | Branche / PR | État |
 |---|---|---|
 | Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte ; tests et clippy verts. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
-| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | PR #811 | Ouverte. Injection dans une fenêtre élevée vérifiée sur la vm124. Un cas de revue reste à valider : avec un `--config-dir` relatif à un lecteur (`C:profiles`), le processus relancé élevé pouvait lire un autre dossier que celui du lancement ; correctif poussé (4875c8db), pas encore revu ni essayé sur la VM ; la configuration SignPath (signature de `lbm-agent.exe`) reste à mettre à jour à la main |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

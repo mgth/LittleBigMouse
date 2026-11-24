@@ -3,7 +3,7 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `d7204166`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
-Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
+Mis à jour au fil des travaux (dernière fois le 2026-11-24, règles sur l'esclave) : voir « Travaux en cours » à la fin.
 
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
@@ -40,6 +40,7 @@ qui va le pointeur quand il y entre.
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
+| Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -70,6 +71,8 @@ trouvés pendant l'essai.
 | Fonds en direct, esclave Windows : diaporama, `SystemParametersInfo`, `IDesktopWallpaper`, clic dans Paramètres, Spotlight, passage en diaporama | Vérifié sur la vm124 : nouvelle vignette chez le maître en 1 à 2 s |
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
 | Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
+| Règles sur l'esclave Windows (vm124, 4K à 1,5 + 1080p) : affichées à leur place sur les deux écrans, zone mesurée qui suit l'écran choisi, mise à jour, retirées sur ordre et à la chute brutale du lien (maître tué), pointeur qui les traverse (`WindowFromPoint` rend la fenêtre du dessous) | Vérifié avec `peer_drive` comme maître et `peer_remote` comme esclave (l'agent installé du mainteneur tournait à côté, intact) |
+| Règles sur un esclave Linux : surfaces layer-shell, mise à jour, bail renouvelé, hôte d'overlay disparu à la fin | Vérifié dans un KWin imbriqué sans écran (`kwin_wayland --virtual`), pas sur un vrai bureau |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
@@ -84,6 +87,9 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
   provoqués sur les machines ;
+- les règles sur l'esclave **depuis `lbm-app`** sur un vrai maître (seul le chemin
+  `peer_drive` → esclave a tourné ; le calcul côté `lbm-app` et le retrait à sa fermeture
+  sont couverts par des tests), et sur un vrai bureau Linux esclave ;
 - les trois fonctions de la PR #813 : l'indicateur, l'alignement des verrous (`GetKeyState`
   depuis le fil de l'injecteur Windows peut retarder sur l'état système ; un esclave
   Linux dont le hook a capturé les claviers lit des LED que le compositeur ne peut plus
@@ -99,6 +105,11 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
+- Règles sur l'esclave : elles ne se tirent pas (inertes là-bas, on aligne en tirant
+  celles des écrans du maître) ; « Rulers on screens » reste grisé quand l'écran
+  sélectionné est celui de l'esclave, comme avant ; sous Linux, l'esclave renouvelle le
+  bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
+  au-delà).
 - Le premier lien avec un esclave qui apporte des écrans inconnus crée un profil
   **désactivé** : le moteur s'arrête jusqu'à ce que l'utilisateur l'active.
 - Esclave Linux : si son propre backend evdev route, une souris locale reprend d'où ce
@@ -410,7 +421,9 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-Aucun : toutes les PR de la série (#806 à #811, #813) sont fusionnées dans `v6`.
+- `feat/mpc-remote-rulers` : les règles graduées sur les écrans de l'esclave (commande
+  `Overlay`, capacité `RemoteOverlay`, requête `PeerOverlay`), voir « Rulers on a
+  remote's screens » dans [`multi-pc.md`](multi-pc.md).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

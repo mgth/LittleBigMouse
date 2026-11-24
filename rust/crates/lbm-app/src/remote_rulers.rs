@@ -104,10 +104,10 @@ impl RemoteRulers {
         wanted: BTreeMap<String, Vec<Band>>,
         errors: Vec<String>,
     ) -> Vec<(String, Value)> {
-        self.computed = errors;
         if !self.offered {
             return Vec::new();
         }
+        self.computed = errors;
         let mut requests = Vec::new();
         let mut gone: Vec<String> = self
             .sent

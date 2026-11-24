@@ -2164,6 +2164,15 @@ mod rulers {
             .unwrap();
     }
 
+    /// The next `Overlay` a remote is sent.
+    pub async fn next_overlay(link: &mut Link) -> (u64, Vec<Value>) {
+        loop {
+            if let Control::Overlay { revision, bands } = next_control(link).await {
+                return (revision, bands);
+            }
+        }
+    }
+
     /// The next `OverlayFailed` the master is sent.
     pub async fn failure(link: &mut Link) -> (u64, String) {
         loop {
@@ -2299,4 +2308,79 @@ async fn only_a_master_draws_on_another_machine() {
     overlay(&laptop_link, 1, vec![ruler(&display("A", 0), 0.0)]).await;
     let quiet = tokio::time::timeout(Duration::from_millis(300), drawn.recv()).await;
     assert!(quiet.is_err(), "nothing drawn: {quiet:?}");
+}
+
+#[tokio::test]
+async fn a_master_shows_a_remotes_failure_of_its_latest_rulers_only() {
+    use rulers::*;
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello {
+            capabilities: vec![lbm_net::wire::OVERLAY_CAPABILITY.into()],
+            ..Hello::new("laptop", "0", Role::Remote)
+        },
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    assert!(desk
+        .service
+        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 0.0)]));
+    let (first, bands) = next_overlay(&mut laptop_link).await;
+    assert_eq!(bands.len(), 1);
+    desk.service
+        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 9.0)]);
+    let (latest, _) = next_overlay(&mut laptop_link).await;
+    assert!(latest > first);
+
+    // The first one failed, but the latest is what is asked for now: nothing to say.
+    let failed = |revision| Control::OverlayFailed {
+        revision,
+        error: "Screen bounds changed.".into(),
+    };
+    laptop_link.sender().control(&failed(first)).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let state = desk.state().await;
+    assert_eq!(
+        peer(&state, laptop.fingerprint()).unwrap().overlay_error,
+        None
+    );
+    // The latest failed: the user is told, until the rulers are asked for again.
+    laptop_link.sender().control(&failed(latest)).await.unwrap();
+    let told = desk
+        .until(|s| peer(s, laptop.fingerprint()).is_some_and(|p| p.overlay_error.is_some()))
+        .await;
+    assert_eq!(
+        peer(&told, laptop.fingerprint())
+            .unwrap()
+            .overlay_error
+            .as_deref(),
+        Some("Screen bounds changed.")
+    );
+    desk.service.overlay(laptop.fingerprint(), Vec::new());
+    let (_, bands) = next_overlay(&mut laptop_link).await;
+    assert!(bands.is_empty());
+    desk.until(|s| peer(s, laptop.fingerprint()).is_some_and(|p| p.overlay_error.is_none()))
+        .await;
 }

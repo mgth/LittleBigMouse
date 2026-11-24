@@ -239,10 +239,12 @@ struct Actor {
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
     /// As a master: the overlays this machine's editor wants on each remote's screens,
-    /// sent again to a remote that links anew; the last revision given to one; and why a
-    /// remote said it could not show them.
+    /// sent again to a remote that links anew; the last revision given, and the last
+    /// sent to each remote (a failure of an earlier one is old news); and why a remote
+    /// said it could not show them.
     overlays: HashMap<String, Vec<Value>>,
     overlay_revision: u64,
+    overlay_sent: HashMap<String, u64>,
     overlay_errors: HashMap<String, String>,
     /// As a remote: the overlays a master asked for, while shown.
     overlaid: Option<Overlaid>,
@@ -337,6 +339,7 @@ pub(super) async fn run(
         published: None,
         overlays: HashMap::new(),
         overlay_revision: 0,
+        overlay_sent: HashMap::new(),
         overlay_errors: HashMap::new(),
         overlaid: None,
         overlay_generation: 0,
@@ -868,7 +871,7 @@ impl Actor {
         if info.hello.role == Role::Remote {
             if let Some(bands) = self.overlays.get(&machine_id).cloned() {
                 self.overlay_errors.remove(&machine_id);
-                if let Err(error) = self.send_overlay(&info.hello, &sender, bands) {
+                if let Err(error) = self.send_overlay(&machine_id, &info.hello, &sender, bands) {
                     self.overlay_errors.insert(machine_id.clone(), error);
                 }
             }
@@ -1053,12 +1056,14 @@ impl Actor {
                 live.overlay_revision = revision;
                 self.show_overlay((machine_id.to_owned(), id), revision, bands);
             }
-            Control::OverlayFailed { error, .. } if live.info.hello.role == Role::Remote => {
+            Control::OverlayFailed { revision, error } if live.info.hello.role == Role::Remote => {
                 eprintln!(
                     "[lbm-agent] multi-PC: {} cannot show the rulers: {error}",
                     live.info.hello.name
                 );
-                if self.overlays.contains_key(machine_id) {
+                if self.overlays.contains_key(machine_id)
+                    && self.overlay_sent.get(machine_id) == Some(&revision)
+                {
                     self.overlay_errors.insert(machine_id.to_owned(), error);
                 }
             }
@@ -1368,7 +1373,7 @@ impl Actor {
             return;
         };
         let (hello, sender) = (live.info.hello.clone(), live.sender.clone());
-        if let Err(error) = self.send_overlay(&hello, &sender, bands) {
+        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands) {
             self.overlay_errors.insert(machine_id, error);
         }
     }
@@ -1378,6 +1383,7 @@ impl Actor {
     /// message; its user is told why nothing shows instead.
     fn send_overlay(
         &mut self,
+        machine_id: &str,
         hello: &Hello,
         sender: &LinkSender,
         bands: Vec<Value>,
@@ -1393,6 +1399,8 @@ impl Actor {
             };
         }
         self.overlay_revision += 1;
+        self.overlay_sent
+            .insert(machine_id.to_owned(), self.overlay_revision);
         let message = Control::Overlay {
             revision: self.overlay_revision,
             bands,
@@ -1484,6 +1492,7 @@ impl Actor {
             eprintln!("[lbm-agent] multi-PC: the rulers of the master are taken down");
         }
         self.overlays.clear();
+        self.overlay_sent.clear();
         self.selected = None;
         self.relaying = None;
         self.hook.set_target(None);

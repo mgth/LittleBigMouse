@@ -111,6 +111,27 @@ pub fn is_wallpaper_message(msg: u32, wparam: usize) -> bool {
     msg == WM_SETTINGCHANGE && wparam == SPI_SETDESKWALLPAPER
 }
 
+/// Follows a notification that has to be armed again after each time it fires (the
+/// registry's): `arm` registers and says whether it could, `wait` sleeps until it fires
+/// and says `false` when the watch is over instead.
+///
+/// The first registration is itself said as a change. A watch is asked for when a master
+/// links, and the wallpapers are read for it then; what changed between that reading and
+/// the registration — the thread had not got there yet — was notified to nobody, and only
+/// a reading taken once armed can be trusted to be followed by a notification.
+pub fn follow(mut arm: impl FnMut() -> bool, mut wait: impl FnMut() -> bool, changes: &Changes) {
+    let mut armed_before = false;
+    while arm() {
+        if !armed_before && !changes.changed() {
+            break;
+        }
+        armed_before = true;
+        if !wait() || !changes.changed() {
+            break;
+        }
+    }
+}
+
 /// The file plasmashell keeps its containments in, wallpapers included.
 #[cfg(target_os = "linux")]
 pub const PLASMA_CONFIG: &str = "plasma-org.kde.plasma.desktop-appletsrc";
@@ -161,26 +182,51 @@ pub fn watch_file(file: &std::path::Path, changes: Changes) -> std::io::Result<W
         }
     }
 
-    let (dirs, names) = events::watched(std::slice::from_ref(&file.to_path_buf()));
-    let fd = tokio::io::unix::AsyncFd::new(events::inotify(&dirs)?)?;
+    let file = file.to_path_buf();
+    let mut target = events::watched(std::slice::from_ref(&file));
+    let mut fd = tokio::io::unix::AsyncFd::new(events::inotify(&target.0)?)?;
     let reader = tokio::spawn(async move {
         let mut buf = vec![0u8; 16 * 1024];
         loop {
-            let Ok(mut ready) = fd.readable().await else {
-                break;
-            };
-            let touched = match ready.try_io(|fd| events::read(fd.as_raw_fd(), &mut buf)) {
-                Ok(Ok(n)) => events::touches(&buf[..n], &names),
-                // Events were lost: whatever they were, read.
-                Ok(Err(e)) if e.raw_os_error() == Some(libc::ENOBUFS) => true,
-                Ok(Err(e)) if e.kind() == std::io::ErrorKind::Interrupted => false,
-                Ok(Err(error)) => {
-                    eprintln!("[lbm-agent] multi-PC: the wallpaper watch failed: {error}");
+            let touched = {
+                let Ok(mut ready) = fd.readable().await else {
                     break;
+                };
+                match ready.try_io(|fd| events::read(fd.as_raw_fd(), &mut buf)) {
+                    Ok(Ok(n)) => events::touches(&buf[..n], &target.1),
+                    // Events were lost: whatever they were, read.
+                    Ok(Err(e)) if e.raw_os_error() == Some(libc::ENOBUFS) => true,
+                    Ok(Err(e)) if e.kind() == std::io::ErrorKind::Interrupted => false,
+                    Ok(Err(error)) => {
+                        eprintln!("[lbm-agent] multi-PC: the wallpaper watch failed: {error}");
+                        break;
+                    }
+                    Err(_would_block) => false,
                 }
-                Err(_would_block) => false,
             };
-            if touched && !changes.changed() {
+            if !touched {
+                continue;
+            }
+            // The entry itself may be what changed: created as a link into another
+            // directory (a dotfile manager's), or pointed somewhere else. What was
+            // resolved when the watch was installed is then the wrong place to look, so
+            // it is resolved again — on this event, and before saying the change, so
+            // that the reading it asks for is taken with the new place already watched.
+            let now = events::watched(std::slice::from_ref(&file));
+            if now != target {
+                match events::inotify(&now.0).and_then(tokio::io::unix::AsyncFd::new) {
+                    Ok(moved) => {
+                        fd = moved;
+                        target = now;
+                    }
+                    Err(error) => eprintln!(
+                        "[lbm-agent] multi-PC: the wallpaper watch could not follow {} to \
+                         where it now points: {error}",
+                        file.display()
+                    ),
+                }
+            }
+            if !changes.changed() {
                 break;
             }
         }
@@ -237,6 +283,50 @@ mod tests {
         // WM_DISPLAYCHANGE, WM_PAINT: the same number in `wParam` means nothing there.
         assert!(!is_wallpaper_message(0x007E, SPI_SETDESKWALLPAPER));
         assert!(!is_wallpaper_message(0x000F, SPI_SETDESKWALLPAPER));
+    }
+
+    /// The registry watch's own gap: the agent read the wallpapers when the master
+    /// linked, and the thread had not registered yet.
+    #[test]
+    fn what_changed_before_the_first_registration_is_read_once_it_is_armed() {
+        let (changes, mut received) = channel();
+        let said = std::cell::Cell::new(0);
+        let mut count = || {
+            while received.try_recv().is_ok() {
+                said.set(said.get() + 1);
+            }
+            said.get()
+        };
+        let mut arms = 0;
+        let mut waits = 0;
+        follow(
+            || {
+                arms += 1;
+                true
+            },
+            || {
+                waits += 1;
+                match waits {
+                    // Asleep for the first time: armed, and nothing fired — yet a
+                    // reading was asked for, the one that covers the gap.
+                    1 => assert_eq!(count(), 1, "the first registration asks for a reading"),
+                    // Fired once since: one more, and no other for arming again.
+                    2 => assert_eq!(count(), 2, "armed again without another reading"),
+                    _ => return false,
+                }
+                true
+            },
+            &changes,
+        );
+        assert_eq!(arms, 3, "armed again after each notification");
+        assert_eq!(count(), 3, "the last notification before the watch ended");
+    }
+
+    #[test]
+    fn a_registration_refused_says_nothing() {
+        let (changes, mut received) = channel();
+        follow(|| false, || unreachable!("nothing to wait for"), &changes);
+        assert!(received.try_recv().is_err());
     }
 
     #[cfg(target_os = "linux")]
@@ -316,6 +406,54 @@ mod tests {
 
             // The file alone is enough for an agent started without the session's variables.
             assert_eq!(plasma_config(&gnome, config.path()), Some(file));
+        }
+
+        /// A dotfile manager installing the configuration after the master linked: the
+        /// entry becomes a link, and the desktop then rewrites the file where it lives.
+        #[tokio::test]
+        async fn a_configuration_installed_as_a_link_is_followed_to_where_it_points() {
+            let config = tempfile::tempdir().unwrap();
+            let dotfiles = tempfile::tempdir().unwrap();
+            let file = config.path().join(PLASMA_CONFIG);
+            let (changes, mut received) = channel();
+            let _watching = watch_file(&file, changes).expect("no inotify watch to test with");
+
+            let real = dotfiles.path().join("appletsrc");
+            std::fs::write(&real, "[Containments][1]\n").unwrap();
+            std::os::unix::fs::symlink(&real, &file).unwrap();
+            assert!(said(&mut received).await, "the link appearing was not seen");
+            while received.try_recv().is_ok() {}
+
+            // In place, then by a rename over it: both happen in the other directory.
+            std::fs::write(&real, "[Containments][1][Wallpaper]\nImage=new\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "a write through the link was not seen"
+            );
+            while received.try_recv().is_ok() {}
+            let staged = dotfiles.path().join("appletsrc.Cd78");
+            std::fs::write(&staged, "[Containments][1][Wallpaper]\nImage=newer\n").unwrap();
+            std::fs::rename(&staged, &real).unwrap();
+            assert!(
+                said(&mut received).await,
+                "a rename over the target was not seen"
+            );
+            while received.try_recv().is_ok() {}
+
+            // Pointed elsewhere: the new place is the one followed from then on.
+            let other = dotfiles.path().join("other-appletsrc");
+            std::fs::write(&other, "[Containments][1]\n").unwrap();
+            std::fs::remove_file(&file).unwrap();
+            std::os::unix::fs::symlink(&other, &file).unwrap();
+            assert!(said(&mut received).await, "the link changing was not seen");
+            // The removal and the new link are two events; let both be handled.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            while received.try_recv().is_ok() {}
+            std::fs::write(&other, "[Containments][1][Wallpaper]\nImage=other\n").unwrap();
+            assert!(
+                said(&mut received).await,
+                "a write to the new target was not seen"
+            );
         }
 
         #[tokio::test]

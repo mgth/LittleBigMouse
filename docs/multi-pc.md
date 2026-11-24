@@ -295,7 +295,8 @@ by the window itself; a remote's are on another desktop, so the remote sends the
     (`$XDG_CONFIG_HOME`), which plasmashell replaces by a rename when a containment's
     wallpaper is configured. The session (`XDG_CURRENT_DESKTOP`) says this is Plasma,
     not the file: a Plasma that has not saved its configuration yet is watched for the
-    first time it does. plasmashell's `wallpaperChanged` D-Bus signal is not used:
+    first time it does. A file that is a link (a dotfile manager's) is followed to
+    where it points, and followed again when the link appears or changes. plasmashell's `wallpaperChanged` D-Bus signal is not used:
     it is emitted by its `setWallpaper` method only, not by the settings dialog. What
     Plasma changes without writing its configuration — the next picture of a slide
     show — is not seen, nor read: the reader reads that configuration.
@@ -303,7 +304,9 @@ by the window itself; a remote's are on another desktop, so the remote sends the
     hidden window the agent already has (`winwatch.rs`), and a
     `RegNotifyChangeKeyValue` on `HKCU\Control Panel\Desktop` for what changes the
     wallpaper without a broadcast (a slide show does not send one). A thread asleep on
-    two handles while a master is linked; none otherwise. Per-virtual-desktop
+    two handles while a master is linked; none otherwise. Its first registration asks
+    for a reading, for what changed between the reading taken at the link and the
+    thread being armed. Per-virtual-desktop
     wallpapers and Spotlight are not known to be covered.
   - **Other desktops** (GNOME, a bare compositor): no watch. Their wallpapers are not
     read either; were they, a change would follow at the next link or display event.

@@ -159,16 +159,20 @@ fn follow_registry(stop: Event, changes: Changes) {
             return;
         }
         if let Ok(changed) = CreateEventW(None, false, false, None) {
-            // One notification per registration: armed again after each.
-            while RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, changed, true)
-                .is_ok()
-            {
-                let woken = WaitForMultipleObjects(&[stop.0, changed], false, INFINITE);
+            // One notification per registration: armed again after each, and the first
+            // registration asks for a reading of its own (`wallpaper_watch::follow`).
+            crate::wallpaper_watch::follow(
+                || {
+                    RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, changed, true)
+                        .is_ok()
+                },
                 // The stop, or a wait that failed: either way there is nothing to follow.
-                if woken.0 != WAIT_OBJECT_0.0 + 1 || !changes.changed() {
-                    break;
-                }
-            }
+                || {
+                    WaitForMultipleObjects(&[stop.0, changed], false, INFINITE).0
+                        == WAIT_OBJECT_0.0 + 1
+                },
+                &changes,
+            );
             let _ = CloseHandle(changed);
         }
         let _ = RegCloseKey(key);

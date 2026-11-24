@@ -40,7 +40,7 @@ fn hook_event(message: Event) -> HookEvent {
         Event::Suspended => HookEvent::Suspended,
         Event::Resumed => HookEvent::Resumed,
         Event::Loaded { .. } => HookEvent::Loaded,
-        Event::LoadFailed => HookEvent::LoadFailed,
+        Event::LoadFailed { .. } => HookEvent::LoadFailed,
         Event::Rescued => HookEvent::Rescued,
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
         Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
@@ -139,13 +139,9 @@ pub struct Agent<W> {
     /// choice (`PeersState::selection`); `None` before any. The zones this agent hands
     /// the hook never lead to another remote ([`Agent::zones_fit`]).
     selection_seen: Option<(u64, Option<String>)>,
-    /// The other machines the zones the hook holds lead to; `None` when that is not
-    /// known (no hook, a hook holding a layout this agent cannot name, a `Loaded` this
-    /// agent did not ask for).
-    hook_holds: Option<std::collections::BTreeSet<String>>,
-    /// The same for every `Load` sent and not yet answered, oldest first: the hook answers
-    /// each with `Loaded` or `LoadFailed`, in order.
-    loads_in_flight: std::collections::VecDeque<std::collections::BTreeSet<String>>,
+    /// The other machines the zones the hook holds lead to, and the same for every
+    /// `Load` sent and not yet answered, each by the id its answer names.
+    hook_zones: crate::hook_zones::HookZones,
     /// What the multi-PC manager was last told of the hook's zones.
     told_hook_ready: Option<Option<u64>>,
 }
@@ -197,8 +193,7 @@ impl<W: AgentWorld> Agent<W> {
             read_failures: Default::default(),
             has_master: false,
             selection_seen: None,
-            hook_holds: None,
-            loads_in_flight: Default::default(),
+            hook_zones: crate::hook_zones::HookZones::new(),
             told_hook_ready: None,
         }
     }
@@ -1029,8 +1024,8 @@ impl<W: AgentWorld> Agent<W> {
     /// endpoint, and the borders to the other machines are walls.
     fn tell_peers_the_hook_zones(&mut self) {
         let ready = self.selection_seen.as_ref().and_then(|(selection, _)| {
-            let fit = self.hook_holds.as_ref().is_some_and(|h| self.zones_fit(h))
-                && self.loads_in_flight.iter().all(|h| self.zones_fit(h));
+            let fit = self.hook_zones.holds().is_some_and(|h| self.zones_fit(h))
+                && self.hook_zones.in_flight().all(|h| self.zones_fit(h));
             fit.then_some(*selection)
         });
         if self.told_hook_ready == Some(ready) {
@@ -1044,8 +1039,7 @@ impl<W: AgentWorld> Agent<W> {
 
     /// The zones the hook holds are unknown from now on (a new connection, or none).
     fn hook_zones_unknown(&mut self) {
-        self.hook_holds = None;
-        self.loads_in_flight.clear();
+        self.hook_zones.unknown();
         self.tell_peers_the_hook_zones();
     }
 
@@ -1303,7 +1297,7 @@ impl<W: AgentWorld> Agent<W> {
     /// hook connection and every input source are gone.
     pub async fn run(
         &mut self,
-        mut signals: UnboundedReceiver<HookSignal>,
+        mut signals: crate::hook::HookSignals,
         mut inputs: UnboundedReceiver<Input>,
         shutdown: impl Future<Output = ()>,
     ) {
@@ -1467,17 +1461,15 @@ impl<W: AgentWorld> Agent<W> {
                             {
                                 self.shortcut_unavailable = None;
                             }
-                            // The answer to the oldest Load on its way; one this agent did
-                            // not send leaves the hook holding what it cannot name.
-                            Event::Loaded { .. } => {
-                                self.hook_holds = self.loads_in_flight.pop_front();
+                            // The answer to the Load it names; one this agent does not
+                            // count leaves the hook holding what it cannot name.
+                            Event::Loaded { id, .. } => {
+                                self.hook_zones.loaded(*id);
                                 self.tell_peers_the_hook_zones();
                             }
                             // A document the hook could not read: it keeps what it held.
-                            Event::LoadFailed => {
-                                if self.loads_in_flight.pop_front().is_none() {
-                                    self.hook_holds = None;
-                                }
+                            Event::LoadFailed { id } => {
+                                self.hook_zones.load_failed(*id);
                                 self.tell_peers_the_hook_zones();
                             }
                             _ => {}
@@ -1515,7 +1507,7 @@ impl<W: AgentWorld> Agent<W> {
     /// one a previous life of the agent sent, perhaps with a remote's zones that are not
     /// the selected one's. That one is unknown, and fit for nothing until replaced.
     fn hook_greeted_with(&mut self, layout: &str) {
-        self.hook_holds = if layout.is_empty() {
+        let holds = if layout.is_empty() {
             Some(Default::default())
         } else {
             self.world
@@ -1523,6 +1515,7 @@ impl<W: AgentWorld> Agent<W> {
                 .filter(|(zones, _)| protocol::fingerprint(zones) == layout)
                 .map(|(zones, _)| zone_hosts(&zones))
         };
+        self.hook_zones.greeted(holds);
         self.tell_peers_the_hook_zones();
     }
 
@@ -1569,20 +1562,20 @@ impl<W: AgentWorld> Agent<W> {
         }
     }
 
-    /// Whether `zones` may be handed to the hook ([`Agent::zones_fit`]), and if so,
-    /// counted as on their way until the hook answers.
-    fn loading(&mut self, zones: &str) -> bool {
+    /// Whether `zones` may be handed to the hook ([`Agent::zones_fit`]), and if so, the
+    /// id their `Load` goes with: they count as on their way until the hook answers it.
+    fn loading(&mut self, zones: &str) -> Option<u64> {
         let hosts = zone_hosts(zones);
         if !self.zones_fit(&hosts) {
             eprintln!(
                 "[lbm-agent] the layout still leads to a machine no longer selected: \
                  the rebuild on its way is sent instead"
             );
-            return false;
+            return None;
         }
-        self.loads_in_flight.push_back(hosts);
+        let id = self.hook_zones.sending(hosts);
         self.tell_peers_the_hook_zones();
-        true
+        Some(id)
     }
 
     fn apply(&mut self, effect: Effect) {
@@ -1599,12 +1592,13 @@ impl<W: AgentWorld> Agent<W> {
                         let _ = self.inputs.send(Input::DisplayChanged);
                         return;
                     }
-                    if !self.loading(&zones) {
+                    let Some(id) = self.loading(&zones) else {
                         return;
-                    }
+                    };
                     let load = Command::Load {
                         zones: zones.clone(),
                         desktop: self.world.desktop(),
+                        id: Some(id),
                     };
                     // A foreign layout is simulated: loaded, never run.
                     let frame = if foreign {
@@ -1632,9 +1626,9 @@ impl<W: AgentWorld> Agent<W> {
                 {
                     return;
                 }
-                if !self.loading(&zones) {
+                let Some(id) = self.loading(&zones) else {
                     return;
-                }
+                };
                 eprintln!(
                     "[lbm-agent] -> Preview ({} zones)",
                     zones.matches("<Zone ").count()
@@ -1643,6 +1637,7 @@ impl<W: AgentWorld> Agent<W> {
                     Command::Load {
                         zones: zones.clone(),
                         desktop: self.world.desktop(),
+                        id: Some(id),
                     },
                     Command::Run,
                 ]));

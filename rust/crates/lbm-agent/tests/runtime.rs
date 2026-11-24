@@ -139,6 +139,28 @@ async fn rebind(endpoint: &str) -> FakeHook {
     panic!("the endpoint {endpoint} never came free");
 }
 
+/// What the hook received, each `Load`'s id checked and then blanked: every `Load` goes
+/// with an id its answer can name, never the same one twice, and which one is the
+/// agent's business.
+fn without_load_ids(received: Vec<Command>) -> Vec<Command> {
+    let mut ids = std::collections::HashSet::new();
+    received
+        .into_iter()
+        .map(|command| match command {
+            Command::Load { zones, desktop, id } => {
+                let id = id.expect("every Load goes with an id");
+                assert!(ids.insert(id), "an id names one Load");
+                Command::Load {
+                    zones,
+                    desktop,
+                    id: None,
+                }
+            }
+            other => other,
+        })
+        .collect()
+}
+
 fn runs(fake: &FakeHook) -> usize {
     fake.received()
         .iter()
@@ -175,7 +197,7 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
     until("the first layout is running", || fake.hooked()).await;
     assert_eq!(record.lock().unwrap().rebuilds, 1);
     assert_eq!(
-        fake.received(),
+        without_load_ids(fake.received()),
         [
             Command::Hello {
                 protocol: protocol::PROTOCOL
@@ -198,7 +220,8 @@ async fn the_agent_hands_its_layout_to_the_hook_and_keeps_it_hooked() {
                     top: 0,
                     width: 3840,
                     height: 1080
-                })
+                }),
+                id: None,
             },
             Command::Run
         ]
@@ -427,7 +450,7 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
     until("running in the gapped geometry", || fake.hooked()).await;
     assert_eq!(*rebuilds.lock().unwrap(), 2);
     assert_eq!(
-        fake.received(),
+        without_load_ids(fake.received()),
         [
             Command::Hello {
                 protocol: protocol::PROTOCOL
@@ -450,7 +473,8 @@ async fn a_start_that_moves_the_outputs_waits_for_the_new_geometry() {
                     top: 0,
                     width: 3840,
                     height: 1080
-                })
+                }),
+                id: None,
             },
             Command::Run
         ],

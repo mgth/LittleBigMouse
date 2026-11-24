@@ -248,6 +248,7 @@ async fn load_outcome_is_broadcast_to_listener() {
     let load = protocol::frame(&[protocol::Command::Load {
         zones: zones.to_owned(),
         desktop: None,
+        id: Some(41),
     }]);
     framing::write_frame(&mut agent, &load).await.unwrap();
     let event = tokio::time::timeout(Duration::from_secs(2), framing::read_frame(&mut agent))
@@ -260,7 +261,9 @@ async fn load_outcome_is_broadcast_to_listener() {
         Some(protocol::Event::Loaded {
             zones: 1,
             main: 1,
-            virtual_layout: true
+            virtual_layout: true,
+            // Named after the Load it answers, so the agent cannot take it for another.
+            id: Some(41),
         }),
         "got {event:?}"
     );
@@ -271,6 +274,7 @@ async fn load_outcome_is_broadcast_to_listener() {
         &protocol::frame(&[protocol::Command::Load {
             zones: String::new(),
             desktop: None,
+            id: Some(42),
         }]),
     )
     .await
@@ -279,7 +283,11 @@ async fn load_outcome_is_broadcast_to_listener() {
         .await
         .expect("LoadFailed event timeout")
         .unwrap();
-    assert!(event.contains("LoadFailed"), "got {event:?}");
+    assert_eq!(
+        protocol::parse_event(&event),
+        Some(protocol::Event::LoadFailed { id: Some(42) }),
+        "got {event:?}"
+    );
 }
 
 #[tokio::test]
@@ -343,6 +351,7 @@ async fn the_greeting_names_the_layout_the_hook_holds() {
             protocol::Command::Load {
                 zones: zones.to_owned(),
                 desktop: None,
+                id: None,
             },
             protocol::Command::Hello {
                 protocol: lbm_ipc::protocol::PROTOCOL,

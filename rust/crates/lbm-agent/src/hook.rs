@@ -11,7 +11,14 @@
 //!
 //! Commands given while there is no connection are dropped, not queued: replayed after a
 //! reconnection they would be stale, and a (re)connected hook asks for its layout anyway
-//! (`Connected`, then `Stopped`, which the reconciler answers).
+//! (`Connected`, then `Stopped`, which the reconciler answers). That holds for every
+//! command given before the caller *knows* of the connection, not only those given
+//! while there was none: a frame sent while the old connection was dropping, or before
+//! the caller read [`HookSignal::Connected`], was decided for a hook it no longer
+//! describes. Written to the new one, the hook would apply zones the caller has counted
+//! lost — a layout leading to a remote no longer selected, applied while the multi-PC
+//! mode believes the border closed. So a new connection writes nothing until
+//! [`HookSignals::recv`] has handed its `Connected` out.
 
 use std::io;
 use std::time::Duration;
@@ -58,6 +65,37 @@ enum Outgoing {
     Frame(String),
     /// Answered once everything queued before it is written (or dropped).
     Flush(tokio::sync::oneshot::Sender<()>),
+    /// The caller has read the `Connected` of this connection: what it sends from now on
+    /// was decided knowing of it.
+    Seen(u64),
+}
+
+/// What the connection task says, with the connection it is about.
+type Signal = (HookSignal, u64);
+
+/// What the connection tells its caller, in order.
+///
+/// Reading a [`HookSignal::Connected`] here is what lets that connection carry
+/// commands: until then, the hook it reaches is one the caller has not heard of.
+#[derive(Debug)]
+pub struct HookSignals {
+    signals: mpsc::UnboundedReceiver<Signal>,
+    /// Weak: the connection lives as long as a [`HookClient`] does, not as long as
+    /// someone listens.
+    commands: mpsc::WeakUnboundedSender<Outgoing>,
+}
+
+impl HookSignals {
+    /// The next signal; `None` once the connection task is gone. Cancel-safe.
+    pub async fn recv(&mut self) -> Option<HookSignal> {
+        let (signal, connection) = self.signals.recv().await?;
+        if signal == HookSignal::Connected {
+            if let Some(commands) = self.commands.upgrade() {
+                let _ = commands.send(Outgoing::Seen(connection));
+            }
+        }
+        Some(signal)
+    }
 }
 
 /// Sends commands to the hook over the current connection.
@@ -70,14 +108,19 @@ impl HookClient {
     /// Starts keeping a connection to the hook at `endpoint` (a socket path, or a
     /// `\\.\pipe\...` name on Windows), on the current tokio runtime. The connection
     /// lives as long as a [`HookClient`] clone does.
-    pub fn spawn(endpoint: String) -> (HookClient, mpsc::UnboundedReceiver<HookSignal>) {
+    pub fn spawn(endpoint: String) -> (HookClient, HookSignals) {
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (signals, signals_rx) = mpsc::unbounded_channel();
         tokio::spawn(keep_connected(endpoint, commands_rx, signals));
-        (HookClient { commands }, signals_rx)
+        let signals = HookSignals {
+            signals: signals_rx,
+            commands: commands.downgrade(),
+        };
+        (HookClient { commands }, signals)
     }
 
-    /// Sends a command frame (see [`lbm_ipc::client`]); dropped if not connected.
+    /// Sends a command frame (see [`lbm_ipc::client`]); dropped if not connected, or
+    /// connected to a hook whose [`HookSignal::Connected`] has not been read yet.
     pub fn send(&self, frame: String) {
         let _ = self.commands.send(Outgoing::Frame(frame));
     }
@@ -106,16 +149,17 @@ async fn connect(endpoint: &str) -> io::Result<tokio::net::windows::named_pipe::
 async fn keep_connected(
     endpoint: String,
     mut commands: mpsc::UnboundedReceiver<Outgoing>,
-    signals: mpsc::UnboundedSender<HookSignal>,
+    signals: mpsc::UnboundedSender<Signal>,
 ) {
     let mut failures = 0u32;
+    let mut connection = 0u64;
     loop {
         let attempt = tokio::time::timeout(ATTEMPT_TIMEOUT, connect(&endpoint)).await;
         let stream = match attempt {
             Ok(Ok(stream)) => stream,
             _ => {
                 if failures.is_multiple_of(UNREACHABLE_EVERY)
-                    && signals.send(HookSignal::Unreachable).is_err()
+                    && signals.send((HookSignal::Unreachable, connection)).is_err()
                 {
                     return;
                 }
@@ -127,7 +171,7 @@ async fn keep_connected(
                         Ok(Outgoing::Flush(done)) => {
                             let _ = done.send(());
                         }
-                        Ok(Outgoing::Frame(_)) => continue,
+                        Ok(Outgoing::Frame(_) | Outgoing::Seen(_)) => continue,
                         Err(mpsc::error::TryRecvError::Empty) => break,
                         Err(mpsc::error::TryRecvError::Disconnected) => return,
                     }
@@ -136,10 +180,11 @@ async fn keep_connected(
             }
         };
         failures = 0;
+        connection = connection.wrapping_add(1);
 
-        match serve(stream, &mut commands, &signals).await {
+        match serve(stream, connection, &mut commands, &signals).await {
             Served::Dropped => {
-                if signals.send(HookSignal::Lost).is_err() {
+                if signals.send((HookSignal::Lost, connection)).is_err() {
                     return;
                 }
                 tokio::time::sleep(RETRY_DELAY).await;
@@ -150,7 +195,7 @@ async fn keep_connected(
             // would leave the mice held by a process nothing here can talk to.
             Served::Foreign => {
                 retire_foreign_hook(&endpoint).await;
-                if signals.send(HookSignal::Lost).is_err() {
+                if signals.send((HookSignal::Lost, connection)).is_err() {
                     return;
                 }
                 tokio::time::sleep(RETRY_DELAY).await;
@@ -185,16 +230,21 @@ enum Served {
 
 async fn serve<S>(
     stream: S,
+    connection: u64,
     commands: &mut mpsc::UnboundedReceiver<Outgoing>,
-    signals: &mpsc::UnboundedSender<HookSignal>,
+    signals: &mpsc::UnboundedSender<Signal>,
 ) -> Served
 where
     S: AsyncRead + AsyncWrite + Send + 'static,
 {
+    let signal = |signal: HookSignal| signals.send((signal, connection));
     let (mut reader, mut writer) = tokio::io::split(stream);
-    if signals.send(HookSignal::Connected).is_err() {
+    if signal(HookSignal::Connected).is_err() {
         return Served::Closed;
     }
+    // Whether the caller has read this connection's `Connected`: until then, every frame
+    // it sends was meant for a hook it no longer reaches.
+    let mut seen = false;
     // Who is there, then subscribe. Both in one frame: a hook that answers the first
     // understands the second, and one that answers neither is the case below.
     let opening = protocol::frame(&[
@@ -250,12 +300,12 @@ where
                                 );
                                 break Served::Foreign;
                             }
-                            if signals.send(HookSignal::Greeted { layout }).is_err() {
+                            if signal(HookSignal::Greeted { layout }).is_err() {
                                 break Served::Closed;
                             }
                         }
                         Some(message) => {
-                            if signals.send(HookSignal::Message(message)).is_err() {
+                            if signal(HookSignal::Message(message)).is_err() {
                                 break Served::Closed;
                             }
                         }
@@ -265,10 +315,18 @@ where
                 None => break Served::Dropped,
             },
             command = commands.recv() => match command {
-                Some(Outgoing::Frame(command)) => {
+                Some(Outgoing::Frame(command)) if seen => {
                     if write_frame(&mut writer, &command).await.is_err() {
                         break Served::Dropped;
                     }
+                }
+                Some(Outgoing::Frame(_)) => {
+                    eprintln!(
+                        "[lbm-agent] a command meant for a previous hook connection: dropped"
+                    );
+                }
+                Some(Outgoing::Seen(seen_connection)) => {
+                    seen |= seen_connection == connection;
                 }
                 Some(Outgoing::Flush(done)) => {
                     let _ = done.send(());

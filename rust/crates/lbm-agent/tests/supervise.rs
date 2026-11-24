@@ -5,13 +5,12 @@
 use std::io;
 use std::time::Duration;
 
-use lbm_agent::hook::{HookClient, HookSignal};
+use lbm_agent::hook::{HookClient, HookSignal, HookSignals};
 use lbm_agent::reconcile::{LayoutState, Timings, World};
 use lbm_agent::runtime::Agent;
 use lbm_agent::supervise::HookLauncher;
 use lbm_agent::world::AgentWorld;
 use lbm_ipc::protocol::{self, Command, Event};
-use tokio::sync::mpsc::UnboundedReceiver;
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
@@ -84,7 +83,7 @@ async fn until_state(endpoint: &str, want: Event) {
 
 /// The next state the hook reports; `None` for a connection signal (after a short
 /// pause, so a retry does not spin).
-async fn next_state(signals: &mut UnboundedReceiver<HookSignal>) -> Option<Event> {
+async fn next_state(signals: &mut HookSignals) -> Option<Event> {
     match signals.recv().await? {
         HookSignal::Message(m) => Some(m),
         HookSignal::Connected

@@ -35,6 +35,7 @@ pub mod elevation;
 pub mod fake_hook;
 pub mod gap_guard;
 pub mod hook;
+mod hook_zones;
 #[cfg(any(target_os = "linux", windows))]
 pub mod icons;
 pub mod input_switch;

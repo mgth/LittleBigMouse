@@ -43,6 +43,21 @@ pub enum Command {
         /// get out of step: a display change rebuilds both and sends them together.
         #[serde(rename = "Desktop", default, skip_serializing_if = "Option::is_none")]
         desktop: Option<Desktop>,
+        /// What this `Load` is known by: the hook names it in the [`Event::Loaded`] or
+        /// [`Event::LoadFailed`] that answers it. Absent from an older agent, and then
+        /// the answer names nothing.
+        ///
+        /// Without it an answer can only be matched to a `Load` by its rank, and the
+        /// rank lies across a reconnection: a frame written to the new connection by an
+        /// agent that had already counted it lost is answered there, and its answer
+        /// taken for the next one's — the agent then believes the hook holds zones it
+        /// does not, which is what the multi-PC mode waits on before it opens a border
+        /// to another machine.
+        ///
+        /// No new [`PROTOCOL`]: both sides read a frame without it, and a hook that
+        /// never echoes it is answered the way every hook was before.
+        #[serde(rename = "Id", default, skip_serializing_if = "Option::is_none")]
+        id: Option<u64>,
     },
     /// Install the hook and route.
     Run,
@@ -166,9 +181,17 @@ pub enum Event {
         main: usize,
         #[serde(rename = "Virtual")]
         virtual_layout: bool,
+        /// The [`Command::Load`]'s own `Id`, echoed; absent when it had none, or from a
+        /// hook that predates it.
+        #[serde(rename = "Id", default, skip_serializing_if = "Option::is_none")]
+        id: Option<u64>,
     },
     /// A `Load` was refused: the document did not parse.
-    LoadFailed,
+    LoadFailed {
+        /// The same as [`Event::Loaded`]'s.
+        #[serde(rename = "Id", default, skip_serializing_if = "Option::is_none")]
+        id: Option<u64>,
+    },
     /// The panic shortcut ran.
     Rescued,
     /// The panic shortcut is not armed, and why is the platform's own: something else
@@ -208,7 +231,7 @@ impl Event {
             Event::Suspended => "Suspended",
             Event::Resumed => "Resumed",
             Event::Loaded { .. } => "Loaded",
-            Event::LoadFailed => "LoadFailed",
+            Event::LoadFailed { .. } => "LoadFailed",
             Event::Rescued => "Rescued",
             Event::ShortcutUnavailable { .. } => "ShortcutUnavailable",
             Event::ShortcutAvailable { .. } => "ShortcutAvailable",
@@ -225,11 +248,12 @@ impl Event {
                 zones,
                 main,
                 virtual_layout,
+                ..
             } => format!(
                 "{zones} zones ({main} main){}",
                 if *virtual_layout { ", virtual" } else { "" }
             ),
-            Event::LoadFailed => "the layout could not be parsed".to_owned(),
+            Event::LoadFailed { .. } => "the layout could not be parsed".to_owned(),
             Event::ShortcutUnavailable { shortcut } | Event::ShortcutAvailable { shortcut } => {
                 shortcut.clone()
             }
@@ -302,6 +326,7 @@ mod tests {
                     width: 3840,
                     height: 1080,
                 }),
+                id: Some(7),
             },
             Command::Run,
         ]);
@@ -316,7 +341,8 @@ mod tests {
                         top: 0,
                         width: 3840,
                         height: 1080,
-                    })
+                    }),
+                    id: Some(7),
                 },
                 Command::Run
             ]
@@ -333,6 +359,7 @@ mod tests {
         let [Command::Load { zones: back, .. }] = &parse(&frame(&[Command::Load {
             zones: zones.to_owned(),
             desktop: None,
+            id: None,
         }]))[..] else {
             panic!("a Load came back");
         };
@@ -388,7 +415,8 @@ mod tests {
             parse(r#"[{"Command":"Load","Zones":"<ZonesLayout/>"}]"#),
             [Command::Load {
                 zones: "<ZonesLayout/>".to_owned(),
-                desktop: None
+                desktop: None,
+                id: None,
             }]
         );
     }
@@ -405,6 +433,7 @@ mod tests {
                 width: 5760,
                 height: 1200,
             }),
+            id: None,
         }]);
 
         let [Command::Load { desktop, .. }] = &parse(&sent)[..] else {
@@ -446,6 +475,7 @@ mod tests {
             zones: 2,
             main: 2,
             virtual_layout: false,
+            id: Some(1),
         };
         assert_eq!(loaded.name(), "Loaded");
         assert_eq!(loaded.payload(), "2 zones (2 main)");
@@ -454,6 +484,7 @@ mod tests {
             zones: 1,
             main: 1,
             virtual_layout: true,
+            id: None,
         };
         assert_eq!(foreign.payload(), "1 zones (1 main), virtual");
 
@@ -490,8 +521,16 @@ mod tests {
                 zones: 3,
                 main: 2,
                 virtual_layout: true,
+                id: Some(u64::MAX),
             },
-            Event::LoadFailed,
+            Event::Loaded {
+                zones: 1,
+                main: 1,
+                virtual_layout: false,
+                id: None,
+            },
+            Event::LoadFailed { id: Some(42) },
+            Event::LoadFailed { id: None },
             Event::Rescued,
             Event::ShortcutUnavailable {
                 shortcut: "Ctrl+Alt+Shift+M".to_owned(),
@@ -535,6 +574,41 @@ mod tests {
                 layout: String::new(),
             })
         );
+    }
+
+    #[test]
+    fn a_load_answer_names_the_load_it_answers_and_an_older_one_names_none() {
+        // The id goes out with the Load and comes back with its answer...
+        let [Command::Load { id, .. }] = &parse(&frame(&[Command::Load {
+            zones: "<ZonesLayout/>".to_owned(),
+            desktop: None,
+            id: Some(12),
+        }]))[..] else {
+            panic!("a Load came back");
+        };
+        assert_eq!(*id, Some(12));
+        // ...and an answer from a hook that predates it is still an answer, naming
+        // nothing: the agent falls back to taking answers in order.
+        assert_eq!(
+            parse_event(r#"{"Event":"Loaded","Zones":2,"Main":2,"Virtual":false}"#),
+            Some(Event::Loaded {
+                zones: 2,
+                main: 2,
+                virtual_layout: false,
+                id: None,
+            })
+        );
+        assert_eq!(
+            parse_event(r#"{"Event":"LoadFailed"}"#),
+            Some(Event::LoadFailed { id: None })
+        );
+        // Nor does a Load without one say it has one.
+        assert!(!frame(&[Command::Load {
+            zones: String::new(),
+            desktop: None,
+            id: None,
+        }])
+        .contains("\"Id\""));
     }
 
     #[test]

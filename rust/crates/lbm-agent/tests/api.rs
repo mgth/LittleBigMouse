@@ -2248,7 +2248,7 @@ fn last_load(fake: &FakeHook) -> (String, Option<lbm_ipc::protocol::Desktop>) {
         .iter()
         .rev()
         .find_map(|c| match c {
-            Command::Load { zones, desktop } => Some((zones.clone(), *desktop)),
+            Command::Load { zones, desktop, .. } => Some((zones.clone(), *desktop)),
             _ => None,
         })
         .expect("a Load")
@@ -2544,6 +2544,7 @@ async fn the_master_relays_its_hooks_input_only_while_the_hook_has_confirmed_zon
             Command::Load {
                 zones: stale,
                 desktop: None,
+                id: None,
             },
             Command::Run,
         ]),

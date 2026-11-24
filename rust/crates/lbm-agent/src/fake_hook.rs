@@ -254,7 +254,7 @@ async fn connection<S>(
                     // Decided by the parser the daemon uses, not by the look of the
                     // text: an empty document is not the only one that fails, and the
                     // zone counts a `Loaded` reports are two different numbers.
-                    Command::Load { zones: xml, .. } => {
+                    Command::Load { zones: xml, id, .. } => {
                         match ZonesLayout::from_xml(&xml) {
                             Some(layout) => {
                                 s.applied = protocol::fingerprint(&xml);
@@ -263,9 +263,10 @@ async fn connection<S>(
                                     zones: layout.all_zones.len(),
                                     main: layout.main_zones.len(),
                                     virtual_layout: layout.virtual_layout,
+                                    id,
                                 });
                             }
-                            None => s.broadcast(&Event::LoadFailed),
+                            None => s.broadcast(&Event::LoadFailed { id }),
                         }
                         // After the outcome, and whatever the outcome was. The daemon
                         // lets go *before* it looks at the document, so a Load that

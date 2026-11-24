@@ -64,7 +64,8 @@ pub fn install(ctx: &egui::Context) {
 /// and pushes its neighbours along. Here the frame is always there: at rest its fill
 /// and its stroke are transparent but keep their width, and the padding gives that
 /// width back so the button is the size it always was. Call it on the `Ui` the button
-/// is added to, which must be a child (`add_enabled` closure) so the style stays local.
+/// is added to. It changes that `Ui`'s style: the caller clones the style first and
+/// puts it back after adding the button, or the change reaches the row's next button.
 pub fn steady_at_rest<'a>(ui: &mut egui::Ui, button: egui::Button<'a>) -> egui::Button<'a> {
     // A disabled button cannot be hovered and is laid out as it always was.
     if !ui.is_enabled() {

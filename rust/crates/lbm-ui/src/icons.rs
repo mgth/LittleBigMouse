@@ -63,6 +63,9 @@ pub fn button(
     enabled: bool,
 ) -> egui::Response {
     ui.add_enabled(enabled, |ui: &mut egui::Ui| {
+        // `add_enabled` hands over the row's own `Ui`: what `steady_at_rest` changes in
+        // its style is put back before returning, or it would reach the next button.
+        let style = ui.style().clone();
         let id = ui.make_persistent_id(("tool-icon", label));
         let mut button = egui::Button::new((egui::Atom::custom(id, vec2(16.0, 16.0)), label))
             .wrap_mode(egui::TextWrapMode::Extend);
@@ -91,6 +94,7 @@ pub fn button(
             };
             paint(ui.painter(), rect, icon, color);
         }
+        ui.set_style(style);
         response.response
     })
 }
@@ -172,6 +176,8 @@ fn pictogram_button(
     framed: bool,
 ) -> egui::Response {
     ui.add_enabled(enabled, |ui: &mut egui::Ui| {
+        // Put back what `steady_at_rest` changes in the row's style (see `button`).
+        let style = ui.style().clone();
         let id = ui.next_auto_id().with("pictogram");
         let mut button = egui::Button::new((egui::Atom::custom(id, vec2(14.0, 14.0)), text));
         if let Some(on) = selected {
@@ -186,6 +192,7 @@ fn pictogram_button(
         if let Some(rect) = response.rect(id) {
             paint(ui.painter(), rect, icon, tone(ui, selected == Some(true)));
         }
+        ui.set_style(style);
         response.response
     })
 }

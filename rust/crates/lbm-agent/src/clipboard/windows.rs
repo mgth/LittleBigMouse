@@ -483,7 +483,9 @@ fn render(windows_format: u32) {
                 return;
             }
         },
-        ClipFormat::Files => convert::dropfiles(&crate::peers::clipboard_files::paths_of(&data)),
+        ClipFormat::Files => {
+            convert::dropfiles(&crate::peers::clipboard_files::unpack_paths(&data))
+        }
         ClipFormat::Unknown => return,
     };
     if let Some(memory) = global(&bytes) {
@@ -554,7 +556,7 @@ fn read(window: HWND, copy: u64, format: ClipFormat, limit: usize) -> Data {
             if paths.is_empty() {
                 Err("no file was copied".to_owned())
             } else {
-                Ok(crate::peers::clipboard_files::lines_of(&paths))
+                Ok(crate::peers::clipboard_files::pack_paths(&paths))
             }
         }),
         ClipFormat::Unknown => Err("not a format this reads".into()),

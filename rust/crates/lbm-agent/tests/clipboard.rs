@@ -306,7 +306,7 @@ fn some_files(dir: &Path) -> (Vec<std::path::PathBuf>, Vec<u8>) {
 }
 
 fn lines(paths: &[std::path::PathBuf]) -> Vec<u8> {
-    lbm_agent::peers::clipboard_files::lines_of(paths)
+    lbm_agent::peers::clipboard_files::pack_paths(paths)
 }
 
 #[tokio::test]
@@ -320,7 +320,7 @@ async fn files_copied_on_one_machine_are_fetched_into_the_reception_folder_of_th
     assert_eq!(offered(&desk.clipboard).await, [ClipFormat::Files]);
 
     let pasted = desk.clipboard.paste(ClipFormat::Files).await.unwrap();
-    let pasted = lbm_agent::peers::clipboard_files::paths_of(&pasted);
+    let pasted = lbm_agent::peers::clipboard_files::unpack_paths(&pasted);
     assert_eq!(pasted.len(), 2);
     assert!(pasted.iter().all(|p| p.starts_with(desk.reception())));
     assert_eq!(pasted[0].file_name().unwrap(), "photos");
@@ -333,7 +333,10 @@ async fn files_copied_on_one_machine_are_fetched_into_the_reception_folder_of_th
 
     // A second paste is handed the same files, not fetched again.
     let again = desk.clipboard.paste(ClipFormat::Files).await.unwrap();
-    assert_eq!(lbm_agent::peers::clipboard_files::paths_of(&again), pasted);
+    assert_eq!(
+        lbm_agent::peers::clipboard_files::unpack_paths(&again),
+        pasted
+    );
     assert_eq!(std::fs::read_dir(desk.reception()).unwrap().count(), 1);
 }
 

@@ -448,8 +448,14 @@ sees it.
   asked once the last is written), into a folder of its own under the reception folder
   (`ClipboardFolder`, `Downloads/LittleBigMouse` by default), then hands the application
   those paths; it copies from there. A name that would land outside that folder (`..`,
-  an absolute path, a drive) refuses the whole offer; names Windows cannot hold are made
-  fit there. The fetch starts at the first read and is not tied to it: the reader may
+  an absolute path, a drive) refuses the whole offer, and so do two entries that would
+  land on one file (`Photo.jpg` and `photo.jpg` where case is ignored, or after names
+  Windows cannot hold were made fit). A name that is not UTF-8 is not offered: the wire
+  carries names as text. Every range is read from the very file that was listed — not a
+  link since, same file (device and inode on Unix), size and time — or the paste fails
+  rather than mix two versions. A list too large for one control message is not offered,
+  and the copier's state says so. Paths go between the system clipboard and the sharing
+  NUL-separated, exactly as the system has them. The fetch starts at the first read and is not tied to it: the reader may
   give up first (a Qt application under Wayland after one second without data, Windows
   after 30 s), and a paste once the files are here gets them at once. A fetch is stopped,
   and what it wrote removed, when the offer is replaced or its machine leaves; what a fetch

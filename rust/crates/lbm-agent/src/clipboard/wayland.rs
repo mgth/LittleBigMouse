@@ -279,7 +279,7 @@ fn spawn_read(
                         if paths.is_empty() {
                             Err("no file of this machine was copied".to_owned())
                         } else {
-                            Ok(crate::peers::clipboard_files::lines_of(&paths))
+                            Ok(crate::peers::clipboard_files::pack_paths(&paths))
                         }
                     }
                     _ => Ok(data),
@@ -302,7 +302,7 @@ fn spawn_write(fd: OwnedFd, mime: String, answer: oneshot::Receiver<Data>) {
             match answer.blocking_recv() {
                 Ok(Ok(data)) => {
                     let data = if mime == URI_LIST || mime == GNOME_FILES {
-                        let paths = crate::peers::clipboard_files::paths_of(&data);
+                        let paths = crate::peers::clipboard_files::unpack_paths(&data);
                         if mime == URI_LIST {
                             convert::uri_list(&paths).into_bytes()
                         } else {

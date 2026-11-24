@@ -542,7 +542,7 @@ impl Sharing {
         tokio::spawn(async move {
             let result = match answer.await {
                 Ok(Ok(paths)) => {
-                    let roots = files::paths_of(&paths);
+                    let roots = files::unpack_paths(&paths);
                     files::blocking(move || files::walk(&roots, max_bytes)).await
                 }
                 Ok(Err(error)) => Err(error),
@@ -579,6 +579,17 @@ impl Sharing {
                 Vec::new()
             }
         };
+        // The list goes in one control message: one too large for it would never arrive,
+        // and the other machine would go on pasting the copy before.
+        let files = if fits(serial, &formats, &files) {
+            files
+        } else {
+            let reason = format!("{} files are too many to offer at once", files.len());
+            eprintln!("[lbm-agent] multi-PC: the files copied are not offered: {reason}");
+            self.problem = Some(reason);
+            formats.retain(|f| *f != ClipFormat::Files);
+            Vec::new()
+        };
         self.announce(copy, formats, files, peers);
     }
 
@@ -600,7 +611,7 @@ impl Sharing {
                     held.machine_id
                 );
                 for reply in waiting {
-                    let _ = reply.send(Ok(files::lines_of(&paths)));
+                    let _ = reply.send(Ok(files::pack_paths(&paths)));
                 }
                 held.fetch = FetchState::Done(paths);
                 self.problem = None;
@@ -624,7 +635,7 @@ impl Sharing {
         };
         match &mut held.fetch {
             FetchState::Done(paths) => {
-                let _ = reply.send(Ok(files::lines_of(paths)));
+                let _ = reply.send(Ok(files::pack_paths(paths)));
                 return;
             }
             FetchState::Running { waiting, .. } => {
@@ -640,6 +651,7 @@ impl Sharing {
             let _ = reply.send(Err("the other machine left".into()));
             return;
         };
+        // Named once: the fetch writes there and an abandon removes that very folder.
         let folder = files::folder_for(&self.options.reception, held.local);
         let fetch = files::Fetch {
             link: peer.sender.clone(),
@@ -654,6 +666,7 @@ impl Sharing {
         };
         let fetched = self.fetched_sender.clone();
         let local = held.local;
+        let running_folder = folder.clone();
         let task = tokio::spawn(async move {
             let made = folder.clone();
             let result = match files::blocking(move || {
@@ -677,7 +690,7 @@ impl Sharing {
         });
         held.fetch = FetchState::Running {
             task,
-            folder: files::folder_for(&self.options.reception, local),
+            folder: running_folder,
             waiting: vec![reply],
         };
     }
@@ -987,7 +1000,7 @@ impl Sharing {
             .filter(|local| local.serial == serial && self.options.send && self.open.is_some())
             .and_then(|local| local.files.get(item as usize))
             .filter(|listed| !listed.entry.folder)
-            .map(|listed| listed.source.clone());
+            .cloned();
         let Some(source) = source else {
             return send(
                 &sender,
@@ -1054,6 +1067,46 @@ impl Sharing {
 fn send(sender: &LinkSender, message: Control) {
     let sender = sender.clone();
     tokio::spawn(async move {
-        let _ = sender.control(&message).await;
+        // A link that closed meanwhile says nothing worth a line; a message that cannot
+        // be sent at all does.
+        if let Err(lbm_net::link::SendError::Invalid(error)) = sender.control(&message).await {
+            eprintln!("[lbm-agent] multi-PC: a clipboard message was not sent: {error}");
+        }
     });
+}
+
+/// Whether an offer of `files` fits in one control message.
+fn fits(serial: u64, formats: &[ClipFormat], files: &[Listed]) -> bool {
+    let offer = Control::ClipboardOffer {
+        serial,
+        formats: formats.to_vec(),
+        files: files.iter().map(|l| l.entry.clone()).collect(),
+        seen: u64::MAX,
+        receiving: true,
+    };
+    lbm_net::wire::encode_control(&offer).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_list_too_large_for_one_message_does_not_fit() {
+        let listed = |n: usize| -> Vec<Listed> {
+            (0..n)
+                .map(|i| Listed {
+                    entry: ClipFile {
+                        path: format!("{}/{i:05}", "d".repeat(200)),
+                        size: 1,
+                        folder: false,
+                    },
+                    source: PathBuf::new(),
+                    stamp: files::Stamp::of(&std::fs::metadata(".").unwrap()),
+                })
+                .collect()
+        };
+        assert!(fits(1, &[ClipFormat::Files], &listed(100)));
+        assert!(!fits(1, &[ClipFormat::Files], &listed(10_000)));
+    }
 }

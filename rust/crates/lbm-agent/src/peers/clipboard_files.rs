@@ -8,7 +8,8 @@
 //! them from there. The disk is only ever touched in blocking tasks: the agent's runtime
 //! has one thread, and the input relay runs on it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,110 +32,197 @@ const PATIENCE: Duration = Duration::from_secs(20);
 pub struct Listed {
     pub entry: ClipFile,
     pub source: PathBuf,
+    /// The file as it was listed: a read of it checks it is still that one.
+    pub stamp: Stamp,
 }
 
-/// The paths a clipboard holds, one per line, as the backends hand them over.
-pub fn paths_of(text: &[u8]) -> Vec<PathBuf> {
-    String::from_utf8_lossy(text)
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty())
-        .map(PathBuf::from)
+/// What tells one version of a file from another: its size and time of change, and on
+/// Unix the file itself (device and inode), so that a file replaced by another under the
+/// same name is told apart even with the same size and time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stamp {
+    len: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    file: (u64, u64),
+}
+
+impl Stamp {
+    pub fn of(metadata: &std::fs::Metadata) -> Stamp {
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        Stamp {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            #[cfg(unix)]
+            file: (metadata.dev(), metadata.ino()),
+        }
+    }
+}
+
+/// The paths a clipboard holds, as the backends hand them over: separated by NUL, the
+/// one byte no path holds on either system, each kept exactly as the system has it (no
+/// line splitting, no trimming, no character lost).
+pub fn unpack_paths(packed: &[u8]) -> Vec<PathBuf> {
+    packed
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        // SAFETY: the bytes come from `pack_paths` in this process, split only at the
+        // ASCII NUL it put between them, which `from_encoded_bytes_unchecked` allows.
+        .map(|path| PathBuf::from(unsafe { OsStr::from_encoded_bytes_unchecked(path) }))
         .collect()
 }
 
-/// The paths as the backends take them, one per line.
-pub fn lines_of(paths: &[PathBuf]) -> Vec<u8> {
-    paths
-        .iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("\n")
-        .into_bytes()
+/// The paths as the backends take them: see [`unpack_paths`].
+pub fn pack_paths(paths: &[PathBuf]) -> Vec<u8> {
+    let mut packed = Vec::new();
+    for path in paths {
+        if !packed.is_empty() {
+            packed.push(0);
+        }
+        packed.extend_from_slice(path.as_os_str().as_encoded_bytes());
+    }
+    packed
+}
+
+/// `name`, if it can cross: an offer carries names as UTF-8, and a Linux name that is not
+/// is refused rather than sent mangled.
+fn crossing_name(name: &OsStr, path: &Path) -> Result<String, String> {
+    name.to_str().map(str::to_owned).ok_or_else(|| {
+        format!(
+            "{} has a name that cannot be sent to the other machine",
+            path.display()
+        )
+    })
 }
 
 /// What `roots` are, folders walked: a folder before what is in it, links not followed
 /// (a link to a folder could loop, and one to a file elsewhere is not what was copied),
 /// nothing but files and folders. An error says why the files are not offered.
 pub fn walk(roots: &[PathBuf], max_bytes: u64) -> Result<Vec<Listed>, String> {
-    let mut listed = Vec::new();
-    let mut total = 0u64;
+    walk_within(roots, max_bytes, MAX_ENTRIES)
+}
+
+/// [`walk`], at most `max_entries` entries.
+pub fn walk_within(
+    roots: &[PathBuf],
+    max_bytes: u64,
+    max_entries: usize,
+) -> Result<Vec<Listed>, String> {
+    let mut walk = Walk {
+        listed: Vec::new(),
+        total: 0,
+        max_bytes,
+        max_entries,
+    };
     for root in roots {
         let name = root
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
             .ok_or_else(|| format!("{} has no name to paste it under", root.display()))?;
-        visit(root, name, &mut listed, &mut total, max_bytes)?;
+        let name = crossing_name(name, root)?;
+        walk.visit(root, name)?;
     }
-    Ok(listed)
+    Ok(walk.listed)
 }
 
-fn visit(
-    path: &Path,
-    relative: String,
-    listed: &mut Vec<Listed>,
-    total: &mut u64,
+struct Walk {
+    listed: Vec<Listed>,
+    total: u64,
     max_bytes: u64,
-) -> Result<(), String> {
-    let metadata = std::fs::symlink_metadata(path)
-        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
-    if listed.len() >= MAX_ENTRIES {
-        return Err(format!("more than {MAX_ENTRIES} files were copied"));
-    }
-    if metadata.is_dir() {
-        listed.push(Listed {
-            entry: ClipFile {
-                path: relative.clone(),
-                size: 0,
-                folder: true,
-            },
-            source: path.to_owned(),
-        });
-        let mut children: Vec<_> = std::fs::read_dir(path)
-            .map_err(|error| format!("{} cannot be read: {error}", path.display()))?
-            .filter_map(Result::ok)
-            .collect();
-        children.sort_by_key(|child| child.file_name());
-        for child in children {
-            let name = child.file_name().to_string_lossy().into_owned();
-            visit(
-                &child.path(),
-                format!("{relative}/{name}"),
-                listed,
-                total,
-                max_bytes,
-            )?;
-        }
-    } else if metadata.is_file() {
-        *total += metadata.len();
-        if *total > max_bytes {
-            return Err(super::super::clipboard::too_large(
-                usize::try_from(max_bytes).unwrap_or(usize::MAX),
-            ));
-        }
-        listed.push(Listed {
-            entry: ClipFile {
-                path: relative,
-                size: metadata.len(),
-                folder: false,
-            },
-            source: path.to_owned(),
-        });
-    }
-    Ok(())
+    max_entries: usize,
 }
 
-/// `length` bytes of `path` from `offset`, fewer at its end.
-pub fn read_range(path: &Path, offset: u64, length: u64) -> Result<Vec<u8>, String> {
+impl Walk {
+    fn too_many(&self) -> String {
+        format!("more than {} files were copied", self.max_entries)
+    }
+
+    fn visit(&mut self, path: &Path, relative: String) -> Result<(), String> {
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+        if self.listed.len() >= self.max_entries {
+            return Err(self.too_many());
+        }
+        if metadata.is_dir() {
+            self.listed.push(Listed {
+                entry: ClipFile {
+                    path: relative.clone(),
+                    size: 0,
+                    folder: true,
+                },
+                source: path.to_owned(),
+                stamp: Stamp::of(&metadata),
+            });
+            // Within what is left of the budget, before anything is sorted: a folder of
+            // a million files is given up after the first entries over the bound.
+            let room = self.max_entries - self.listed.len();
+            let mut children = Vec::new();
+            for child in std::fs::read_dir(path)
+                .map_err(|error| format!("{} cannot be read: {error}", path.display()))?
+            {
+                let Ok(child) = child else { continue };
+                if children.len() >= room {
+                    return Err(self.too_many());
+                }
+                children.push(child);
+            }
+            children.sort_by_key(|child| child.file_name());
+            for child in children {
+                let name = crossing_name(&child.file_name(), &child.path())?;
+                self.visit(&child.path(), format!("{relative}/{name}"))?;
+            }
+        } else if metadata.is_file() {
+            self.total += metadata.len();
+            if self.total > self.max_bytes {
+                return Err(super::super::clipboard::too_large(
+                    usize::try_from(self.max_bytes).unwrap_or(usize::MAX),
+                ));
+            }
+            self.listed.push(Listed {
+                entry: ClipFile {
+                    path: relative,
+                    size: metadata.len(),
+                    folder: false,
+                },
+                source: path.to_owned(),
+                stamp: Stamp::of(&metadata),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// `length` bytes of the file `listed` from `offset`, fewer at its end — provided it is
+/// still the file that was listed: not a link now, the same file, size and time. A file
+/// changed between two ranges would otherwise paste as the start of one version and the
+/// end of another.
+pub fn read_range(listed: &Listed, offset: u64, length: u64) -> Result<Vec<u8>, String> {
+    let path = &listed.source;
+    let changed = || format!("{} changed since it was copied", path.display());
+    let link = std::fs::symlink_metadata(path)
+        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+    if !link.is_file() {
+        return Err(changed());
+    }
     let mut file = std::fs::File::open(path)
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+    let opened = file
+        .metadata()
+        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+    if Stamp::of(&opened) != listed.stamp {
+        return Err(changed());
+    }
     file.seek(SeekFrom::Start(offset))
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
     let mut data = Vec::new();
     file.take(length)
         .read_to_end(&mut data)
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
-    Ok(data)
+    // And still that one once read: a change under the read is a change too.
+    match std::fs::metadata(path) {
+        Ok(after) if Stamp::of(&after) == listed.stamp => Ok(data),
+        _ => Err(changed()),
+    }
 }
 
 /// Where the entry `relative` of an offer goes under `root`, or `None` when it would go
@@ -200,6 +288,15 @@ pub fn windows_name(name: &str) -> String {
 /// `max_bytes`. Checked when the offer comes, so that a paste never starts what it
 /// cannot finish.
 pub fn acceptable(files: &[ClipFile], max_bytes: u64) -> Result<(), String> {
+    // Windows and macOS file systems ignore case: `Photo.jpg` and `photo.jpg` are one
+    // file there.
+    acceptable_on(files, max_bytes, cfg!(any(windows, target_os = "macos")))
+}
+
+/// [`acceptable`] on a file system that ignores case or not. Two entries that would land
+/// on the same path refuse the whole offer: the second would overwrite the first and the
+/// paste would succeed with a file lost.
+pub fn acceptable_on(files: &[ClipFile], max_bytes: u64, fold_case: bool) -> Result<(), String> {
     if files.is_empty() {
         return Err("no file was listed".into());
     }
@@ -212,6 +309,18 @@ pub fn acceptable(files: &[ClipFile], max_bytes: u64) -> Result<(), String> {
             "a file has a name that cannot be pasted: {}",
             bad.path
         ));
+    }
+    let mut taken = HashSet::new();
+    for file in files {
+        let path = local_path(root, &file.path).expect("checked above");
+        let key = path.to_string_lossy().into_owned();
+        let key = if fold_case { key.to_lowercase() } else { key };
+        if !taken.insert(key) {
+            return Err(format!(
+                "two files would have the same name here: {}",
+                file.path
+            ));
+        }
     }
     let total: u64 = files.iter().map(|f| f.size).fold(0, u64::saturating_add);
     if total > max_bytes {
@@ -454,8 +563,86 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("f");
         std::fs::write(&file, b"0123456789").unwrap();
-        assert_eq!(read_range(&file, 3, 4).unwrap(), b"3456");
-        assert_eq!(read_range(&file, 8, 4).unwrap(), b"89");
+        let listed = &walk(&[file], 100).unwrap()[0];
+        assert_eq!(read_range(listed, 3, 4).unwrap(), b"3456");
+        assert_eq!(read_range(listed, 8, 4).unwrap(), b"89");
+    }
+
+    #[test]
+    fn a_file_changed_or_replaced_since_it_was_listed_is_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f");
+        std::fs::write(&file, b"first version").unwrap();
+        let listed = walk(std::slice::from_ref(&file), 100).unwrap().remove(0);
+        // Grown.
+        std::fs::write(&file, b"second, longer version").unwrap();
+        assert!(read_range(&listed, 0, 4).unwrap_err().contains("changed"));
+        // Replaced by another file of the same size, renamed over it: told apart by
+        // the file itself, which only Unix gives here.
+        #[cfg(unix)]
+        {
+            std::fs::write(&file, b"first version").unwrap();
+            let listed = walk(std::slice::from_ref(&file), 100).unwrap().remove(0);
+            let other = dir.path().join("g");
+            std::fs::write(&other, b"other version").unwrap();
+            std::fs::rename(&other, &file).unwrap();
+            assert!(read_range(&listed, 0, 4).unwrap_err().contains("changed"));
+        }
+        // A link where the file was.
+        #[cfg(unix)]
+        {
+            let listed = walk(std::slice::from_ref(&file), 100).unwrap().remove(0);
+            std::fs::remove_file(&file).unwrap();
+            std::os::unix::fs::symlink(dir.path().join("elsewhere"), &file).unwrap();
+            assert!(read_range(&listed, 0, 4).unwrap_err().contains("changed"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn paths_cross_between_the_clipboard_and_the_sharing_exactly() {
+        use std::os::unix::ffi::OsStrExt;
+        let paths = vec![
+            PathBuf::from("/tmp/rapport "),
+            PathBuf::from("/tmp/two\nlines"),
+            PathBuf::from(OsStr::from_bytes(b"/tmp/not-utf8-\xff")),
+        ];
+        assert_eq!(unpack_paths(&pack_paths(&paths)), paths);
+        // But a name that is not UTF-8 is not offered: the wire carries names as text.
+        let dir = tempfile::tempdir().unwrap();
+        let bad = dir.path().join(OsStr::from_bytes(b"bad-\xff"));
+        std::fs::write(&bad, b"x").unwrap();
+        assert!(walk(&[bad], 100).unwrap_err().contains("cannot be sent"));
+    }
+
+    #[test]
+    fn a_folder_over_the_entry_bound_is_given_up_while_it_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let top = dir.path().join("cache");
+        std::fs::create_dir(&top).unwrap();
+        for i in 0..50 {
+            std::fs::write(top.join(format!("{i}")), b"").unwrap();
+        }
+        assert!(walk_within(std::slice::from_ref(&top), 1000, 10)
+            .unwrap_err()
+            .contains("more than 10"));
+        assert_eq!(walk_within(&[top], 1000, 51).unwrap().len(), 51);
+    }
+
+    #[test]
+    fn two_entries_that_would_land_on_one_file_refuse_the_offer() {
+        let file = |path: &str| ClipFile {
+            path: path.into(),
+            size: 1,
+            folder: false,
+        };
+        let photos = [file("d/Photo.jpg"), file("d/photo.jpg")];
+        assert!(acceptable_on(&photos, 10, false).is_ok());
+        assert!(acceptable_on(&photos, 10, true)
+            .unwrap_err()
+            .contains("same name"));
+        // Two copied roots of the same name, on any system.
+        assert!(acceptable_on(&[file("x"), file("x")], 10, false).is_err());
     }
 
     #[test]

@@ -9,6 +9,7 @@
 //! Linux. Keeping the decisions out of the injectors is what lets them be tested
 //! without touching a real device, and lets both systems keep the same rules.
 
+pub mod blocking;
 pub mod coordinates;
 pub mod keymap;
 pub mod parking;
@@ -286,8 +287,8 @@ fn track(held: &mut Vec<u16>, code: u16, pressed: bool) -> bool {
 
 /// This system's injector.
 #[cfg(windows)]
-pub fn platform_injector(_shared: &'static crate::shared::Shared) -> Box<dyn Injector> {
-    Box::new(windows::SendInputInjector::new())
+pub fn platform_injector(shared: &'static crate::shared::Shared) -> Box<dyn Injector> {
+    Box::new(windows::SendInputInjector::new(shared))
 }
 
 /// This system's injector. The desktop the pointer device spans is read from `shared`.

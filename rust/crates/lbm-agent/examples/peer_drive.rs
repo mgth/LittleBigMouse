@@ -17,8 +17,13 @@
 //! `key|keydown|keyup CODE`, `wheel H V` (1/120ths of a notch), `sleep MS`.
 //! `rulers N` asks the remote to draw "Rulers on screens" on all its screens, measuring
 //! its `N`th screen (0 first), as a master's editor computes them from the `Displays` it
-//! was sent; `norulers` takes them down. While it sleeps it prints what the remote says
-//! of them (`OverlayFailed`).
+//! was sent; `norulers` takes them down. What the remote says of them (`OverlayFailed`)
+//! is printed as it comes.
+//!
+//! It hears of blocks as a master does (`InjectionBlocked`, a Windows remote whose
+//! foreground window is elevated): each one is printed, and one said while the pointer
+//! is over there brings it home as the agent would — a `Leave` — the script's steps
+//! being skipped until its next `enter`.
 //!
 //! It opens no input device and drives nothing on this machine: everything it sends is
 //! typed on the command line.
@@ -174,7 +179,8 @@ async fn main() -> ExitCode {
 async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<(), String> {
     let identity = Identity::load_or_create(&directory).map_err(|e| e.to_string())?;
     println!("this machine: {}", identity.fingerprint());
-    let hello = Hello::new("peer_drive", env!("CARGO_PKG_VERSION"), Role::Master);
+    let mut hello = Hello::new("peer_drive", env!("CARGO_PKG_VERSION"), Role::Master);
+    hello.capabilities = vec![lbm_ipc::peer::INJECTION_BLOCKED_CAPABILITY.to_owned()];
     let options = link::Options::default();
     let pending = link::connect(address.as_str(), &identity, hello, options)
         .await
@@ -218,36 +224,70 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
         Ok(Err(error)) => return Err(error),
         Err(_) => println!("no Displays within {DISPLAYS_PATIENCE:?}; playing the script anyway"),
     }
-    let mut revision = 0;
 
+    // What the remote says from now on, read beside the script.
+    let started = std::time::Instant::now();
+    let (blocks, mut blocked) = tokio::sync::mpsc::unbounded_channel();
+    let reader = tokio::spawn(async move {
+        while let Some(event) = link.next().await {
+            match event {
+                Event::Control(Control::InjectionBlocked { block }) => {
+                    println!(
+                        "<- {:>6} ms InjectionBlocked {block:?}",
+                        started.elapsed().as_millis()
+                    );
+                    let _ = blocks.send(block.is_some());
+                }
+                Event::Control(Control::InputReset) => {
+                    println!("<- {:>6} ms InputReset", started.elapsed().as_millis());
+                }
+                Event::Control(Control::OverlayFailed { revision, error }) => {
+                    println!(
+                        "<- {:>6} ms rulers {revision} not shown: {error}",
+                        started.elapsed().as_millis()
+                    );
+                }
+                Event::Closed(_) => break,
+                _ => {}
+            }
+        }
+    });
+    // The pointer is over there: an `Enter` sent and no `Leave` since.
+    let mut over_there = false;
+    // The last `Overlay` sent.
+    let mut revision = 0;
+    let come_home = |block: bool, over_there: &mut bool| -> bool {
+        let home = block && *over_there;
+        if home {
+            println!("   blocked over there: the pointer comes home");
+            *over_there = false;
+        }
+        home
+    };
     for step in steps {
+        while let Ok(block) = blocked.try_recv() {
+            if come_home(block, &mut over_there) {
+                send(&sender, vec![InputEvent::Leave], started).await?;
+            }
+        }
         match step {
             Step::Send(events) => {
-                println!("-> {events:?}");
-                sender
-                    .input(&encode(&events))
-                    .await
-                    .map_err(|e| format!("cannot send: {e}"))?;
+                let enters = matches!(events.first(), Some(InputEvent::Enter { .. }));
+                if !over_there && !enters && events != [InputEvent::Leave] {
+                    println!("   skipped (the pointer is home): {events:?}");
+                    continue;
+                }
+                over_there = enters || (over_there && events != [InputEvent::Leave]);
+                send(&sender, events, started).await?;
             }
             Step::Sleep(duration) => {
-                let _ = tokio::time::timeout(duration, async {
-                    while let Some(event) = link.next().await {
-                        match event {
-                            Event::Control(Control::OverlayFailed { revision, error }) => {
-                                println!("<- rulers {revision} not shown: {error}")
-                            }
-                            Event::Control(Control::Displays { revision, displays }) => {
-                                println!("<- Displays {revision}: {} screen(s)", displays.len())
-                            }
-                            Event::Closed(reason) => {
-                                println!("<- the link ended: {reason:?}");
-                                break;
-                            }
-                            _ => {}
-                        }
+                let deadline = tokio::time::Instant::now() + duration;
+                while let Ok(Some(block)) = tokio::time::timeout_at(deadline, blocked.recv()).await
+                {
+                    if come_home(block, &mut over_there) {
+                        send(&sender, vec![InputEvent::Leave], started).await?;
                     }
-                })
-                .await;
+                }
             }
             Step::Rulers(measured) => {
                 let bands = match measured {
@@ -255,7 +295,11 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                     None => Vec::new(),
                 };
                 revision += 1;
-                println!("-> Overlay {revision}: {} band(s)", bands.len());
+                println!(
+                    "-> {:>6} ms Overlay {revision}: {} band(s)",
+                    started.elapsed().as_millis(),
+                    bands.len()
+                );
                 sender
                     .control(&Control::Overlay { revision, bands })
                     .await
@@ -265,16 +309,21 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
     }
     sender.close("the script is over").await;
     // The Bye leaves before the link reports itself closed.
-    let _ = tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(event) = link.next().await {
-            if let Event::Closed(_) = event {
-                break;
-            }
-        }
-    })
-    .await;
+    let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
     println!("bye");
     Ok(())
+}
+
+async fn send(
+    sender: &link::LinkSender,
+    events: Vec<InputEvent>,
+    started: std::time::Instant,
+) -> Result<(), String> {
+    println!("-> {:>6} ms {events:?}", started.elapsed().as_millis());
+    sender
+        .input(&encode(&events))
+        .await
+        .map_err(|e| format!("cannot send: {e}"))
 }
 
 /// "Rulers on screens" for the remote's screens, measuring the `index`th, as a master's

@@ -492,6 +492,39 @@ async fn a_masters_batches_reach_the_remotes_hook_in_order_and_its_end_releases_
 
 #[cfg(unix)]
 #[tokio::test]
+async fn a_master_that_left_cleanly_and_goes_releases_the_remotes_hook() {
+    use lbm_ipc::input::{encode, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let mut hook = endpoint::serve(tower_dir.path(), "input.sock");
+
+    let mut tower = Node::new(tower_dir.path(), Some(hook.path.clone()));
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+
+    // A crossing, and the pointer back home: no session is under way any more.
+    let sender = link.sender();
+    let crossing = encode(&[InputEvent::Enter { x: 0, y: 0 }]);
+    let home = encode(&[InputEvent::Leave]);
+    sender.input(&crossing).await.unwrap();
+    sender.input(&home).await.unwrap();
+    assert_eq!(hook.next().await, Some(crossing));
+    assert_eq!(hook.next().await, Some(home));
+
+    // The master goes: the hook's connection ends with it, the hook has no client left.
+    sender.close("done").await;
+    assert_eq!(hook.next().await, None);
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends() {
     let (desk_dir, tower_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let desk_id = Identity::load_or_create(desk_dir.path())

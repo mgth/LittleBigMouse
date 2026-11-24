@@ -1125,6 +1125,10 @@ async fn forward(
     // `InputReset` was said: what the master sends before it hears of it opens no
     // session, only its next crossing (or its `Leave`) does.
     let mut reset_said = false;
+    // A batch of this link's was queued for the hook since its stream was last ended
+    // here: the end of the link ends it, whether a session is under way or the master
+    // left cleanly, so the hook does not go on holding a client for a master gone.
+    let mut used = false;
     let reason = loop {
         let event = tokio::select! {
             lost = hook.lost() => {
@@ -1151,6 +1155,7 @@ async fn forward(
             Some(Event::Input(batch)) if injecting => {
                 let (crosses, leaves) = session_edges(&batch);
                 if let Some(number) = hook.try_batch(batch, crosses) {
+                    used = true;
                     if leaves {
                         session = None;
                         reset_said = false;
@@ -1165,9 +1170,10 @@ async fn forward(
                     // stream, ignored until the master's next `Enter`. The master is
                     // told, or it would go on sending into that void, its pointer and
                     // keyboards held here, until the user crossed home and back.
-                    if session.take().is_some() {
+                    if std::mem::take(&mut used) {
                         hook.release().await;
                     }
+                    session = None;
                     reset_said = true;
                     reset(&link);
                 }
@@ -1184,8 +1190,9 @@ async fn forward(
             None => break CloseReason::Local("the link stopped".into()),
         }
     };
-    // The stream is over: the hook releases whatever it left pressed.
-    if session.is_some() {
+    // The stream is over: the hook releases whatever it left pressed, and has no client
+    // for this master any more.
+    if used {
         hook.release().await;
     }
     let _ = internal.send(Internal::Closed {

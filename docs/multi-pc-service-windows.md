@@ -333,6 +333,28 @@ réseau du service est l'étape 4).
 Effet de bord à connaître : un `osk.exe` ouvert au moment du verrouillage est relancé par
 ATBroker, côté utilisateur et sur l'écran de verrouillage (en SYSTEM).
 
+### Essai du service sous le SCM (2026-11-24, vm124, compte administrateur)
+
+Binaires de #830 (avec #824 et #825), service créé comme le fait l'installeur (même nom,
+LocalSystem, `"<dossier>\lbm-service.exe" run`) mais dans `C:\Program Files\LBM-service-trial`
+et démarré à la demande ; magasin écrit à la main en SYSTEM avec la DACL protégée ; pare-feu
+limité à la machine Linux. Maître : `examples/master_trial` (un `lbm_net::link` maître, depuis
+Linux). Le LBM v6 du mainteneur tournait en même temps, intact.
+
+| Cas | Résultat |
+|---|---|
+| Démarrage par le SCM | **marche** : contrôle `admin_only` passé, identité créée dans le dossier protégé, écoute sur 24818, offre publiée sous `HKLM` (`Port`, `MachineId`) |
+| Maître approuvé, mouvement | **marche** : injecteur lancé en session 1, curseur au pixel injecté (1000, 540) |
+| Invite UAC, Échap envoyé par le maître | **marche** : invite annulée (« L'opération a été annulée par l'utilisateur ») |
+| Maître non approuvé | **refusé** avant tout échange (« not approved on this machine ») |
+| `untrust` (magasin vidé + contrôle 128) pendant une session avec Ctrl enfoncé | **marche** : lien fermé aussitôt (« no longer approved »), port fermé, offre retirée, Ctrl relâché |
+| Arrêt du service | l'injecteur s'arrête avec lui |
+
+Trouvé : l'offre retirée laisse une clé `HKLM\SOFTWARE\LittleBigMouse` vide ; la
+désinstallation de #832 la retire si elle est vide. Pas fait ici : l'installeur lui-même
+(il tue d'abord tous les processus LittleBigMouse, donc le v6 du mainteneur), un vrai agent
+maître (#829, #831), l'écran de verrouillage par le service, un compte standard.
+
 ## Questions pour le mainteneur
 
 1. ~~**Ancrage de la confiance (B)**~~ : validé le 2026-11-24.

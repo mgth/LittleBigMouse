@@ -111,7 +111,7 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
         // as long as they like. Give up only if the wanted shortcut changed under us:
         // then the answer would be to the wrong question.
         let bound = tokio::select! {
-            bound = bind(shared, &wanted) => bound,
+            bound = bind(&wanted) => bound,
             () = superseded(generation) => continue,
         };
 
@@ -235,11 +235,13 @@ async fn differs_from(mut current: watch::Receiver<u64>, generation: u64) {
 struct Binding {
     shortcuts: GlobalShortcuts,
     session: ashpd::desktop::Session<GlobalShortcuts>,
+    /// What the desktop bound the rescue to, if it listed it.
+    trigger: Option<String>,
 }
 
-/// Ask the desktop for the combination `wanted` names. `shared` is only told when
-/// the answer is "registered, but bound to nothing".
-async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::Error> {
+/// Ask the desktop for the combination `wanted` names. What it answered is said once
+/// the binding is listened to: a key bound in a session nobody hears is no rescue.
+async fn bind(wanted: &str) -> Result<Binding, ashpd::Error> {
     let shortcuts = GlobalShortcuts::new().await?;
     let session = shortcuts.create_session(Default::default()).await?;
 
@@ -261,9 +263,13 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
         .response()?;
     // The whole answer: a desktop can accept the request and bind nothing, and a rescue
     // missing from it is a rescue no key will trigger.
-    note_trigger(shared, wanted, rescue_trigger(described(bound.shortcuts())));
+    let trigger = rescue_trigger(described(bound.shortcuts())).map(str::to_owned);
 
-    Ok(Binding { shortcuts, session })
+    Ok(Binding {
+        shortcuts,
+        session,
+        trigger,
+    })
 }
 
 fn described(shortcuts: &[Shortcut]) -> impl Iterator<Item = (&str, &str)> {
@@ -296,7 +302,7 @@ fn note_trigger(shared: &Shared, wanted: &str, trigger: Option<&str>) {
         Some(trigger) => {
             eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
             shared.rescue_bound_by_desktop.store(true, Ordering::SeqCst);
-            shared.report_rescue_available(wanted);
+            shared.report_rescue_bound(wanted);
         }
     }
 }
@@ -321,15 +327,19 @@ async fn listen(
     shared: &'static Shared,
     on_fire: fn(&'static Shared),
 ) {
-    let (Ok(mut activated), Ok(mut deactivated), Ok(mut rebound)) = (
+    let streams = (
         binding.shortcuts.receive_activated().await,
         binding.shortcuts.receive_deactivated().await,
         binding.shortcuts.receive_shortcuts_changed().await,
-    ) else {
-        eprintln!("[LittleBigMouse.Hook] rescue: the portal stopped answering");
+    );
+    let (Ok(mut activated), Ok(mut deactivated), Ok(mut rebound)) = streams else {
+        no_longer_heard(shared, wanted);
         let _ = binding.session.close().await;
         return;
     };
+    note_trigger(shared, wanted, binding.trigger.as_deref());
+
+    let mut lost = true;
 
     loop {
         tokio::select! {
@@ -367,14 +377,33 @@ async fn listen(
                 };
                 note_change(shared, wanted, described(changed.shortcuts()));
             }
-            () = superseded(generation) => break,
+            () = superseded(generation) => {
+                lost = false;
+                break;
+            }
         }
     }
 
+    if lost {
+        no_longer_heard(shared, wanted);
+    } else {
+        // Bound again at once, for the shortcut now wanted.
+        shared
+            .rescue_bound_by_desktop
+            .store(false, Ordering::SeqCst);
+    }
+    let _ = binding.session.close().await;
+}
+
+/// The portal's signals cannot be heard, or no longer are: whatever the desktop bound,
+/// nothing here would act on it. The keys this daemon reads stop leaving the rescue to
+/// it, and the rescue is said as refused until a binding is heard again.
+fn no_longer_heard(shared: &Shared, wanted: &str) {
+    eprintln!("[LittleBigMouse.Hook] rescue: the portal stopped answering");
     shared
         .rescue_bound_by_desktop
         .store(false, Ordering::SeqCst);
-    let _ = binding.session.close().await;
+    shared.report_rescue_refused(wanted);
 }
 
 #[cfg(test)]
@@ -470,7 +499,7 @@ mod tests {
     #[tokio::test]
     async fn a_refusal_with_the_keyboards_read_leaves_the_rescue_armed() {
         let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
-        shared.read_rescue_from_keys();
+        shared.set_keyboards_read(true);
         let mut agent = crate::testing::Listening::to(shared).await;
         let generation = *GENERATION.borrow();
 
@@ -502,10 +531,64 @@ mod tests {
                 shortcut: "Ctrl+Alt+F9".to_string(),
             }
         );
-        shared.read_rescue_from_keys();
+        shared.set_keyboards_read(true);
         assert_eq!(
             agent.next("the keyboards").await,
             Event::ShortcutAvailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+    }
+
+    /// The keyboards come and go: a rescue the desktop refused follows them, one it
+    /// bound does not.
+    #[tokio::test]
+    async fn the_last_keyboard_gone_says_a_refused_rescue_again() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let available = Event::ShortcutAvailable {
+            shortcut: "Ctrl+Alt+F9".to_string(),
+        };
+        let unavailable = Event::ShortcutUnavailable {
+            shortcut: "Ctrl+Alt+F9".to_string(),
+        };
+
+        shared.set_keyboards_read(true);
+        shared.report_rescue_refused("Ctrl+Alt+F9");
+        assert_eq!(agent.next("the refusal, read").await, available);
+        shared.set_keyboards_read(true);
+        shared.set_keyboards_read(false);
+        assert_eq!(agent.next("the keyboards gone").await, unavailable);
+        shared.set_keyboards_read(true);
+        assert_eq!(agent.next("a keyboard plugged in").await, available);
+
+        note_trigger(shared, "Ctrl+Alt+F9", Some("Ctrl+Alt+F9"));
+        assert_eq!(agent.next("the desktop's binding").await, available);
+        shared.set_keyboards_read(false);
+        shared.report_rescue_available("marker");
+        assert_eq!(
+            agent.next("nothing but the marker").await,
+            Event::ShortcutAvailable {
+                shortcut: "marker".to_string(),
+            }
+        );
+    }
+
+    /// A binding whose signals cannot be heard is none: the keys read here take the
+    /// rescue back, and it is said as refused.
+    #[tokio::test]
+    async fn a_binding_no_longer_heard_hands_the_rescue_back_to_the_keys() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        note_trigger(shared, "Ctrl+Alt+F9", Some("Ctrl+Alt+F9"));
+        agent.next("the binding").await;
+        assert!(shared.rescue_bound_by_desktop.load(Ordering::SeqCst));
+
+        no_longer_heard(shared, "Ctrl+Alt+F9");
+        assert!(!shared.rescue_bound_by_desktop.load(Ordering::SeqCst));
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutUnavailable {
                 shortcut: "Ctrl+Alt+F9".to_string(),
             }
         );
@@ -603,10 +686,10 @@ mod tests {
     #[ignore = "asks the running desktop to bind a shortcut"]
     #[tokio::test]
     async fn binds_for_real_and_says_what_it_got() {
-        let shared: &'static Shared = crate::shared::SHARED.get_or_init(Shared::new);
-        let binding = bind(shared, crate::shortcut::DEFAULT)
+        let binding = bind(crate::shortcut::DEFAULT)
             .await
             .expect("the portal bound the shortcut");
+        eprintln!("bound to {:?}", binding.trigger);
 
         binding.session.close().await.expect("the session closes");
     }

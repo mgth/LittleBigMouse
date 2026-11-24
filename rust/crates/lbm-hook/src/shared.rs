@@ -47,9 +47,13 @@ pub struct Shared {
     /// The desktop has bound the rescue to a key (Linux, the global-shortcuts portal):
     /// it fires it, and the keys this daemon reads leave it to the desktop.
     pub rescue_bound_by_desktop: AtomicBool,
-    /// This daemon reads the keyboards and watches them for the rescue (the evdev
-    /// backend): it holds without the desktop's binding.
+    /// This daemon reads keyboards now and watches them for the rescue (the evdev
+    /// backend, armed, with at least one keyboard): it holds without the desktop's
+    /// binding.
     pub rescue_read_from_keys: AtomicBool,
+    /// The shortcut the desktop last refused or left unbound; `None` once it bound it.
+    /// What the rescue is said to be when the keyboards come and go.
+    rescue_refused_by_desktop: Mutex<Option<String>>,
     /// The panic shortcut as the layout spells it (`Ctrl+Alt+Shift+M`). Read by the
     /// listener whenever it is asked to reconcile.
     pub rescue_shortcut: Mutex<String>,
@@ -142,6 +146,7 @@ impl Shared {
             shortcuts_revision: AtomicU32::new(0),
             rescue_bound_by_desktop: AtomicBool::new(false),
             rescue_read_from_keys: AtomicBool::new(false),
+            rescue_refused_by_desktop: Mutex::new(None),
             letters: Mutex::new(Default::default()),
             rescue_unavailable: Mutex::new(None),
             unhook_requests: AtomicU32::new(0),
@@ -167,7 +172,25 @@ impl Shared {
 
     /// The desktop could not arm `shortcut`. Armed all the same while this daemon
     /// reads the keyboards for it; otherwise [`Self::report_rescue_unavailable`].
+    /// Remembered, so that keyboards coming or going say it again.
     pub fn report_rescue_refused(&self, shortcut: &str) {
+        *self
+            .rescue_refused_by_desktop
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(shortcut.to_owned());
+        self.say_refused(shortcut);
+    }
+
+    /// The desktop bound `shortcut`: it holds whatever the keyboards do.
+    pub fn report_rescue_bound(&self, shortcut: &str) {
+        *self
+            .rescue_refused_by_desktop
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
+        self.report_rescue_available(shortcut);
+    }
+
+    fn say_refused(&self, shortcut: &str) {
         if self.rescue_read_from_keys.load(Ordering::SeqCst) {
             eprintln!(
                 "[LittleBigMouse.Hook] rescue: the desktop has no binding for {shortcut}; it is read from the keyboards instead"
@@ -178,19 +201,20 @@ impl Shared {
         }
     }
 
-    /// The keyboards are read, and watched for the rescue: a rescue the desktop could
-    /// not arm is armed now.
-    pub fn read_rescue_from_keys(&self) {
-        if self.rescue_read_from_keys.swap(true, Ordering::SeqCst) {
+    /// Whether keyboards are read and watched for the rescue now. Cheap when nothing
+    /// changed, so said as often as it may have; when it did, a rescue the desktop
+    /// refused is said available or unavailable again.
+    pub fn set_keyboards_read(&self, read: bool) {
+        if self.rescue_read_from_keys.swap(read, Ordering::SeqCst) == read {
             return;
         }
         let refused = self
-            .rescue_unavailable
+            .rescue_refused_by_desktop
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone();
         if let Some(shortcut) = refused {
-            self.report_rescue_refused(&shortcut);
+            self.say_refused(&shortcut);
         }
     }
 

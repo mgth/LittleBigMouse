@@ -6,14 +6,22 @@
 //! rescue and the pointer lock are watched for on a key the user never presses.
 //!
 //! The compositor says which layout it applies: `wl_keyboard` hands any client the
-//! keymap it uses, and again whenever it changes, and says which of its layouts is
-//! active. No focus is needed, and no key is ever seen through this connection. The
-//! keymap is read with xkbcommon, loaded at run time as the overlay does; without
+//! keymap it uses, and again whenever it changes. No focus is needed for that, and no
+//! key is ever seen through this connection. Which of the keymap's layouts is active is
+//! another matter: `wl_keyboard.modifiers` carries it, and a compositor may send it
+//! only to the client that has the focus, which this one never has. So the active
+//! layout is also asked of KDE (`org.kde.KeyboardLayouts`, its index is the keymap's
+//! group), and followed there. Where neither says, a keymap with one layout needs no
+//! answer; one with several is read in its first, and the log says so.
+//!
+//! The keymap is read with xkbcommon, loaded at run time as the overlay does; without
 //! either, the letters stay where a US keyboard has them.
 
 use std::os::unix::fs::FileExt;
 use std::sync::atomic::Ordering;
-use std::sync::Once;
+use std::sync::{Mutex, Once};
+
+use futures::StreamExt;
 
 use wayland_client::{
     globals::{registry_queue_init, GlobalListContents},
@@ -49,11 +57,125 @@ pub fn spawn(shared: &'static Shared) {
         if let Err(error) = spawned {
             eprintln!("[LittleBigMouse.Hook] keyboard layout: no thread: {error}");
         }
+        let spawned = std::thread::Builder::new()
+            .name("lbm-layout".to_owned())
+            .spawn(move || follow_kde(shared));
+        if let Err(error) = spawned {
+            eprintln!("[LittleBigMouse.Hook] keyboard layout: no thread for KDE's: {error}");
+        }
     });
 }
 
+/// What is known of the desktop's layout, from whichever thread learnt it last.
+struct Known {
+    /// The compositor's keymap, NUL-terminated.
+    keymap: Option<Vec<u8>>,
+    /// Its active layout, once anyone said which.
+    group: Option<u32>,
+    /// The unknown group was already reported for this keymap.
+    told_unknown: bool,
+}
+
+static KNOWN: Mutex<Known> = Mutex::new(Known {
+    keymap: None,
+    group: None,
+    told_unknown: false,
+});
+
+/// A new keymap: read again in the group already known.
+fn keymap_is(shared: &Shared, keymap: Vec<u8>) {
+    let mut known = KNOWN.lock().unwrap_or_else(|p| p.into_inner());
+    known.keymap = Some(keymap);
+    known.told_unknown = false;
+    apply(shared, &mut known);
+}
+
+/// The active layout is `group`: read the keymap again if it changed.
+fn group_is(shared: &Shared, group: u32) {
+    let mut known = KNOWN.lock().unwrap_or_else(|p| p.into_inner());
+    if known.group == Some(group) {
+        return;
+    }
+    known.group = Some(group);
+    apply(shared, &mut known);
+}
+
+fn apply(shared: &Shared, known: &mut Known) {
+    let Some(xkb) = xkbcommon_dl::xkbcommon_option() else {
+        return;
+    };
+    let Some(keymap) = &known.keymap else {
+        return;
+    };
+    let read = letters_of_keymap(xkb, keymap, known.group.unwrap_or(0));
+    match read {
+        Some(read) => {
+            if known.group.is_none() && read.layouts > 1 && !known.told_unknown {
+                known.told_unknown = true;
+                eprintln!(
+                    "[LittleBigMouse.Hook] keyboard layout: {} layouts and none said to be active; shortcut letters are read in the first",
+                    read.layouts
+                );
+            }
+            adopt(shared, read.letters);
+        }
+        None => eprintln!(
+            "[LittleBigMouse.Hook] keyboard layout: the compositor's keymap could not be read"
+        ),
+    }
+}
+
+/// Follows KDE's active layout, for as long as KDE is there to say it. Elsewhere, or
+/// once it goes, `wl_keyboard.modifiers` is all there is.
+fn follow_kde(shared: &'static Shared) {
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return;
+    };
+    let followed = runtime.block_on(async {
+        let connection = zbus::Connection::session().await?;
+        let layouts = zbus::Proxy::new(
+            &connection,
+            "org.kde.keyboard",
+            "/Layouts",
+            "org.kde.KeyboardLayouts",
+        )
+        .await?;
+        // Subscribed before the first question: a switch in between is not missed.
+        let mut changed = layouts.receive_signal("layoutChanged").await?;
+        let mut relisted = layouts.receive_signal("layoutListChanged").await?;
+        group_is(shared, layouts.call::<_, _, u32>("getLayout", &()).await?);
+        eprintln!("[LittleBigMouse.Hook] keyboard layout: the active layout is followed in KDE's");
+        loop {
+            tokio::select! {
+                message = changed.next() => {
+                    let Some(message) = message else { break };
+                    if let Ok(group) = message.body().deserialize::<u32>() {
+                        group_is(shared, group);
+                    }
+                }
+                message = relisted.next() => {
+                    if message.is_none() {
+                        break;
+                    }
+                    group_is(shared, layouts.call::<_, _, u32>("getLayout", &()).await?);
+                }
+            }
+        }
+        Ok::<_, zbus::Error>(())
+    });
+    if let Err(error) = followed {
+        // Not KDE, or not yet: the ordinary case on any other desktop.
+        eprintln!(
+            "[LittleBigMouse.Hook] keyboard layout: KDE's active layout not followed ({error})"
+        );
+    }
+}
+
 fn follow(shared: &'static Shared) -> Result<(), String> {
-    let xkb = xkbcommon_dl::xkbcommon_option().ok_or("no libxkbcommon")?;
+    xkbcommon_dl::xkbcommon_option().ok_or("no libxkbcommon")?;
     let connection = Connection::connect_to_env().map_err(|e| e.to_string())?;
     let (globals, mut queue) =
         registry_queue_init::<State>(&connection).map_err(|e| e.to_string())?;
@@ -63,9 +185,6 @@ fn follow(shared: &'static Shared) -> Result<(), String> {
         .map_err(|e| format!("no seat: {e}"))?;
     let mut state = State {
         shared,
-        xkb,
-        keymap: None,
-        group: 0,
         keyboard: None,
     };
     loop {
@@ -77,26 +196,7 @@ fn follow(shared: &'static Shared) -> Result<(), String> {
 
 struct State {
     shared: &'static Shared,
-    xkb: &'static XkbCommon,
-    /// The compositor's keymap, NUL-terminated.
-    keymap: Option<Vec<u8>>,
-    /// Its active layout.
-    group: u32,
     keyboard: Option<WlKeyboard>,
-}
-
-impl State {
-    fn apply(&self) {
-        let Some(keymap) = &self.keymap else {
-            return;
-        };
-        match letters_of_keymap(self.xkb, keymap, self.group) {
-            Some(letters) => adopt(self.shared, letters),
-            None => eprintln!(
-                "[LittleBigMouse.Hook] keyboard layout: the compositor's keymap could not be read"
-            ),
-        }
-    }
 }
 
 /// Puts the letters where the routing thread reads them, and has it read them again
@@ -118,8 +218,15 @@ fn adopt(shared: &Shared, letters: Letters) {
     );
 }
 
+/// The letters of a keymap in one of its layouts, and how many it has.
+#[derive(Debug, PartialEq)]
+struct Read {
+    letters: Letters,
+    layouts: u32,
+}
+
 /// The letters of `keymap` (XKB text, NUL-terminated) in its layout `group`.
-fn letters_of_keymap(xkb: &XkbCommon, keymap: &[u8], group: u32) -> Option<Letters> {
+fn letters_of_keymap(xkb: &XkbCommon, keymap: &[u8], group: u32) -> Option<Read> {
     if keymap.last() != Some(&0) {
         return None;
     }
@@ -135,7 +242,10 @@ fn letters_of_keymap(xkb: &XkbCommon, keymap: &[u8], group: u32) -> Option<Lette
             xkbcommon_dl::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
             xkbcommon_dl::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
         );
-        let letters = (!compiled.is_null()).then(|| letters_of(xkb, compiled, group));
+        let letters = (!compiled.is_null()).then(|| Read {
+            letters: letters_of(xkb, compiled, group),
+            layouts: (xkb.xkb_keymap_num_layouts)(compiled),
+        });
         if !compiled.is_null() {
             (xkb.xkb_keymap_unref)(compiled);
         }
@@ -234,14 +344,12 @@ impl Dispatch<WlKeyboard, ()> for State {
                 if std::fs::File::from(fd).read_exact_at(&mut bytes, 0).is_ok() {
                     // The protocol's text ends with its NUL; one more costs nothing.
                     bytes.push(0);
-                    state.keymap = Some(bytes);
-                    state.apply();
+                    keymap_is(state.shared, bytes);
                 }
             }
-            wl_keyboard::Event::Modifiers { group, .. } if group != state.group => {
-                state.group = group;
-                state.apply();
-            }
+            // Only if the compositor sends it here, which it may keep for the client
+            // that has the focus.
+            wl_keyboard::Event::Modifiers { group, .. } => group_is(state.shared, group),
             _ => {}
         }
     }
@@ -324,6 +432,87 @@ mod tests {
             crate::hook::crossing::keys::Combination::parse("Ctrl+A", &us).map(|c| c.key()),
             Some(KEY_A)
         );
+    }
+
+    /// The text of the keymap xkeyboard-config builds for `layout`, as a compositor
+    /// sends it; `None` where this machine cannot build it.
+    fn keymap_text(layout: &str) -> Option<Vec<u8>> {
+        let xkb = xkbcommon_dl::xkbcommon_option()?;
+        let layout = std::ffi::CString::new(layout).ok()?;
+        let names = xkbcommon_dl::xkb_rule_names {
+            rules: std::ptr::null(),
+            model: std::ptr::null(),
+            layout: layout.as_ptr(),
+            variant: std::ptr::null(),
+            options: std::ptr::null(),
+        };
+        unsafe {
+            let context =
+                (xkb.xkb_context_new)(xkbcommon_dl::xkb_context_flags::XKB_CONTEXT_NO_FLAGS);
+            if context.is_null() {
+                return None;
+            }
+            let keymap = (xkb.xkb_keymap_new_from_names)(
+                context,
+                &names,
+                xkbcommon_dl::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
+            );
+            let mut text = None;
+            if !keymap.is_null() {
+                let string = (xkb.xkb_keymap_get_as_string)(
+                    keymap,
+                    xkbcommon_dl::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
+                );
+                if !string.is_null() {
+                    let mut bytes = std::ffi::CStr::from_ptr(string)
+                        .to_bytes_with_nul()
+                        .to_vec();
+                    bytes.shrink_to_fit();
+                    text = Some(bytes);
+                    libc_free(string.cast_mut().cast());
+                }
+                (xkb.xkb_keymap_unref)(keymap);
+            }
+            (xkb.xkb_context_unref)(context);
+            text
+        }
+    }
+
+    extern "C" {
+        #[link_name = "free"]
+        fn libc_free(pointer: *mut std::ffi::c_void);
+    }
+
+    /// The compositor's keymap holds every layout; which one is typed in is the group,
+    /// and a group nobody said reads as the first.
+    #[test]
+    fn a_keymap_of_two_layouts_is_read_in_the_active_one() {
+        let (Some(xkb), Some(text), Some(fr)) = (
+            xkbcommon_dl::xkbcommon_option(),
+            keymap_text("us,fr"),
+            letters_of_layout("fr"),
+        ) else {
+            eprintln!("no libxkbcommon or no us,fr layouts here: skipped");
+            return;
+        };
+        let first = letters_of_keymap(xkb, &text, 0).expect("readable");
+        assert_eq!(
+            first,
+            Read {
+                letters: Letters::US,
+                layouts: 2
+            }
+        );
+        let second = letters_of_keymap(xkb, &text, 1).expect("readable");
+        assert_eq!(
+            second,
+            Read {
+                letters: fr,
+                layouts: 2
+            }
+        );
+        // A group the keymap does not have is read as its first, as xkbcommon wraps it.
+        assert_eq!(letters_of_keymap(xkb, &text, 7).map(|r| r.layouts), Some(2));
     }
 
     #[test]

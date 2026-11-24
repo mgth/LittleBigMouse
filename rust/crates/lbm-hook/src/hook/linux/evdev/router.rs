@@ -121,6 +121,11 @@ pub fn run(shared: &'static Shared) -> bool {
             }
         }
 
+        // The rescue is read from the keyboards only while some are: one plugged in
+        // late, the last one gone, or the router stopped, says it again. A swap, a
+        // no-op when nothing changed.
+        shared.set_keyboards_read(router.as_ref().is_some_and(|r| !r.keyboards.is_empty()));
+
         match router.as_mut() {
             Some(r) => r.pump(shared),
             // Nothing is grabbed: nothing happens here until a request says so.
@@ -313,9 +318,6 @@ impl Router {
             "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override and the shortcuts",
             keyboards.len()
         );
-        if !keyboards.is_empty() {
-            shared.read_rescue_from_keys();
-        }
 
         // Take over from where the cursor really is: ask the compositor (KWin
         // scripting, logical coordinates — the zones' space), else where the

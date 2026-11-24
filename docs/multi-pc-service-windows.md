@@ -1,6 +1,8 @@
 # Service Windows de l'esclave multi-PC : conception
 
-> **Statut : proposition, à valider par le mainteneur avant tout code.** Rien de ce qui
+> **Statut : option B (§ 1) validée par le mainteneur le 2026-11-24.** Choix par défaut
+> retenus pour les autres questions, en attendant son avis : port à part, `SendSAS` en
+> dernière étape optionnelle, écran de connexion essayé mais pas promis. Rien de ce qui
 > suit n'a tourné. Les comportements de Windows marqués *(à vérifier)* ne sont connus que
 > par la documentation ou par l'usage qu'en font d'autres outils, pas par un essai ici.
 
@@ -271,9 +273,7 @@ mainteneur) ; service installé par l'installeur, maître Linux :
 
 ## Questions pour le mainteneur
 
-1. **Ancrage de la confiance (B)** : d'accord pour que le flux d'entrée aille au service par
-   une seconde connexion, plutôt que par l'agent ? C'est le seul choix de cette conception
-   qui change le protocole.
+1. ~~**Ancrage de la confiance (B)**~~ : validé le 2026-11-24.
 2. **Port à part (24818) ou tunnel dans le lien existant** : le tunnel (l'agent relaie
    des octets TLS opaques entre le maître et le service) évite une règle de pare-feu de
    plus, au prix d'un type de trame et d'un relais dans l'agent. Préférence de départ :

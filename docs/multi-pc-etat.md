@@ -18,8 +18,10 @@ LittleBigMouse qui route le pointeur sur l'ensemble ; l'esclave ne fait qu'injec
 
 Un écran connu des deux machines (KVM, ou moniteur câblé sur deux entrées) est **un seul
 moniteur à deux sources**, à condition que les deux machines lui lisent la même clé de
-dalle (constructeur, produit et numéro de série de l'EDID). Sans numéro de série
-exploitable, ou derrière un KVM qui masque l'EDID, ce sont deux moniteurs distincts. Sa source active dit quelle machine il affiche, et donc à
+dalle (constructeur, produit et numéro de série de l'EDID) et que cette clé soit unique
+parmi les écrans. Sans numéro de série exploitable, ou derrière un KVM qui masque
+l'EDID, ce sont deux moniteurs distincts ; avec deux dalles de même clé, la source
+distante est rattachée à la mauvaise. Sa source active dit quelle machine il affiche, et donc à
 qui va le pointeur quand il y entre.
 
 ## Ce qui est livré
@@ -30,17 +32,17 @@ qui va le pointeur quand il y entre.
 | Flux d'entrée | `lbm-ipc/src/input.rs` | Trames binaires `Enter/Leave/Motion/Button/Wheel/Key`, codes evdev, positions absolues en pixels du receveur |
 | Modèle | `lbm-layout`, `lbm-display`, `lbm-store`, `lbm-zones` | Machine portée par la source, clé de dalle inter-machines, fusion des écrans distants, zones avec hôte |
 | Agent | `lbm-agent/src/peers` | Gestion des pairs, API (`Peers`, `SetMultiPc`, `PeerConnect`…), relais du flux, un esclave « sélectionné » |
-| Hook maître | `lbm-hook/src/hook/linux/evdev` | Traversée, capture des claviers quand le pointeur est parti, retour maison sur tout échec, curseur local masqué |
+| Hook maître | `lbm-hook/src/hook/linux/evdev` | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
 | Hook esclave | `lbm-hook/src/remote` | Injection `SendInput` (Windows) et uinput (Linux), relâchement de tout ce qui est tenu en fin de session, curseur rangé |
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
 | Fonds d'écran | `lbm-agent/src/peers/wallpapers.rs`, `wallpaper_watch.rs` | Vignettes envoyées par l'esclave, suivies par événements (inotify Plasma, registre et diffusion Windows) |
 
-Règle de sûreté tenue partout : **quand un maillon du flux tombe, le pointeur est chez
+Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
 les touches et tous les boutons que le flux a laissés enfoncés. Le raccourci de secours
-reste reconnu pendant que le clavier est capturé. Une panne y échappe encore : le hook
-de l'esclave qui redémarre seul (voir « Faiblesses connues »).
+reste reconnu pendant que le clavier est capturé. La règle n'est pas encore tenue
+partout : le hook de l'esclave qui redémarre seul y échappe (voir « Faiblesses connues »).
 
 ## Ce qui a été essayé pour de bon
 
@@ -119,7 +121,7 @@ Et par fonction annexe :
 | Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Sans objet tant qu'il n'y a pas de maître Windows |
 | Curseur rangé, côté esclave | Rien de visible | Oui |
 | DDC/CI | `ddcutil` | dxva2 |
-| Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines (l'id du moniteur est alors cette clé) ; sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil | Non : Windows nomme ses moniteurs autrement |
+| Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines **et unique parmi les écrans** (l'id du moniteur est alors cette clé). Sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil. Avec deux dalles annonçant le même numéro de série, celle que le KVM bascule est rattachée à sa jumelle restée sur le maître, et le profil change aussi | Non : Windows nomme ses moniteurs autrement |
 
 ## Reste à faire pour un support Linux/Windows universel
 
@@ -239,14 +241,19 @@ que fait toute application et cela couvre la plupart des collages.
 ### Transfert à la demande
 
 Ne pas envoyer le contenu à chaque copie : une capture d'écran 4K copiée puis jamais
-collée ailleurs n'a pas à traverser le réseau.
+lue ailleurs n'a pas à traverser le réseau.
 
 - À chaque changement, la machine qui possède le presse-papiers **annonce** les formats
   disponibles (un message de contrôle, quelques octets).
 - L'autre machine se déclare propriétaire d'un presse-papiers **sans contenu** : rendu
   différé sous Windows, source de données qui n'écrit qu'à la demande sous Wayland et
   X11.
-- Le contenu n'est demandé qu'au **collage**, dans le format réellement voulu.
+- Le contenu n'est demandé qu'à la **première lecture** d'un format par une application,
+  dans ce format. Ce n'est pas forcément un collage de l'utilisateur : sous Windows, un
+  gestionnaire d'historique du presse-papiers peut lire dès l'annonce, ce qui déclenche
+  le rendu et donc le transfert. La garantie est « à la demande d'une application ».
+  S'il faut attendre un geste de l'utilisateur, il faut un déclencheur explicite
+  (raccourci, ou annonce faite seulement au passage du bord).
 
 Conséquences sur le protocole : un message d'annonce, une requête et une réponse ; la
 réponse dépasse la borne de 1 Mio des trames de contrôle, donc un nouveau type de trame

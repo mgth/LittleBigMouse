@@ -2,17 +2,19 @@
 //! the rescue shortcut recognised in the grabbed stream.
 //!
 //! While the keyboards are grabbed the compositor sees no key at all, and the desktop's
-//! global shortcuts — the portal the rescue listens through (`hook::linux::rescue`) —
-//! go deaf with it. The way out of a trapped pointer must not depend on where the
-//! pointer is, so the stream this process now reads is watched for the same
-//! combination, held for the same time.
+//! global shortcuts — the portal the rescue listens through on Linux
+//! (`hook::linux::rescue`), the registered hotkey on Windows — go deaf with it. The
+//! way out of a trapped pointer must not depend on where the pointer is, so the stream
+//! this process now reads is watched for the same combination, held for the same time.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use lbm_ipc::shortcut::{Shortcut, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN};
 
-/// The same hold as through the portal: one rescue, wherever the pointer is.
-pub(crate) use crate::hook::linux::rescue::HOLD;
+/// How long the rescue combination must stay down, as on Windows: long enough not to
+/// fire on a fumble, short enough to feel like a rescue. The same hold through the
+/// desktop's portal and in the grabbed stream: one rescue, wherever the pointer is.
+pub(crate) const HOLD: Duration = Duration::from_millis(900);
 
 /// A set of `EV_KEY` codes — buttons and keys alike, they share one code space. A
 /// bitset over every code the kernel defines (`KEY_MAX` = 0x2ff), so tracking a press

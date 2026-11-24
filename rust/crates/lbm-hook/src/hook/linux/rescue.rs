@@ -41,9 +41,9 @@ const ID: &str = "rescue";
 /// What the desktop shows beside the binding.
 const DESCRIPTION: &str = "Little Big Mouse: free a trapped cursor";
 
-/// How long the combination must stay down, as on Windows: long enough not to fire
-/// on a fumble, short enough to feel like a rescue.
-pub(crate) const HOLD: Duration = Duration::from_millis(900);
+// How long the combination must stay down: one hold for the portal and for the
+// grabbed stream of a master whose pointer is on another machine.
+use crate::hook::crossing::keys::HOLD;
 
 /// The pause before asking again a portal that could not be reached, doubled up to
 /// [`LAST_RETRY`]: one that arrives late is usually only a session still starting, and

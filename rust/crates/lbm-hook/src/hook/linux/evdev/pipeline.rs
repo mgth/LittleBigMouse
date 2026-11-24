@@ -80,7 +80,7 @@
 //!
 //! With the keyboards grabbed the portal's global shortcut never fires: the compositor
 //! sees no key. The configured shortcut is therefore watched for in the grabbed stream
-//! ([`super::keys::RescueKeys`]), with the same hold, and fires the same
+//! ([`crate::hook::crossing::keys::RescueKeys`]), with the same hold, and fires the same
 //! `daemon::rescue_fired` after bringing the pointer home. Its final key is kept back
 //! while it is held, so the other machine never sees it; given up early, it is
 //! forwarded late, in order.
@@ -113,9 +113,9 @@ use crate::zones::HostPoint;
 
 use super::cursor::EvdevCursor;
 use super::frame::PumpBuffers;
-use super::keys::{HeldSet, RescueKeys, Verdict};
 use super::probe::{extents, try_device_bounds};
 use super::{BTN_MOUSE_RANGE, BTN_RANGE, BTN_TRIGGER_HAPPY_RANGE};
+use crate::hook::crossing::keys::{HeldSet, RescueKeys, Verdict};
 
 /// Everything a cycle writes to: this machine's two virtual devices, the input stream,
 /// and the keyboards' exclusivity. The router's implementation owns the devices; the
@@ -824,8 +824,8 @@ mod tests {
     use lbm_ipc::input::{decode, read_batch};
 
     use super::super::frame::Frame;
-    use super::super::keys::HOLD;
     use crate::engine::event::MouseEventArg;
+    use crate::hook::crossing::keys::HOLD;
     use crate::ipc::input::{Driver, Outlet};
     use crate::zones::ZonesLayout;
 

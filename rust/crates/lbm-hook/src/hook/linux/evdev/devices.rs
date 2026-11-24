@@ -16,9 +16,9 @@ use evdev::{Device, KeyCode, RelativeAxisCode};
 
 use crate::hook::linux::accel::PointerAccel;
 
-use super::keys::HeldSet;
 use super::uinput::is_ours;
 use super::BTN_MOUSE_RANGE;
+use crate::hook::crossing::keys::HeldSet;
 
 /// An opened /dev/input node and the path it came from. What an enumeration
 /// hands back, and what an observed keyboard stays as — only grabbed mice carry

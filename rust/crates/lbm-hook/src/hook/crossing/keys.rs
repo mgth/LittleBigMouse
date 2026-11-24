@@ -121,6 +121,20 @@ impl Letters {
         45, 21, 44,
     ]);
 
+    /// The letters of a layout from where it puts each of A to Z, as Linux codes; one
+    /// it has nowhere stays where US has it. For a master that can ask its system
+    /// where a letter's virtual key is (Windows, `MapVirtualKeyEx`).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn from_places(places: [Option<u16>; 26]) -> Letters {
+        let mut letters = Letters::US;
+        for (code, place) in letters.0.iter_mut().zip(places) {
+            if let Some(place) = place {
+                *code = place;
+            }
+        }
+        letters
+    }
+
     /// The letters of a layout, from the keysyms each key gives: `keys` yields a Linux
     /// code and its keysyms by level. A letter is the key that gives it without a
     /// modifier, else at any level; one the layout has nowhere stays where US has it.
@@ -668,5 +682,20 @@ mod tests {
             keys.filter(KEY_M, Press::Up, start),
             Verdict::Release(KEY_M)
         );
+    }
+
+    #[test]
+    fn letters_from_their_places_keep_us_where_the_layout_says_nothing() {
+        // French AZERTY: A where US has Q, Q where US has A, M right of L.
+        let mut places = [None; 26];
+        places[0] = Some(16);
+        places[(b'Q' - b'A') as usize] = Some(30);
+        places[(b'M' - b'A') as usize] = Some(39);
+        let letters = Letters::from_places(places);
+        assert_eq!(letters.code_of(0x41), Some(16));
+        assert_eq!(letters.code_of(0x51), Some(30));
+        assert_eq!(letters.code_of(0x4D), Some(39));
+        assert_eq!(letters.code_of(0x42), Letters::US.code_of(0x42));
+        assert_eq!(Letters::from_places([None; 26]), Letters::US);
     }
 }

@@ -41,6 +41,29 @@
 //! A preview is ended by the agent too (the user's Start or Stop, a rebuild, the
 //! rescue, the hook going away): `Previewing` in the state says which is the case.
 //! An unknown method is answered with an error, never guessed at.
+//!
+//! The multi-PC mode (capability `MultiPc`, additive to version 3; docs/multi-pc.md):
+//!
+//! ```text
+//! -> {"Id": 9, "Method": "SetMultiPc", "Enabled": true, "Port": 24817, "Name": "desk"}
+//! <- {"Id": 9, "Result": {"Enabled": true, "Port": 24817, "Name": "desk",
+//!                         "MachineId": "<sha-256 hex>", "ListenAddress": "0.0.0.0:24817",
+//!                         "Error": null, "Peers": [...]}}
+//! -> {"Id": 10, "Method": "PeerConnect", "Address": "192.168.1.30"}
+//! <- {"Id": 10, "Result": {"MachineId": "…", "Name": "tower", "Address": "192.168.1.30:24817",
+//!                          "Connected": false, "Displays": [], "Role": "Remote",
+//!                          "State": "Pending"}}
+//! -> {"Id": 11, "Method": "PeerAccept", "MachineId": "…"}     // also PeerRefuse, PeerForget
+//! -> {"Id": 12, "Method": "Peers"}                             // the state, as above
+//! <- {"Event": "Peers", "Peers": {… the state, whenever it changes …}}
+//! -> {"Id": 13, "Method": "SetActiveSource", "LayoutId": "…", "Monitor": "DEL4065_ABC123",
+//!     "Source": "HDMI-1@a1b2c3d4"}                             // a shared panel's machine
+//! <- {"Id": 13, "Result": null}
+//! -> {"Id": 14, "Method": "PeerWallpapers", "MachineId": "…"}  // capability PeerWallpapers
+//! <- {"Id": 14, "Result": {"MachineId": "…", "Revision": 3,     // its WallpaperRevision
+//!                          "Wallpapers": [{"Display": "eDP-1", "Image": "<base64 JPEG>"},
+//!                                         {"Display": "HDMI-1", "Color": "#203040"}]}}
+//! ```
 
 use std::io;
 
@@ -63,7 +86,14 @@ pub const PROTOCOL: u32 = 3;
 /// - `IntrinsicSize`: a model size marked `IntrinsicSize` in a document is applied as
 ///   stored, whatever the detected shape (#728, #730). An agent without it swaps a
 ///   size whose landscape/portrait shape contradicts the detected panel.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize"];
+/// - `MultiPc`: the multi-PC requests (`Peers`, `SetMultiPc`, `PeerConnect`,
+///   `PeerAccept`, `PeerRefuse`, `PeerForget`, `SetActiveSource`) and the `Peers`
+///   event, which also carry the remote machines' screens (docs/multi-pc.md). The
+///   layout of a master holds its remotes' screens: its `LayoutId` is that of every
+///   monitor, theirs included.
+/// - `PeerWallpapers`: the request of that name, and `WallpaperRevision` on every machine
+///   of the `Peers` state: what a remote's screens show, for the master's map.
+pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers"];
 
 //==================//
 // The contract     //
@@ -238,6 +268,59 @@ pub enum Request {
     /// The processes seen in the foreground this session, oldest first — what the
     /// exclusion list is picked from.
     SeenProcesses,
+    /// The multi-PC mode (`MultiPc`): its settings, this machine's id, and every machine
+    /// paired or waiting to be, with the screens of those linked as remotes.
+    Peers,
+    /// Turns the mode on or off; `Port` and `Name` change only when given. Answered
+    /// with the state once the listener is up (or could not be) or everything is closed.
+    SetMultiPc {
+        #[serde(rename = "Enabled")]
+        enabled: bool,
+        #[serde(rename = "Port", default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+        #[serde(rename = "Name", default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
+    /// Connects to a machine as its master (`host`, `host:port`; the default port
+    /// otherwise). Answered once it said who it is: the machine, `Pending` until the
+    /// user accepts it, `Paired` if it already was.
+    PeerConnect {
+        #[serde(rename = "Address")]
+        address: String,
+    },
+    /// The user trusts a machine waiting to be paired.
+    PeerAccept {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+    },
+    /// The user does not trust a machine waiting to be paired.
+    PeerRefuse {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+    },
+    /// Unpairs a machine (or drops one waiting): its link, if any, is closed.
+    PeerForget {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+    },
+    /// Which machine a panel two machines know shows (`MultiPc`): `Source` is one of
+    /// the sources of `Monitor` in the current layout, on its machine's desktop. Saved,
+    /// and handed to a running engine. Refused for another layout than the current one,
+    /// as an edit is.
+    SetActiveSource {
+        #[serde(rename = "LayoutId")]
+        layout_id: String,
+        #[serde(rename = "Monitor")]
+        monitor: String,
+        #[serde(rename = "Source")]
+        source: String,
+    },
+    /// What the screens of a remote of this machine show (`PeerWallpapers`): the pictures
+    /// it last sent, asked for when its `WallpaperRevision` in the `Peers` state changes.
+    PeerWallpapers {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+    },
 }
 
 /// A request with the id its answer carries back.
@@ -298,6 +381,11 @@ pub fn answer(id: u64, result: Result<Value, String>) -> String {
 /// The `State` event.
 pub fn state_event(snapshot: &Snapshot) -> String {
     json!({ "Event": "State", "State": snapshot }).to_string()
+}
+
+/// The `Peers` event: the multi-PC state, whenever it changes.
+pub fn peers_event(state: &crate::peers::PeersState) -> String {
+    json!({ "Event": "Peers", "Peers": state }).to_string()
 }
 
 /// The `Hook` event: what the hook said, forwarded.

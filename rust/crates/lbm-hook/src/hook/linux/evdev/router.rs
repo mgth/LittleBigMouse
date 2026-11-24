@@ -16,25 +16,25 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use evdev::{uinput::VirtualDevice, Device, EventType};
+use evdev::{uinput::VirtualDevice, Device, EventType, InputEvent};
 
-use crate::engine::cursor::CursorEnv;
 use crate::engine::event::MouseEventArg;
 use crate::geometry::Point;
-use crate::hook::hot_path::{count_event, route_move, Routed};
 use crate::hook::linux::accel::{AccelConfig, PointerAccel};
+use crate::ipc::input::Driver;
 use crate::shared::Shared;
 use lbm_ipc::protocol::Event;
 
 use super::cursor::EvdevCursor;
 use super::devices::{
-    self, held_buttons_of, purge_dead, retry_grabs, set_aside, slot_is_dead, Gone, Mouse, Node,
-    ScanResult, REGRAB_EVERY,
+    self, held_buttons_of, purge_dead, retry_grabs, set_aside, slot_is_dead, Gone, Keyboard, Mouse,
+    Node, ScanResult, REGRAB_EVERY,
 };
-use super::frame::{Frame, PumpBuffers};
+use super::frame::Frame;
+use super::hider::CursorHider;
+use super::pipeline::{Outputs, Pipeline};
 use super::probe::{
     device_bounds_blocking, first_zone_center, kwin_cursor_pos, layout_bounds_blocking,
-    try_device_bounds, try_layout_bounds,
 };
 use super::uinput::{build_virtual, build_virtual_keyboard};
 
@@ -95,7 +95,8 @@ pub fn run(shared: &'static Shared) -> bool {
                 }
             }
         } else if !want && router.is_some() {
-            resume_at = router.as_ref().map(|r| r.env.virtual_pos);
+            // Where it is on this machine: a pointer on another one comes home first.
+            resume_at = router.as_ref().map(|r| r.pipe.local_pos());
             drop(router.take());
             hooked_since = None;
             shared.hooked.store(false, Ordering::SeqCst);
@@ -124,7 +125,7 @@ pub fn run(shared: &'static Shared) -> bool {
             let events = crate::hook::MOUSE_EVENTS.load(Ordering::Relaxed);
             let crossings = crate::hook::CROSSINGS.load(Ordering::Relaxed);
             if events != last_events {
-                let p = active.env.virtual_pos;
+                let p = active.pipe.env.virtual_pos;
                 eprintln!("[LittleBigMouse.Hook] evdev: {} motion events, {crossings} crossings (pos {},{})",
                     events - last_events, p.x(), p.y());
                 last_events = events;
@@ -157,8 +158,9 @@ struct Router {
     /// Each grabbed mouse carries its own acceleration state: velocities must
     /// not mix across devices, and kcminputrc settings are per-device.
     devices: Vec<Mouse>,
-    /// Observed (non-grabbed) keyboards feeding the ctrl-override state.
-    keyboards: Vec<Node>,
+    /// Observed keyboards feeding the ctrl-override state, grabbed while the pointer
+    /// is on another machine.
+    keyboards: Vec<Keyboard>,
     /// Mice opened but not grabbed (another program holds them), kept open so
     /// that the grab alone can be retried every [`REGRAB_EVERY`]. Never polled:
     /// their events still go to the compositor.
@@ -173,17 +175,67 @@ struct Router {
     /// mixing a full keyboard into an ABS pointer risks a libinput/KWin
     /// reclassification of the pointer.
     virt_kbd: VirtualDevice,
-    env: EvdevCursor,
-    sens: f64,
-    debug: bool,
-    /// Sub-pixel remainder of the sensitivity-scaled raw motion integration.
-    rem: (f64, f64),
     /// kcminputrc + env overrides, resolved per device at grab time (arm and
     /// hot-plug rescan) — the pump itself never touches the filesystem.
     accel_cfg: AccelConfig,
-    /// Poll set, event drains and pending frames — reused cycle after cycle so
-    /// the routing path does not allocate.
-    bufs: PumpBuffers,
+    /// The cursor, the reused buffers, and what is done with a frame — on this
+    /// machine or another one.
+    pipe: Pipeline,
+    /// The input stream's client, for the frames that go to another machine.
+    link: Driver,
+    /// Hides this machine's cursor while the pointer is on another one.
+    hider: CursorHider,
+}
+
+/// The router's devices and input stream, as the pipeline writes to them.
+struct Outs<'a> {
+    virt: &'a mut VirtualDevice,
+    virt_kbd: &'a mut VirtualDevice,
+    keyboards: &'a mut Vec<Keyboard>,
+    link: &'a mut Driver,
+    hider: &'a mut CursorHider,
+}
+
+impl Outputs for Outs<'_> {
+    fn pointer(&mut self, frame: &[InputEvent]) {
+        let _ = self.virt.emit(frame);
+    }
+
+    fn keyboard(&mut self, frame: &[InputEvent]) {
+        let _ = self.virt_kbd.emit(frame);
+    }
+
+    fn remote_client(&self) -> Option<u64> {
+        self.link.client()
+    }
+
+    fn send_remote(&mut self, batch: Vec<u8>) -> bool {
+        self.link.send(batch)
+    }
+
+    fn grab_keyboards(&mut self) {
+        for keyboard in self.keyboards.iter_mut() {
+            keyboard.grab_if_idle();
+        }
+    }
+
+    fn release_keyboards(&mut self) {
+        for keyboard in self.keyboards.iter_mut() {
+            keyboard.release();
+        }
+    }
+
+    fn hide_cursor(&mut self, from: Point<i32>) {
+        self.hider.hide(from);
+    }
+
+    fn cursor_hiding_spot(&mut self) -> Option<Point<i32>> {
+        self.hider.spot()
+    }
+
+    fn show_cursor(&mut self) {
+        self.hider.show();
+    }
 }
 
 impl Router {
@@ -195,8 +247,10 @@ impl Router {
     ) -> std::io::Result<Router> {
         // Where the cursor may go, and the desktop the device has to span. The same
         // rectangle whenever the layout covers the desktop, which is the ordinary case.
-        let bounds = layout_bounds_blocking(shared);
-        let device = device_bounds_blocking(shared, bounds);
+        // The device spans this machine's desktop only: another machine's zones, in play
+        // or not, are never emitted here.
+        let (bounds, local) = layout_bounds_blocking(shared);
+        let device = device_bounds_blocking(shared, local);
 
         // Everything slow happens BEFORE the first grab: from EVIOCGRAB on, the
         // user's mice are captured but not routed yet, so this window must stay
@@ -212,11 +266,14 @@ impl Router {
         let mut keyboards = Vec::new();
         for (path, dev) in scan.keyboards {
             if dev.set_nonblocking(true).is_ok() {
-                keyboards.push((path, dev));
+                keyboards.push(Keyboard::open(path, dev));
             }
         }
         let virt = build_virtual(device)?;
         let virt_kbd = build_virtual_keyboard()?;
+        // Its thread, the first time; it reaches for the display server only when the
+        // pointer first goes to another machine.
+        let hider = CursorHider::new();
 
         let mut devices = Vec::new();
         let mut pending = Vec::new();
@@ -252,8 +309,8 @@ impl Router {
                 None => (
                     first_zone_center(shared).unwrap_or_else(|| {
                         Point::new(
-                            bounds.left() + bounds.width() / 2,
-                            bounds.top() + bounds.height() / 2,
+                            local.left() + local.width() / 2,
+                            local.top() + local.height() / 2,
                         )
                     }),
                     "fallback",
@@ -261,14 +318,15 @@ impl Router {
             },
         };
         // Into the layout, not merely onto the desktop: a monitor excluded from the
-        // layout is part of the desktop and is where the cursor is not to start.
+        // layout is part of the desktop and is where the cursor is not to start. And
+        // on this machine: the pointer always starts here.
         let start = Point::new(
             start
                 .x()
-                .clamp(bounds.left(), bounds.left() + bounds.width() - 1),
+                .clamp(local.left(), local.left() + local.width() - 1),
             start
                 .y()
-                .clamp(bounds.top(), bounds.top() + bounds.height() - 1),
+                .clamp(local.top(), local.top() + local.height() - 1),
         );
         eprintln!(
             "[LittleBigMouse.Hook] evdev: starting at ({},{}) ({origin})",
@@ -298,53 +356,61 @@ impl Router {
             scan_stop,
             virt,
             virt_kbd,
-            env,
-            sens,
-            debug,
-            rem: (0.0, 0.0),
             accel_cfg,
-            bufs: PumpBuffers::new(),
+            pipe: Pipeline::new(env, sens, debug),
+            link: Driver::default(),
+            hider,
         };
 
         // Place the cursor at the start point and prime the engine there.
-        router.emit_absolute();
+        let (pipe, mut out) = router.split();
+        pipe.emit_local(&mut out);
         let mut engine = shared.engine.lock().unwrap_or_else(|p| p.into_inner());
         let mut e = MouseEventArg::new(start);
-        engine.on_mouse_move(&mut router.env, &mut e);
+        engine.on_mouse_move(&mut router.pipe.env, &mut e);
         drop(engine);
 
         Ok(router)
     }
 
+    /// The pipeline, and the devices and stream it writes to: two borrows of
+    /// distinct fields, for the calls that need both.
+    fn split(&mut self) -> (&mut Pipeline, Outs<'_>) {
+        (
+            &mut self.pipe,
+            Outs {
+                virt: &mut self.virt,
+                virt_kbd: &mut self.virt_kbd,
+                keyboards: &mut self.keyboards,
+                link: &mut self.link,
+                hider: &mut self.hider,
+            },
+        )
+    }
+
     /// One poll cycle: drain readable devices, process each SYN frame.
     fn pump(&mut self, shared: &'static Shared) {
-        // Both can change under us: a Load brings a new layout, and names the desktop
-        // it sits on. Both are read with `try_lock` — this is the routing thread, and
-        // a blocking lock here is a pointer frozen system-wide (the module rule). On
+        // The input stream's client, the layout and the desktop it sits on can all
+        // change under us: an agent connects or goes, a Load brings a new layout and
+        // names its desktop. All are read without waiting — this is the routing thread,
+        // and a blocking lock here is a pointer frozen system-wide (the module rule). On
         // contention nothing is updated and the next cycle asks again.
-        if let Some((bounds, device)) = try_layout_bounds(shared)
-            .and_then(|bounds| try_device_bounds(shared, bounds).map(|device| (bounds, device)))
-        {
-            let mut moved = false;
-            if device != self.env.device {
+        self.link.refresh(&shared.outlet);
+        let (pipe, mut out) = self.split();
+        if let Some(device) = pipe.begin_cycle(shared, &mut out) {
+            if device != self.pipe.env.device {
                 // Rebuilt to the new span, so the compositor's mapping stays 1:1. A
                 // build that fails leaves the old device and the old rectangle in
-                // place, and the next cycle tries again.
+                // place, and the next cycle tries again. Only when it changed: this
+                // runs every cycle, and an absolute frame per cycle is not a thing the
+                // compositor should be sent.
                 if let Ok(v) = build_virtual(device) {
                     self.virt = v;
-                    self.env.device = device;
-                    moved = true;
+                    self.pipe.env.device = device;
+                    self.pipe.env.virtual_pos = self.pipe.env.clamp(self.pipe.env.virtual_pos);
+                    let (pipe, mut out) = self.split();
+                    pipe.emit_local(&mut out);
                 }
-            }
-            if bounds != self.env.bounds {
-                self.env.bounds = bounds;
-                moved = true;
-            }
-            // Only when something actually moved: this runs every cycle, and an
-            // absolute frame per cycle is not a thing the compositor should be sent.
-            if moved {
-                self.env.virtual_pos = self.env.clamp(self.env.virtual_pos);
-                self.emit_absolute();
             }
         }
 
@@ -354,45 +420,46 @@ impl Router {
         let n_mice = self.devices.len();
         {
             let Router {
-                bufs,
+                pipe,
                 devices,
                 keyboards,
                 ..
             } = self;
-            bufs.fill_poll_set(
+            pipe.bufs.fill_poll_set(
                 devices
                     .iter()
                     .map(|(_, d, _)| d.as_raw_fd())
-                    .chain(keyboards.iter().map(|(_, d)| d.as_raw_fd())),
+                    .chain(keyboards.iter().map(|k| k.dev.as_raw_fd())),
             );
         }
-        if self.bufs.slots() == 0 {
+        if self.pipe.bufs.slots() == 0 {
             // Every device vanished: keep the cadence (poll(0 fds) returns
             // immediately) and let the rescan pick devices back up.
             std::thread::sleep(Duration::from_millis(POLL_TIMEOUT_MS as u64));
             return;
         }
-        self.bufs.poll(POLL_TIMEOUT_MS);
+        self.pipe.bufs.poll(POLL_TIMEOUT_MS);
 
         // Indexed rather than iterated: processing an event needs `&mut self`,
-        // which an iterator borrowed from `self.bufs` would hold hostage. Both
+        // which an iterator borrowed from `self.pipe.bufs` would hold hostage. Both
         // `pollfd` and `InputEvent` are `Copy`, so a slot is read out and the
         // borrow ends there.
-        for slot in 0..self.bufs.slots() {
-            let revents = self.bufs.revents(slot);
+        for slot in 0..self.pipe.bufs.slots() {
+            let revents = self.pipe.bufs.revents(slot);
             if slot_is_dead(revents) {
-                self.bufs.mark_dead(slot);
+                self.pipe.bufs.mark_dead(slot);
                 continue;
             }
             if revents & libc::POLLIN == 0 {
                 continue;
             }
             if slot >= n_mice {
-                self.track_ctrl_from_keyboard(slot - n_mice);
+                self.drain_keyboard(shared, slot - n_mice);
                 continue;
             }
             {
-                let Router { bufs, devices, .. } = self;
+                let Router { pipe, devices, .. } = self;
+                let bufs = &mut pipe.bufs;
                 match devices[slot].1.fetch_events() {
                     Ok(it) => bufs.refill_events(it),
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
@@ -406,9 +473,10 @@ impl Router {
                     }
                 }
             }
-            for k in 0..self.bufs.event_count() {
-                let ev = self.bufs.event(k);
-                if self.bufs.push(ev, &mut self.env, slot) == Frame::Complete {
+            for k in 0..self.pipe.bufs.event_count() {
+                let ev = self.pipe.bufs.event(k);
+                let Pipeline { bufs, env, .. } = &mut self.pipe;
+                if bufs.push(ev, env, slot) == Frame::Complete {
                     self.flush_frame(shared);
                 }
             }
@@ -418,40 +486,54 @@ impl Router {
         // than hold the motion until the next one. A no-op when nothing is.
         self.flush_frame(shared);
 
-        if !self.bufs.dead_slots().is_empty() {
+        if !self.pipe.bufs.dead_slots().is_empty() {
             let Router {
-                bufs,
+                pipe,
                 devices,
                 keyboards,
                 ..
             } = self;
+            let bufs = &mut pipe.bufs;
             purge_dead(bufs.dead_slots(), n_mice, devices, keyboards, |gone| {
                 let (path, kind) = match &gone {
                     Gone::Mouse((path, _, _)) => (path, "device"),
-                    Gone::Keyboard((path, _)) => (path, "keyboard"),
+                    Gone::Keyboard(keyboard) => (&keyboard.path, "keyboard"),
                 };
                 eprintln!("[LittleBigMouse.Hook] evdev: {kind} gone {path:?}");
             });
             bufs.clear_dead();
         }
+
+        let (pipe, mut out) = self.split();
+        pipe.end_cycle(shared, &mut out);
     }
 
-    /// Drain a (non-grabbed) keyboard, keeping only the ctrl state: the
-    /// compositor still owns these devices, we just observe the modifier.
+    /// Drain a keyboard. While the compositor owns it, only its ctrl state is
+    /// taken; while it is grabbed — the pointer is on another machine — its keys
+    /// are forwarded there, as one batch per drain.
     ///
-    /// Nothing here needs `&mut Router`, only the cursor's modifier state, so
-    /// the drain is consumed as it comes: `keyboards` and `env` are distinct
-    /// fields, and the events never have to be collected anywhere.
-    fn track_ctrl_from_keyboard(&mut self, k: usize) {
-        let Router { keyboards, env, .. } = self;
-        let Ok(events) = keyboards[k].1.fetch_events() else {
-            return; // dead nodes are purged via POLLERR next cycle
-        };
-        for ev in events {
-            if ev.event_type() == EventType::KEY {
-                env.track_ctrl(ev.code(), ev.value());
+    /// The drain is consumed as it comes: the keyboard and the pipeline are
+    /// distinct fields, and the events never have to be collected anywhere.
+    fn drain_keyboard(&mut self, shared: &'static Shared, k: usize) {
+        let now = Instant::now();
+        {
+            let Router {
+                keyboards, pipe, ..
+            } = self;
+            let keyboard = &mut keyboards[k];
+            let grabbed = keyboard.grabbed();
+            let Ok(events) = keyboard.dev.fetch_events() else {
+                return; // dead nodes are purged via POLLERR next cycle
+            };
+            for ev in events {
+                if ev.event_type() == EventType::KEY {
+                    keyboard.held.track(ev.code(), ev.value());
+                    pipe.keyboard_key(ev.code(), ev.value(), grabbed, now);
+                }
             }
         }
+        let (pipe, mut out) = self.split();
+        pipe.flush_keys(shared, &mut out);
     }
 
     /// Drain the scanner thread's results and pick up hot-plugged devices. A
@@ -483,11 +565,13 @@ impl Router {
                 }
             }
             for (path, dev) in scan.keyboards {
-                if self.keyboards.iter().any(|(p, _)| *p == path) {
+                if self.keyboards.iter().any(|k| k.path == path) {
                     continue;
                 }
+                // Grabbed at the end of the cycle if the pointer is on another
+                // machine and nothing is held on it.
                 if dev.set_nonblocking(true).is_ok() {
-                    self.keyboards.push((path, dev));
+                    self.keyboards.push(Keyboard::open(path, dev));
                 }
             }
         }
@@ -516,111 +600,67 @@ impl Router {
         });
     }
 
-    /// Run the engine over the accumulated motion and place the cursor at the
-    /// resulting absolute position, forwarding buttons/wheels in the same frame.
-    fn flush_frame(&mut self, shared: &Shared) {
-        if !self.bufs.frame_pending() {
-            return;
-        }
-
-        let acc = self.bufs.take_motion();
-        if acc != (0, 0) {
-            // Reproduce the pointer acceleration libinput would have applied had
-            // we not grabbed the device (the ABS virtual pointer bypasses it):
-            // per-device curve on the raw frame delta, THEN the user's flat
-            // LBM_EVDEV_SENS multiplier. Sub-pixel remainders carry over frames.
-            let now = self.env.started.elapsed().as_micros() as u64;
-            let idx = self
-                .bufs
-                .last_motion_dev()
-                .min(self.devices.len().saturating_sub(1));
-            let (ax, ay) = match self.devices.get_mut(idx) {
-                Some((_, _, accel)) => accel.apply(acc.0 as f64, acc.1 as f64, now),
-                None => (acc.0 as f64, acc.1 as f64),
-            };
-            let sx = ax * self.sens + self.rem.0;
-            let sy = ay * self.sens + self.rem.1;
-            let (dx, dy) = (sx.trunc() as i32, sy.trunc() as i32);
-            self.rem = (sx - dx as f64, sy - dy as f64);
-
-            let old = self.env.virtual_pos;
-            // Win32 parity: the LL hook sees the UNCLIPPED proposed point even while
-            // ClipCursor pins the cursor — the growing past-border distance is what
-            // drains border resistance. Only the committed position gets clamped.
-            let candidate = Point::new(old.x().saturating_add(dx), old.y().saturating_add(dy));
-
-            // The evdev variants around the shared route (see the table in
-            // `hot_path`): the cursor is authoritative, so someone must always
-            // commit a position — the engine's verdict on a crossing, our own
-            // clamp otherwise. A contended route therefore cannot just pass: it
-            // commits the clamped candidate and emits right here (and that frame
-            // has never been counted as an event — the early return skips the
-            // pending keyboard frame too, exactly as before).
-            let routed = route_move(&shared.engine, &mut self.env, candidate);
-            match routed {
-                Routed::Contended => {
-                    self.env.virtual_pos = self.env.clamp(candidate);
-                    self.emit_absolute();
-                    return;
+    /// Run the engine over the accumulated motion and emit the frame where the
+    /// pointer now is (`Pipeline::flush_frame`), feeding the acceleration curve of
+    /// the mouse the motion came from.
+    fn flush_frame(&mut self, shared: &'static Shared) {
+        let Router {
+            pipe,
+            devices,
+            virt,
+            virt_kbd,
+            keyboards,
+            link,
+            hider,
+            ..
+        } = self;
+        let mut out = Outs {
+            virt,
+            virt_kbd,
+            keyboards,
+            link,
+            hider,
+        };
+        pipe.flush_frame(
+            shared,
+            |idx, x, y, now| {
+                let idx = idx.min(devices.len().saturating_sub(1));
+                match devices.get_mut(idx) {
+                    Some((_, _, accel)) => accel.apply(x, y, now),
+                    None => (x, y),
                 }
-                Routed::Passed => {
-                    self.env.virtual_pos = self.env.clamp(candidate);
-                    count_event();
-                }
-                Routed::Crossed => count_event(),
-            }
-            if self.debug {
-                // Per-frame trace: raw delta, engine input, emitted position. The
-                // ground truth for any "the cursor was seen somewhere we never
-                // sent it" investigation (compare against what KWin displays).
-                eprintln!("[LittleBigMouse.Hook] evdev: frame d=({dx},{dy}) cand=({},{}) -> emit ({},{}){}{}",
-                    candidate.x(), candidate.y(), self.env.virtual_pos.x(), self.env.virtual_pos.y(),
-                    if routed.handled() { " CROSS" } else { "" },
-                    if self.env.ctrl_down() { " ctrl" } else { "" });
-            }
-        }
-
-        self.emit_absolute();
-
-        // Keyboard usages get their own atomic frame on the virtual keyboard
-        // (emit appends the SYN_REPORT), mirroring the per-device framing of the
-        // pointer batch above.
-        let Router { bufs, virt_kbd, .. } = self;
-        bufs.take_keyboard_frame(|frame| {
-            let _ = virt_kbd.emit(frame);
-        });
-    }
-
-    /// Emit the current absolute position plus any pending buttons/wheels as one
-    /// atomic uinput frame. ABS values are desktop-relative (the ABS range starts
-    /// at 0), so the compositor's 1:1 mapping lands the cursor exactly.
-    fn emit_absolute(&mut self) {
-        let ax = self.env.virtual_pos.x() - self.env.device.left();
-        let ay = self.env.virtual_pos.y() - self.env.device.top();
-        let frame = self.bufs.pointer_frame(ax, ay);
-        let _ = self.virt.emit(frame);
+            },
+            &mut out,
+        );
     }
 }
 
 impl Drop for Router {
     fn drop(&mut self) {
         self.scan_stop.store(true, Ordering::Relaxed);
+        // A pointer on another machine comes home first: its `Leave` releases what
+        // the stream pressed there, and the keyboards go back to the compositor.
+        let (pipe, mut out) = self.split();
+        pipe.shut_down(&mut out);
         // A button still held here is one the compositor saw pressed on the
         // virtual pointer and would never see released: the device is about to
         // disappear, and whatever release follows lands on the real device the
         // ungrab below hands back. The seat keeps the button down, and the user
         // loses that button until something resets the state — the failure
         // reads as "I have no left click any more". Pay the releases while the
-        // virtual device is still alive.
-        let releases = self.env.release_frame();
+        // virtual device is still alive. (A button held on the other machine is
+        // among them; a release of a button the virtual pointer never pressed
+        // changes nothing.)
+        let releases = self.pipe.env.release_frame();
         if !releases.is_empty() {
             let _ = self.virt.emit(&releases);
-            self.env.buttons = 0;
+            self.pipe.env.buttons = 0;
         }
         for (_, d, _) in &mut self.devices {
             let _ = d.ungrab();
         }
-        // Keyboards were never grabbed; closing their fds is enough. The scanner
-        // thread exits on the flag (or on its next send, once scan_rx is gone).
+        // Keyboards were let go above; closing their fds would release a grab
+        // anyway. The scanner thread exits on the flag (or on its next send, once
+        // scan_rx is gone).
     }
 }

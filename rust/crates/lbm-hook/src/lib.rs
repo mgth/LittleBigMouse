@@ -13,6 +13,7 @@ pub mod daemon;
 pub mod hook;
 pub mod ipc;
 pub mod platform;
+pub mod remote;
 pub mod shared;
 /// The rescue shortcut's grammar, which now lives with the protocol.
 ///

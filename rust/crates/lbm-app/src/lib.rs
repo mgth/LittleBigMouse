@@ -8,6 +8,7 @@ pub mod desktop_wallpaper;
 pub mod displays;
 pub mod image_picker;
 pub mod instance;
+pub mod machines;
 pub mod patterns;
 pub mod probe;
 pub mod properties;
@@ -22,3 +23,4 @@ pub mod wallpaper_editor;
 pub mod vcp;
 
 pub mod remote;
+pub mod remote_wallpapers;

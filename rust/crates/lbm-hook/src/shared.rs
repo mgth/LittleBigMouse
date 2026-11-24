@@ -89,6 +89,9 @@ pub struct Shared {
     pub applied: Mutex<String>,
     /// The IPC server handle, published once the listener is up.
     pub server: OnceLock<ServerHandle>,
+    /// The input endpoint's current client, for a master's routing thread to write the
+    /// pointer and keys to while they are on another machine (docs/multi-pc.md).
+    pub outlet: std::sync::Arc<crate::ipc::input::Outlet>,
 }
 
 impl Shared {
@@ -129,6 +132,7 @@ impl Shared {
             applied: Mutex::new(String::new()),
             desktop: Mutex::new(None),
             server: OnceLock::new(),
+            outlet: Default::default(),
         }
     }
 

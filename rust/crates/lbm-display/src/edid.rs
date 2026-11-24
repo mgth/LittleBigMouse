@@ -59,12 +59,17 @@ pub struct Edid {
     /// The 0xFF descriptor (serial number string), `""` when absent.
     pub serial_number: Option<String>,
     pub checksum: i32,
+    /// The block as it was read, whole. Not C#'s: the multi-PC mode sends it to the
+    /// master, which identifies the panel with its own parser rather than trusting
+    /// what this one made of it (docs/multi-pc.md, `PeerDisplay.Edid`).
+    pub raw: Vec<u8>,
 }
 
 /// C# `EdidParser.Parse(key, edid)`.
 pub fn parse(key: impl Into<String>, edid: &[u8]) -> Edid {
     let mut e = Edid {
         key: key.into(),
+        raw: edid.to_vec(),
         ..Default::default()
     };
     let len = edid.len();
@@ -241,6 +246,17 @@ fn block(code: u8, edid: &[u8]) -> String {
 }
 
 impl Edid {
+    /// What identifies the panel across machines
+    /// ([`lbm_layout::model::panel_key`]).
+    pub fn panel_key(&self) -> Option<String> {
+        lbm_layout::model::panel_key(
+            self.manufacturer_code.as_deref(),
+            self.product_code.as_deref(),
+            self.serial_number.as_deref(),
+            self.serial.as_deref(),
+        )
+    }
+
     /// The members the Linux mapping reads (`LinuxLayoutMapping.AddMonitor`).
     pub fn to_linux(&self) -> LinuxEdid {
         LinuxEdid {
@@ -261,6 +277,8 @@ impl Edid {
     pub fn to_windows(&self) -> WindowsEdid {
         WindowsEdid {
             manufacturer_code: self.manufacturer_code.clone(),
+            product_code: self.product_code.clone(),
+            serial: self.serial.clone(),
             model: self.model.clone(),
             serial_number: self.serial_number.clone(),
             video_interface: self.video_interface.clone(),

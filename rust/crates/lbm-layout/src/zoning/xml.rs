@@ -113,10 +113,20 @@ fn links(layout: &ZonesLayout, links: &[ZoneLink]) -> String {
 }
 
 fn zone(layout: &ZonesLayout, z: &Zone) -> String {
-    Element::new()
+    let mut element = Element::new();
+    element
         .int("Id", z.id)
         .string("Name", z.name.as_deref())
-        .string("DeviceId", z.device_id.as_deref())
+        .string("DeviceId", z.device_id.as_deref());
+    // Not in C#: a remote machine's zone (docs/multi-pc.md). Absent on this machine's
+    // zones, so a layout without remotes is the document C# writes.
+    if let Some(host) = &z.host {
+        element
+            .attr("Host", host)
+            .int("HostX", z.host_offset.0)
+            .int("HostY", z.host_offset.1);
+    }
+    element
         .child("PixelsBounds", &rect(&z.pixels_bounds))
         .child("PhysicalBounds", &rect(&z.physical_bounds))
         .child("LeftLinks", &links(layout, &z.left_links))

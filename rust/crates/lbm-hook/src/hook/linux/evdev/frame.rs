@@ -301,6 +301,59 @@ impl PumpBuffers {
         write(&self.kbd);
         self.kbd.clear();
     }
+
+    /// The wheel travel of the pending frame in 1/120ths of a notch, `(horizontal,
+    /// vertical)`, for the input stream of the multi-PC mode. Per axis, a hi-res mouse's
+    /// own 120ths when the frame carries them, and only then: it reports the detents
+    /// beside them, and counting both would scroll twice as far. A low-resolution one's
+    /// detents times 120 otherwise — the same rule [`Self::pointer_frame`] applies.
+    pub(super) fn wheel_120ths(&self) -> (i32, i32) {
+        let carries = |code: RelativeAxisCode| {
+            self.passthrough
+                .iter()
+                .any(|e| e.event_type() == EventType::RELATIVE && e.code() == code.0)
+        };
+        let hi_res = (
+            carries(RelativeAxisCode::REL_HWHEEL_HI_RES),
+            carries(RelativeAxisCode::REL_WHEEL_HI_RES),
+        );
+        let (mut horizontal, mut vertical) = (0i32, 0i32);
+        for ev in &self.passthrough {
+            if ev.event_type() != EventType::RELATIVE {
+                continue;
+            }
+            let value = ev.value();
+            match ev.code() {
+                c if c == RelativeAxisCode::REL_HWHEEL_HI_RES.0 => {
+                    horizontal = horizontal.saturating_add(value)
+                }
+                c if c == RelativeAxisCode::REL_WHEEL_HI_RES.0 => {
+                    vertical = vertical.saturating_add(value)
+                }
+                c if c == RelativeAxisCode::REL_HWHEEL.0 && !hi_res.0 => {
+                    horizontal = horizontal.saturating_add(value.saturating_mul(120))
+                }
+                c if c == RelativeAxisCode::REL_WHEEL.0 && !hi_res.1 => {
+                    vertical = vertical.saturating_add(value.saturating_mul(120))
+                }
+                _ => {}
+            }
+        }
+        (horizontal, vertical)
+    }
+
+    /// Whether buttons, wheels or scancodes wait for the pointer's frame.
+    pub(super) fn pointer_pending(&self) -> bool {
+        !self.passthrough.is_empty()
+    }
+
+    /// Keeps, of the pending buttons, wheels, scancodes and keyboard usages, only those
+    /// `keep` says are still this machine's; the others are the caller's to have taken.
+    /// In place, in arrival order: nothing is allocated.
+    pub(super) fn retain_local(&mut self, mut keep: impl FnMut(&InputEvent) -> bool) {
+        self.passthrough.retain(&mut keep);
+        self.kbd.retain(keep);
+    }
 }
 
 #[cfg(test)]

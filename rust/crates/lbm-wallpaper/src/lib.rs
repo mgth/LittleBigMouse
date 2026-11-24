@@ -14,6 +14,7 @@
 //! **truncating** division, as there: the rounding is part of the result, and #492 is
 //! what happens when it is not respected.
 
+pub mod desktop;
 pub mod render;
 /// A size in pixels. Integers, and the division that makes them truncates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

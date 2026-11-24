@@ -8,7 +8,7 @@
 use std::sync::atomic::Ordering;
 
 use littlebigmouse_hook::shared::{Shared, SHARED};
-use littlebigmouse_hook::{daemon, hook, ipc, platform};
+use littlebigmouse_hook::{daemon, hook, ipc, platform, remote};
 
 fn main() {
     platform::init();
@@ -59,6 +59,24 @@ fn main() {
 
     eprintln!("[LittleBigMouse.Hook] listening on {endpoint}");
 
+    // The multi-PC input stream (docs/multi-pc.md), beside the command endpoint so
+    // that one override moves both. Not fatal: a hook that cannot be driven from
+    // another machine still routes this one's mouse.
+    let input = match ipc::input::start(
+        lbm_ipc::input::input_endpoint_beside(&endpoint),
+        remote::platform_injector(shared),
+        shared.outlet.clone(),
+    ) {
+        Ok(input) => {
+            eprintln!("[LittleBigMouse.Hook] input stream on {}", input.endpoint());
+            Some(input)
+        }
+        Err(error) => {
+            eprintln!("[LittleBigMouse.Hook] no input stream endpoint: {error}");
+            None
+        }
+    };
+
     // Optional debug heartbeat: prints the live mouse-event count so the hook can
     // be observed staying alive (and being called) under the timeout window.
     if std::env::var("LBM_HOOK_DEBUG").is_ok() {
@@ -83,4 +101,10 @@ fn main() {
 
     // Run the platform's hook/event loop on this thread until a `Quit` command.
     hook::run(shared);
+
+    // Nothing a remote stream pressed may outlive the hook: on Windows a key
+    // `SendInput` pressed stays down after its process is gone.
+    if let Some(input) = input {
+        input.stop();
+    }
 }

@@ -415,9 +415,12 @@ impl Layout {
     /// there, not that the screen stopped existing — and a consumer that needs the
     /// desktop (the Linux hook's absolute pointing device, whose range a compositor
     /// maps onto the whole desktop) needs the real one or it maps everything wrong.
+    ///
+    /// This machine's desktop only: a remote source's rectangle is in another
+    /// machine's pixels (docs/multi-pc.md).
     pub fn desktop_pixel_bounds(&self) -> Option<Rect> {
         let mut bounds: Option<Rect> = None;
-        for source in self.sources() {
+        for source in self.sources().filter(|s| s.source.is_local()) {
             let Some(monitor) = self.monitor(&source.monitor) else {
                 continue;
             };
@@ -499,6 +502,10 @@ impl Layout {
     /// `ParseDisplaySources`, over the sources in insertion order: the last
     /// primary one wins, the effective DPIs fold with `Math.Max` from 0, and
     /// the ratio is unary while every source's pixel-to-DIP ratio is.
+    ///
+    /// A remote source takes no part in any of it but the saved flag: the primary and
+    /// the DPIs are this machine's desktop's (docs/multi-pc.md), and a remote's primary
+    /// would otherwise become the anchor of the whole layout.
     pub fn parse_display_sources(&mut self) {
         let mut max_x = 0.0;
         let mut max_y = 0.0;
@@ -506,6 +513,10 @@ impl Layout {
         let mut primary = None;
         let mut unsaved = false;
         for source in self.sources.iter().filter(|s| s.registered) {
+            unsaved |= !source.saved;
+            if !source.source.is_local() {
+                continue;
+            }
             if source.source.primary {
                 primary = Some(source.source.id.clone());
             }
@@ -514,7 +525,6 @@ impl Layout {
             if is_unary && !self.pixel_to_dip_ratio(source).is_unary() {
                 is_unary = false;
             }
-            unsaved |= !source.saved;
         }
         if unsaved {
             self.saved = false;

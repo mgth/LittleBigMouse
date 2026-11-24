@@ -9,6 +9,10 @@ description = "LittleBigMouse display detection: EDID parsing, the Linux outputs
 [dependencies]
 # The neutral output description (LinuxMonitor, WindowsMonitor) the layout model maps.
 lbm-layout = { path = "../lbm-layout" }
+# PeerDisplay, what a remote machine reports of its screens (src/peer.rs).
+lbm-ipc = { path = "../lbm-ipc" }
+# A PeerDisplay's EDID travels as base64.
+base64 = "0.22"
 # kscreen-doctor --json.
 serde_json.workspace = true
 # The xrandr line, with the C# pattern as it is.

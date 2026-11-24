@@ -28,6 +28,9 @@ pub enum Message {
     State(Value),
     /// Something the hook said, passed on.
     Hook { name: String, payload: String },
+    /// The multi-PC state, whenever it changes (capability `MultiPc`): the body of
+    /// `{"Event": "Peers", "Peers": …}`, read by `crate::machines`.
+    Peers(Value),
     /// Something this version does not know. Kept whole rather than dropped: an agent
     /// newer than its frontend is a case that will happen during the port, and a
     /// frontend that treated it as an error would be wrong more often than it is right.
@@ -68,6 +71,7 @@ pub(crate) fn decode(frame: &str) -> io::Result<Message> {
     }
     Ok(match value.get("Event").and_then(Value::as_str) {
         Some("State") => Message::State(value.get("State").cloned().unwrap_or(Value::Null)),
+        Some("Peers") => Message::Peers(value.get("Peers").cloned().unwrap_or(Value::Null)),
         Some("Hook") => Message::Hook {
             name: value
                 .get("Hook")

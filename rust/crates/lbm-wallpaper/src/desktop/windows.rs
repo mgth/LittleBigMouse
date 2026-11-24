@@ -1,4 +1,6 @@
-use super::{Entry, Rect, Repeat, Style};
+use super::{Entry, Repeat};
+use crate::Style;
+use lbm_layout::geo::Rect;
 use windows::{
     core::{PCWSTR, PWSTR},
     Win32::{
@@ -47,14 +49,27 @@ fn read() -> windows::core::Result<Vec<Entry>> {
         let color = [color as u8, (color >> 8) as u8, (color >> 16) as u8, 255];
         let mut entries = Vec::new();
         for index in 0..desktop.GetMonitorDevicePathCount()? {
-            let id = string(desktop.GetMonitorDevicePathAt(index)?)?;
+            // The list holds every monitor Windows remembers, attached or not, and the
+            // calls below fail (E_FAIL) for one that is not on the desktop right now.
+            // That monitor has no wallpaper to report; the others still do. Seen on a
+            // machine behind a KVM: one stale path made the whole reading fail.
+            let Ok(id) = desktop.GetMonitorDevicePathAt(index).and_then(string) else {
+                continue;
+            };
             let id: Vec<_> = id.encode_utf16().chain(Some(0)).collect();
             let id = PCWSTR(id.as_ptr());
-            let bounds = desktop.GetMonitorRECT(id)?;
+            let Ok(bounds) = desktop.GetMonitorRECT(id) else {
+                continue;
+            };
             if bounds.right <= bounds.left || bounds.bottom <= bounds.top {
                 continue;
             }
-            let path = string(desktop.GetWallpaper(id)?)?;
+            // No picture readable for this monitor (a slideshow between two images, for
+            // one) is the background colour, not a failure of the whole desktop.
+            let path = desktop
+                .GetWallpaper(id)
+                .and_then(string)
+                .unwrap_or_default();
             entries.push(Entry {
                 bounds: Rect::new(
                     bounds.left.into(),

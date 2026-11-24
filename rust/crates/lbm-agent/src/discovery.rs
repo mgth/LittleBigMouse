@@ -9,11 +9,15 @@ use lbm_layout::linux::LinuxMonitor;
 use lbm_layout::model::Layout;
 
 /// How the agent finds the displays.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Discovery {
     /// Nothing answers: one fallback output (C#'s factory does the same). What the tests
     /// use, on every platform.
     Fallback,
+    /// Outputs described rather than detected, mapped as the Linux backends' are: a
+    /// test's machine, when one fallback output without an EDID cannot say what is
+    /// being tested (a panel two machines share is known by its EDID).
+    Given(&'static [LinuxMonitor]),
     /// The Linux backend that answered at start.
     Linux(Backend),
     /// The Win32 device tree (the process is per-monitor DPI aware: see `main`).
@@ -62,9 +66,37 @@ impl Discovery {
         }
     }
 
-    /// The Linux outputs (the KWin gaps move them); none elsewhere.
+    /// This machine's screens as a remote reports them to its master (multi-PC), with
+    /// their raw EDIDs. Asked of the system again rather than taken from the layout:
+    /// the master maps what the detection read, not what this layout made of it.
+    pub fn peer_displays(&self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        match self {
+            #[cfg(windows)]
+            Discovery::Windows => match lbm_display::windows::discover() {
+                Ok(tree) => crate::peers::local::windows_displays(&tree),
+                Err(error) => {
+                    eprintln!("[lbm-agent] display discovery failed: {error}");
+                    Vec::new()
+                }
+            },
+            Discovery::Linux(_) => crate::peers::local::linux_displays(
+                &self.outputs(),
+                &lbm_display::linux::drm::read_all(),
+            ),
+            // Outputs given by hand have no EDID in sysfs: whatever is there belongs to
+            // the machine's real outputs, not to these.
+            Discovery::Given(outputs) => crate::peers::local::linux_displays(
+                outputs,
+                &lbm_display::linux::drm::EdidMap::default(),
+            ),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The Linux outputs (the KWin gaps move them), or the given ones; none elsewhere.
     pub fn outputs(&self) -> Vec<LinuxMonitor> {
         match self {
+            Discovery::Given(outputs) => outputs.to_vec(),
             Discovery::Linux(backend) => backend.query().unwrap_or_else(|error| {
                 eprintln!("[lbm-agent] display discovery failed: {error}");
                 Vec::new()

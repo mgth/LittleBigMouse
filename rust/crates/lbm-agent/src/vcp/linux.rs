@@ -1,22 +1,11 @@
-use super::{Monitor, Target, Write};
-use lbm_ipc::vcp::{self, Choice, Feature};
+use super::common::{choice_label, feature, Reading, PRESET, RGB};
+use super::{DdcFuture, Monitor, Target, Write};
+use lbm_ipc::vcp::{self, Choice};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     time::Duration,
 };
-
-const PRESET: u8 = 0x14;
-/// The controls of a colour preset: changing one can switch the monitor to "custom".
-const RGB: [u8; 6] = [0x16, 0x18, 0x1a, 0x6c, 0x6e, 0x70];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Reading {
-    value: u16,
-    maximum: u16,
-    /// ddcutil reported a plain continuous value (`C`), not a structured one.
-    plain: bool,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Bus {
@@ -208,29 +197,100 @@ impl Service {
         }
     }
     async fn output(&self, bus: &Bus, args: Vec<String>) -> Result<(bool, String, String), String> {
-        let mut cmd = tokio::process::Command::new(&self.tool);
-        cmd.args(args)
-            .args(["--bus", &bus.number.to_string()])
-            .env("LC_ALL", "C")
-            .stdin(std::process::Stdio::null())
-            .kill_on_drop(true);
-        let output = tokio::time::timeout(Duration::from_secs(18), cmd.output())
-            .await
-            .map_err(|_| {
-                "DDC/CI request timed out. Check the monitor's DDC/CI setting.".to_string()
-            })?
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "ddcutil is not installed. Install it to control monitor hardware.".into()
-                } else {
-                    format!("Cannot start ddcutil: {e}")
-                }
-            })?;
-        Ok((
-            output.status.success(),
-            String::from_utf8_lossy(&output.stdout).into(),
-            String::from_utf8_lossy(&output.stderr).into(),
-        ))
+        ddcutil(&self.tool, bus.number, args).await
+    }
+
+    /// What this service read of a monitor is no longer to be trusted: the input
+    /// switching wrote to it behind the property panel's back.
+    pub fn forget(&mut self) {
+        self.cached = None;
+    }
+}
+
+async fn ddcutil(
+    tool: &Path,
+    bus: u32,
+    args: Vec<String>,
+) -> Result<(bool, String, String), String> {
+    let mut cmd = tokio::process::Command::new(tool);
+    cmd.args(args)
+        .args(["--bus", &bus.to_string()])
+        .env("LC_ALL", "C")
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(Duration::from_secs(18), cmd.output())
+        .await
+        .map_err(|_| "DDC/CI request timed out. Check the monitor's DDC/CI setting.".to_string())?
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "ddcutil is not installed. Install it to control monitor hardware.".into()
+            } else {
+                format!("Cannot start ddcutil: {e}")
+            }
+        })?;
+    Ok((
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).into(),
+        String::from_utf8_lossy(&output.stderr).into(),
+    ))
+}
+
+/// One VCP code read or written on its own, through ddcutil: what the input switching
+/// needs, without the property panel's probe and tokens.
+pub struct SystemDdc {
+    tool: PathBuf,
+    drm: PathBuf,
+}
+
+impl Default for SystemDdc {
+    fn default() -> Self {
+        Self {
+            tool: "ddcutil".into(),
+            drm: "/sys/class/drm".into(),
+        }
+    }
+}
+
+impl super::Ddc for SystemDdc {
+    fn read(&self, target: Target, code: u8) -> DdcFuture<u16> {
+        let (tool, drm) = (self.tool.clone(), self.drm.clone());
+        Box::pin(async move {
+            let bus = find_bus(&drm, &target)?;
+            let args = vec!["getvcp".into(), format!("{code:02x}"), "--brief".into()];
+            let (_, output, error) = ddcutil(&tool, bus.number, args).await?;
+            values(&output)
+                .remove(&code)
+                .map(|reading| reading.value)
+                .ok_or_else(|| {
+                    format!(
+                        "no DDC/CI answer for {} from {}: {}",
+                        vcp::name(code),
+                        target.connector,
+                        diagnostic(&error, &output)
+                    )
+                })
+        })
+    }
+
+    fn write(&self, target: Target, code: u8, value: u16) -> DdcFuture<()> {
+        let (tool, drm) = (self.tool.clone(), self.drm.clone());
+        Box::pin(async move {
+            let bus = find_bus(&drm, &target)?;
+            // Not verified: a monitor that changed input may well stop answering on
+            // this cable, which is no failure of the write.
+            let args = vec![
+                "setvcp".into(),
+                format!("{code:02x}"),
+                value.to_string(),
+                "--noverify".into(),
+            ];
+            let (ok, output, error) = ddcutil(&tool, bus.number, args).await?;
+            if ok {
+                Ok(())
+            } else {
+                Err(diagnostic(&error, &output))
+            }
+        })
     }
 }
 fn diagnostic(stderr: &str, stdout: &str) -> String {
@@ -260,37 +320,6 @@ fn is_target(edid: &[u8], target: &Target) -> bool {
             .model
             .as_ref()
             .is_none_or(|model| detected.pnp_code().as_ref() == Some(model))
-}
-/// A control as the panel offers it. `None` when the reading makes no sense for it.
-fn feature(code: u8, reading: Reading, choices: Vec<Choice>) -> Option<Feature> {
-    // Only the older, plain volume is a level from 0 up.
-    let structured_volume = code == vcp::VOLUME && !reading.plain;
-    let feature = if structured_volume {
-        Feature {
-            code,
-            value: reading.value,
-            minimum: vcp::VOLUME_LEVELS.0,
-            // MCCS defines the levels: a reply may well leave its maximum at zero.
-            maximum: match reading.maximum {
-                0 => vcp::VOLUME_LEVELS.1,
-                maximum => maximum.min(vcp::VOLUME_LEVELS.1),
-            },
-            choices: vcp::volume_choices(),
-        }
-    } else {
-        Feature {
-            code,
-            value: reading.value,
-            minimum: 0,
-            maximum: reading.maximum,
-            choices,
-        }
-    };
-    let usable = !vcp::continuous(code)
-        || (feature.maximum > 0
-            && feature.maximum >= feature.minimum
-            && feature.accepts(feature.value));
-    usable.then_some(feature)
 }
 fn find_bus(root: &Path, target: &Target) -> Result<Bus, String> {
     let mut found = vec![];
@@ -394,20 +423,6 @@ fn capabilities(output: &str) -> BTreeMap<u8, Vec<Choice>> {
         }
     }
     result
-}
-fn choice_label(code: u8, value: u16, reported: &str) -> String {
-    match (code, value) {
-        (0x8d, 1) => "Muted".into(),
-        (0x8d, 2) => "Sound on".into(),
-        (0xd6, 1) => "On".into(),
-        (0xd6, 2) => "Standby".into(),
-        (0xd6, 3) => "Suspend".into(),
-        (0xd6, 4 | 5) => format!("Off (0x{value:02X})"),
-        _ if reported.is_empty() || reported.starts_with("Unrecognized") => {
-            format!("0x{value:02X}")
-        }
-        _ => reported.into(),
-    }
 }
 /// Brief reads can include diagnostics or an unsupported code between valid lines.
 fn values(output: &str) -> BTreeMap<u8, Reading> {
@@ -772,5 +787,50 @@ esac
             .await
             .is_err());
         assert_eq!(lines(), before);
+    }
+
+    #[tokio::test]
+    async fn the_input_is_read_and_written_on_its_own_without_a_probe() {
+        use super::super::Ddc;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        connector(dir.path(), "card0", 42);
+        let executable = dir.path().join("ddcutil-test");
+        let log = dir.path().join("log");
+        let script = format!(
+            r#"#!/bin/sh
+echo "$@" >> '{0}'
+case "$1" in
+getvcp) printf 'VCP 60 SNC x11\n';;
+setvcp) ;;
+*) exit 1;;
+esac
+"#,
+            log.display()
+        );
+        std::fs::write(&executable, script).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let ddc = SystemDdc {
+            tool: executable,
+            drm: dir.path().into(),
+        };
+        let target = Target {
+            connector: "DP-1".into(),
+            serial: None,
+            model: None,
+        };
+        assert_eq!(ddc.read(target.clone(), 0x60).await, Ok(0x11));
+        ddc.write(target, 0x60, 0x0f).await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            "getvcp 60 --brief --bus 9\nsetvcp 60 15 --noverify --bus 9\n"
+        );
+        // Another monitor on that connector is not written to.
+        let other = Target {
+            connector: "DP-1".into(),
+            serial: Some("nope".into()),
+            model: None,
+        };
+        assert!(ddc.write(other, 0x60, 0x0f).await.is_err());
     }
 }

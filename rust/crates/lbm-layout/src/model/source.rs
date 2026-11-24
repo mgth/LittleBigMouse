@@ -39,6 +39,13 @@ pub struct DisplaySource {
     pub raw_dpi: Ratio,
     pub effective_dpi: Ratio,
     pub dpi_aware_angular_dpi: Ratio,
+    /// The machine this source belongs to, by machine id (docs/multi-pc.md); `None` is
+    /// this machine. A panel two machines know is one monitor with a source per machine,
+    /// so the machine lives here and not on the monitor.
+    pub host: Option<String>,
+    /// The VCP 0x60 value that makes the monitor show this source, once learnt.
+    /// Switching a shared panel writes it (docs/multi-pc.md, "Input switching").
+    pub input_source: Option<u16>,
 }
 
 impl DisplaySource {
@@ -62,7 +69,16 @@ impl DisplaySource {
             raw_dpi: Ratio::uniform(96.0),
             effective_dpi: Ratio::uniform(96.0),
             dpi_aware_angular_dpi: Ratio::uniform(96.0),
+            host: None,
+            input_source: None,
         }
+    }
+
+    /// Whether this source is one of this machine's own, as opposed to a remote's:
+    /// everything that talks to the local desktop (its pixel arrangement, its primary,
+    /// its wallpaper, its monitors over DDC) only ever means those.
+    pub fn is_local(&self) -> bool {
+        self.host.is_none()
     }
 }
 

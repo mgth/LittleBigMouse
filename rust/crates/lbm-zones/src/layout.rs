@@ -23,8 +23,14 @@ pub enum Algorithm {
 
 pub struct ZonesLayout {
     pub arena: SlotMap<ZoneId, Zone>,
+    /// The zones in play, in document order: this machine's, and the other machines'
+    /// only while [`Self::set_remote_enterable`] says so. Everything that routes, clips
+    /// or draws barriers walks this list or [`Self::main_zones`], so a zone left out of
+    /// it does not exist for them — links to it included.
     pub zones: Vec<ZoneId>,
     pub main_zones: Vec<ZoneId>,
+    /// Every zone the document described, in play or not.
+    pub all_zones: Vec<ZoneId>,
 
     pub max_travel_distance_squared: f64,
     pub freelook_check_interval_ms: i64,
@@ -68,6 +74,21 @@ pub struct ZonesLayout {
     /// (unlike the C++ `Zone::_travels`) so `Move` can mutate it without
     /// aliasing the arena.
     travels: HashMap<(ZoneId, ZoneId), Vec<Rect<i32>>>,
+
+    /// Whether the zones of other machines are in play (docs/multi-pc.md). Off until
+    /// someone able to drive another machine turns it on: only the evdev backend can,
+    /// and only while its input stream has a client. Every other backend moves the
+    /// real cursor in real pixels, and a remote zone's pixels do not exist here.
+    remote_enterable: bool,
+}
+
+/// A point of the engine's pixel space, seen from the machine it is on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostPoint<'a> {
+    /// The machine id; `None` for this machine.
+    pub host: Option<&'a str>,
+    /// In that machine's own desktop pixels.
+    pub pixel: Point<i32>,
 }
 
 impl Default for ZonesLayout {
@@ -76,6 +97,7 @@ impl Default for ZonesLayout {
             arena: SlotMap::with_key(),
             zones: Vec::new(),
             main_zones: Vec::new(),
+            all_zones: Vec::new(),
             // C++ ZonesLayout member initializers.
             max_travel_distance_squared: 200.0 * 200.0,
             freelook_check_interval_ms: 100,
@@ -105,6 +127,7 @@ impl Default for ZonesLayout {
             right: 0.0,
             bottom: 0.0,
             travels: HashMap::new(),
+            remote_enterable: false,
         }
     }
 }
@@ -192,6 +215,11 @@ impl ZonesLayout {
                     .find(|(b, _)| *b == pixels_bounds)
                     .map(|(_, id)| *id);
 
+                // Not in C#: the machine a zone is on (docs/multi-pc.md). Absent: this
+                // machine's, as in every document from before the multi-PC mode.
+                let host = zone_el.attribute("Host").map(str::to_owned);
+                let host_offset = Point::new(get_i32(zone_el, "HostX"), get_i32(zone_el, "HostY"));
+
                 let key = layout.arena.insert_with_key(|k| {
                     Zone::new(
                         id,
@@ -206,8 +234,13 @@ impl ZonesLayout {
                         bottom,
                     )
                 });
+                if host.is_some() {
+                    let zone = &mut layout.arena[key];
+                    zone.host = host;
+                    zone.host_offset = host_offset;
+                }
                 by_bounds.push((pixels_bounds, key));
-                layout.zones.push(key);
+                layout.all_zones.push(key);
             }
         }
 
@@ -217,7 +250,21 @@ impl ZonesLayout {
 
     /// C++ `ZonesLayout::Init`: compute overall bounds, collect main zones, and
     /// resolve each link's target from its `target_id`.
+    ///
+    /// Over the zones in play only, and run again whenever that set changes: a link
+    /// whose target is out of play resolves to no target, which is the wall the UI's
+    /// compiler would have written had that zone not been there.
     fn init(&mut self) {
+        let remote = self.remote_enterable;
+        self.zones = self
+            .all_zones
+            .iter()
+            .copied()
+            .filter(|&z| remote || self.arena[z].host.is_none())
+            .collect();
+        self.main_zones.clear();
+        self.travels.clear();
+        (self.left, self.top, self.right, self.bottom) = (0.0, 0.0, 0.0, 0.0);
         let zids = self.zones.clone();
 
         // First occurrence of each zone id (C++ InitZoneLinks scans in order).
@@ -259,6 +306,27 @@ impl ZonesLayout {
         }
     }
 
+    /// Whether the zones of other machines are in play.
+    pub fn remote_enterable(&self) -> bool {
+        self.remote_enterable
+    }
+
+    /// Puts the zones of other machines in play, or takes them out. Rebuilds the zone
+    /// lists, the extent and the links when it changes anything, so it is not for a
+    /// per-report path; a call that changes nothing costs a comparison.
+    pub fn set_remote_enterable(&mut self, enterable: bool) {
+        if self.remote_enterable == enterable {
+            return;
+        }
+        self.remote_enterable = enterable;
+        self.init();
+    }
+
+    /// Whether the document has zones of other machines at all, in play or not.
+    pub fn has_remote_zones(&self) -> bool {
+        self.all_zones.iter().any(|&z| self.arena[z].host.is_some())
+    }
+
     /// C++ `ZonesLayout::Containing(Point<long>)`.
     pub fn containing_pixel(&self, pixel: Point<i32>) -> Option<ZoneId> {
         self.main_zones
@@ -273,6 +341,17 @@ impl ZonesLayout {
             .iter()
             .copied()
             .find(|&z| self.arena[z].contains_mm(mm))
+    }
+
+    /// Which machine a point of the engine's pixel space is on, and the same point on
+    /// that machine's own desktop (docs/multi-pc.md, "Engine pixel space"). `None`
+    /// outside every zone in play.
+    pub fn host_point(&self, pixel: Point<i32>) -> Option<HostPoint<'_>> {
+        let zone = &self.arena[self.containing_pixel(pixel)?];
+        Some(HostPoint {
+            host: zone.host.as_deref(),
+            pixel: zone.to_host_pixel(pixel),
+        })
     }
 
     pub fn width(&self) -> f64 {
@@ -371,7 +450,7 @@ mod tests {
 
     fn zone_by_name<'a>(layout: &'a ZonesLayout, name: &str) -> (ZoneId, &'a Zone) {
         let zid = *layout
-            .zones
+            .all_zones
             .iter()
             .find(|&&z| layout.arena[z].name == name)
             .unwrap();
@@ -501,5 +580,89 @@ mod tests {
             Some(right_id)
         );
         assert_eq!(layout.containing_pixel(Point::new(99999, 99999)), None);
+    }
+
+    #[test]
+    fn a_zone_without_a_host_is_this_machines_and_its_points_are_its_own() {
+        let layout = ZonesLayout::from_xml(FIXTURE).expect("parse");
+        let (_, right) = zone_by_name(&layout, "Right");
+        assert_eq!(right.host, None);
+        assert_eq!(right.host_offset, Point::new(0, 0));
+        let point = layout.host_point(Point::new(100, 100)).unwrap();
+        assert_eq!(point.host, None);
+        assert_eq!(point.pixel, Point::new(100, 100));
+    }
+
+    #[test]
+    fn a_remote_zones_point_is_given_back_in_its_machines_desktop() {
+        let xml = concat!(
+            r#"<ZonesLayout><MainZones>"#,
+            r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+            r#"<Zone Id="1" Name="There" Host="abcd" HostX="4920" HostY="-20"><PixelsBounds><Rect Left="3000" Top="-20" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+            r#"</MainZones></ZonesLayout>"#,
+        );
+        let mut layout = ZonesLayout::from_xml(xml).expect("parse");
+        layout.set_remote_enterable(true);
+        let (_, there) = zone_by_name(&layout, "There");
+        assert_eq!(there.host.as_deref(), Some("abcd"));
+        assert_eq!(there.host_offset, Point::new(4920, -20));
+
+        let point = layout.host_point(Point::new(3010, 0)).unwrap();
+        assert_eq!(point.host, Some("abcd"));
+        assert_eq!(point.pixel, Point::new(-1910, 20));
+        assert_eq!(layout.host_point(Point::new(2500, 0)), None);
+    }
+
+    // Here (0..1920) links right to There (a remote at 3000..4920), which links back.
+    const TWO_MACHINES: &str = concat!(
+        r#"<ZonesLayout LoopX="True"><MainZones>"#,
+        r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="1" Name="There" Host="abcd" HostX="3000" HostY="0"><PixelsBounds><Rect Left="3000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="0"></ZoneLink></LeftLinks></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    #[test]
+    fn another_machines_zones_are_out_of_play_until_they_are_put_in() {
+        let layout = ZonesLayout::from_xml(TWO_MACHINES).expect("parse");
+        let (here, _) = zone_by_name(&layout, "Here");
+
+        // As if the document had described this machine's screen alone: no zone, no
+        // link target, no extent and no point of the other machine.
+        assert_eq!(layout.all_zones.len(), 2);
+        assert_eq!(layout.zones, vec![here]);
+        assert_eq!(layout.main_zones, vec![here]);
+        assert_eq!(layout.arena[here].right[0].target, None);
+        assert_eq!(layout.width(), 40.0 + 527.0);
+        assert_eq!(layout.host_point(Point::new(3010, 0)), None);
+        assert!(layout.has_remote_zones());
+        assert!(!layout.remote_enterable());
+    }
+
+    #[test]
+    fn putting_another_machines_zones_in_play_links_them_and_taking_them_out_unlinks_them() {
+        let mut layout = ZonesLayout::from_xml(TWO_MACHINES).expect("parse");
+        let (here, _) = zone_by_name(&layout, "Here");
+        let (there, _) = zone_by_name(&layout, "There");
+
+        layout.set_remote_enterable(true);
+        assert_eq!(layout.main_zones, vec![here, there]);
+        assert_eq!(layout.arena[here].right[0].target, Some(there));
+        assert_eq!(layout.width(), 40.0 + 1054.0);
+        assert_eq!(
+            layout.host_point(Point::new(3010, 5)),
+            Some(HostPoint {
+                host: Some("abcd"),
+                pixel: Point::new(10, 5)
+            })
+        );
+        // A travel computed while they were in play must not outlive them.
+        assert!(!layout.travel_pixels(here, there).is_empty());
+
+        layout.set_remote_enterable(false);
+        assert_eq!(layout.main_zones, vec![here]);
+        assert_eq!(layout.arena[here].right[0].target, None);
+        assert!(layout.travels.is_empty());
     }
 }

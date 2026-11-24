@@ -43,7 +43,7 @@ const DESCRIPTION: &str = "Little Big Mouse: free a trapped cursor";
 
 /// How long the combination must stay down, as on Windows: long enough not to fire
 /// on a fumble, short enough to feel like a rescue.
-const HOLD: Duration = Duration::from_millis(900);
+pub(crate) const HOLD: Duration = Duration::from_millis(900);
 
 /// The pause before asking again a portal that could not be reached, doubled up to
 /// [`LAST_RETRY`]: one that arrives late is usually only a session still starting, and

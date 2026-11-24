@@ -20,6 +20,7 @@ pub mod frame;
 pub mod icons;
 pub mod inline;
 pub mod list;
+pub mod machines;
 pub mod map;
 pub mod mode;
 pub mod options;

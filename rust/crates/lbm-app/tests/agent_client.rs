@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use lbm_agent::fake_hook::FakeHook;
 use lbm_agent::hook::HookClient;
+use lbm_agent::peers::{Service, Setup};
 use lbm_agent::reconcile::{LayoutState, Timings, World};
 use lbm_agent::runtime::Agent;
 use lbm_agent::world::AgentWorld;
@@ -183,8 +184,9 @@ fn incompatible_and_silent_endpoints_never_enable_the_controls() {
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
-/// One monitor, a layout the user wants — the agent tests' own fixture.
-struct Enabled(Option<LayoutState>);
+/// One monitor, a layout the user wants — the agent tests' own fixture — and the screens
+/// it reports to a master in the multi-PC mode (none outside those tests).
+struct Enabled(Option<LayoutState>, Vec<lbm_ipc::peer::PeerDisplay>);
 
 impl World for Enabled {
     fn display_signature(&mut self) -> String {
@@ -208,6 +210,9 @@ impl World for Enabled {
 }
 
 impl AgentWorld for Enabled {
+    fn peer_displays(&mut self) -> Vec<lbm_ipc::peer::PeerDisplay> {
+        self.1.clone()
+    }
     fn zones(&self) -> Option<(String, bool)> {
         self.0.map(|_| (ZONES.to_owned(), false))
     }
@@ -254,6 +259,22 @@ impl Running {
     }
 
     fn at(dir: std::sync::Arc<tempfile::TempDir>) -> Running {
+        Self::machine(dir, None)
+    }
+
+    /// An agent offering the multi-PC mode, listening on loopback only, that reports
+    /// `displays` to the masters it pairs with.
+    fn with_machines(displays: Vec<lbm_ipc::peer::PeerDisplay>) -> Running {
+        Self::machine(
+            std::sync::Arc::new(tempfile::tempdir().unwrap()),
+            Some(displays),
+        )
+    }
+
+    fn machine(
+        dir: std::sync::Arc<tempfile::TempDir>,
+        multi_pc: Option<Vec<lbm_ipc::peer::PeerDisplay>>,
+    ) -> Running {
         let at = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
         let (hook_endpoint, api_endpoint) = (at("hook.sock"), at("lbm-agent.sock"));
 
@@ -271,9 +292,17 @@ impl Running {
         let (hook, signals) = HookClient::spawn(hook_endpoint);
         let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
         let (calls, listener) = lbm_agent::api::listen(&api_endpoint).unwrap();
+        let peers = multi_pc.as_ref().map(|_| {
+            let mut setup = Setup::new(None);
+            setup.bind = std::net::Ipv4Addr::LOCALHOST.into();
+            Service::new(dir.path().join("config"), setup)
+        });
         runtime.spawn(async move {
-            let mut agent =
-                Agent::new(Enabled(None), Timings::default(), hook, inputs).with_api(calls);
+            let world = Enabled(None, multi_pc.unwrap_or_default());
+            let mut agent = Agent::new(world, Timings::default(), hook, inputs).with_api(calls);
+            if let Some(peers) = peers {
+                agent = agent.with_peers(peers);
+            }
             agent.run(signals, inputs_rx, std::future::pending()).await;
         });
         drop(entered);
@@ -545,4 +574,193 @@ fn a_refused_request_is_an_error_under_its_own_id() {
         }
     }
     panic!("the refusal never came back");
+}
+
+impl Running {
+    /// The answer to one request, which must be accepted.
+    fn ask_ok(&mut self, method: &str, extra: Value) -> Value {
+        let id = self.outgoing.ask(method, extra).unwrap();
+        self.answer(id)
+            .unwrap_or_else(|why| panic!("{method} refused: {why}"))
+    }
+
+    /// The multi-PC state once it satisfies `wanted`: as it is now, or as a `Peers` event
+    /// announces it later — the event being what the window waits on, never a poll.
+    fn peers_until(&mut self, wanted: impl Fn(&Value) -> bool) -> Value {
+        let now = self.ask_ok("Peers", json!({}));
+        if wanted(&now) {
+            return now;
+        }
+        for _ in 0..200 {
+            let message = self.incoming.receive().expect("the agent stopped talking");
+            if let Message::Peers(state) = message {
+                if wanted(&state) {
+                    return state;
+                }
+            }
+        }
+        panic!("no Peers event matched");
+    }
+}
+
+/// A laptop screen, as the remote reports it.
+fn laptop_screen() -> lbm_ipc::peer::PeerDisplay {
+    lbm_ipc::peer::PeerDisplay {
+        id: "eDP-1".into(),
+        connector: "eDP-1".into(),
+        name: "Built-in display".into(),
+        edid: None,
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1200,
+        scale: 1.0,
+        effective_dpi: 96.0,
+        orientation: 0,
+        frequency: 60.0,
+        primary: true,
+        attached: true,
+        width_mm: 302.0,
+        height_mm: 189.0,
+        input_source: None,
+    }
+}
+
+fn machines_of(state: &Value) -> (lbm_ui::machines::State, Vec<lbm_app::machines::Remote>) {
+    lbm_app::machines::read(state).expect("a multi-PC state")
+}
+
+/// The whole of lot 7's conversation, against two real agents on loopback: the desk's
+/// window connects to the laptop, the laptop's window sees the desk waiting with its
+/// fingerprint, both accept with the requests the Machines page sends, and the desk's
+/// window gets the laptop's screens by the `Peers` event and puts them on its map.
+#[test]
+fn a_pending_machine_is_accepted_by_its_fingerprint_and_its_screens_reach_the_map() {
+    use lbm_ui::machines::Did;
+
+    let mut laptop = Running::with_machines(vec![laptop_screen()]);
+    let mut desk = Running::with_machines(Vec::new());
+    for agent in [&mut laptop, &mut desk] {
+        agent.ask_ok("Subscribe", json!({}));
+    }
+    let hello = desk.ask_ok("Hello", json!({ "Client": "lbm-app" }));
+    assert!(
+        hello["Capabilities"]
+            .as_array()
+            .is_some_and(|all| all.iter().any(|c| c == lbm_app::machines::CAPABILITY)),
+        "{hello}"
+    );
+
+    let window = lbm_app::machines::Controller::default();
+    let (method, mut extra) = window.request(&Did::Enable(true));
+    assert_eq!(method, "SetMultiPc");
+    // The page's switch sends no port and no name: the agent keeps its own. The test
+    // gives them, so that two agents on one machine do not want the same port.
+    extra["Port"] = json!(0);
+    extra["Name"] = json!("laptop");
+    let (laptop_state, _) = machines_of(&laptop.ask_ok(method, extra.clone()));
+    let address = laptop_state.listen_address.clone().expect("listening");
+    let laptop_id = laptop_state.machine_id.clone().expect("an identity");
+    extra["Name"] = json!("desk");
+    let desk_id = machines_of(&desk.ask_ok(method, extra))
+        .0
+        .machine_id
+        .expect("an identity");
+
+    let (method, extra) = window.request(&Did::Connect(address));
+    let entry = desk.ask_ok(method, extra);
+    assert_eq!(entry["MachineId"], laptop_id.as_str());
+    assert_eq!(entry["State"], "Pending");
+
+    // The laptop's page: the desk, waiting, with the fingerprint its user compares.
+    let waiting = laptop.peers_until(|s| {
+        machines_of(s)
+            .0
+            .peers
+            .iter()
+            .any(|p| p.machine_id == desk_id && p.pending)
+    });
+    let (seen, remotes) = machines_of(&waiting);
+    let desk_seen = seen.peers.iter().find(|p| p.machine_id == desk_id).unwrap();
+    assert_eq!(desk_seen.name, "desk");
+    assert_eq!(desk_seen.role, lbm_ui::machines::Role::Master);
+    assert!(remotes.is_empty(), "a master's screens are not this map's");
+    assert_eq!(
+        lbm_ui::machines::fingerprint(&desk_seen.machine_id),
+        lbm_ui::machines::fingerprint(&desk_id),
+        "the laptop prints the fingerprint the desk prints of itself"
+    );
+
+    // Both users say yes, each with the request the page's Accept sends.
+    let (method, extra) = window.request(&Did::Accept(desk_id.clone()));
+    assert_eq!(method, "PeerAccept");
+    assert_eq!(laptop.ask_ok(method, extra), Value::Null);
+    let (method, extra) = window.request(&Did::Accept(laptop_id.clone()));
+    assert_eq!(desk.ask_ok(method, extra), Value::Null);
+
+    // The desk's window learns the laptop's screens from the event.
+    let linked = desk.peers_until(|s| {
+        machines_of(s)
+            .1
+            .iter()
+            .any(|r| r.machine_id == laptop_id && !r.displays.is_empty())
+    });
+    let mut window = lbm_app::machines::Controller::default();
+    assert!(window.heard(&linked), "the map has a remote to merge");
+    assert_eq!(window.remotes[0].name, "laptop");
+
+    // And the map gets it: merged after this machine's screens, before the id.
+    let mut layout = lbm_layout::model::Layout::new(Default::default());
+    lbm_app::machines::build(
+        &mut layout,
+        |l| lbm_layout::linux::add_monitor(l, &lbm_layout::linux::LinuxMonitor::fallback()),
+        &window.remotes,
+        |_| {},
+    );
+    assert_eq!(layout.monitors().len(), 2);
+    let remote = layout
+        .monitors()
+        .iter()
+        .find(|m| lbm_app::machines::remote_machine(&layout, &m.id).is_some())
+        .expect("the laptop's screen is on the map");
+    assert!(layout.id.contains(&remote.id), "the layout id counts it");
+    assert_eq!(
+        lbm_app::machines::tag(&layout, &remote.id, "desk"),
+        Some(lbm_app::machines::Tag {
+            machine: "laptop".into(),
+            remote: true,
+            shared: false,
+        })
+    );
+}
+
+/// A shared panel's switch reaches the agent under its own id, and whatever the agent
+/// makes of it, the window can tell an agent that does not know the request from one
+/// that refused it.
+#[test]
+fn a_switch_is_answered_under_its_own_id_and_an_older_agent_is_told_from_a_refusal() {
+    let mut running = Running::start();
+    let id = running.outgoing.reserve();
+    let switch = lbm_app::machines::Switch {
+        id,
+        layout: "DELA0B1_ABC123".into(),
+        monitor: "DELA0B1_ABC123".into(),
+        source: "DP-1@a1b2c3d4".into(),
+    };
+    running
+        .outgoing
+        .ask_as(id, "SetActiveSource", switch.request())
+        .unwrap();
+    let result = running.answer(id);
+    match (&result, lbm_app::machines::switched(&result)) {
+        (Err(why), lbm_app::machines::Switched::Unknown) => {
+            assert!(why.starts_with("bad request"), "{why}");
+        }
+        (Err(why), lbm_app::machines::Switched::Refused(said)) => {
+            assert_eq!(why, &said);
+            assert!(!said.is_empty(), "a refusal with nothing to show");
+        }
+        (Ok(_), lbm_app::machines::Switched::Taken) => {}
+        (result, switched) => panic!("{result:?} read as {switched:?}"),
+    }
 }

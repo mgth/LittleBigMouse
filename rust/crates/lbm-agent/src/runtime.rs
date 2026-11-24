@@ -9,6 +9,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request, Snapshot};
 use crate::hook::{HookClient, HookSignal};
+use crate::input_switch::{self, InputRead, InputSwitch, Outcome};
+use crate::peers::{Answer, Notice, PeerRequest, PeerState};
 use crate::reconcile::{Effect, EngineState, HookEvent, Input, Reconciler, Timings};
 use crate::supervise::{HookLauncher, Launch};
 use crate::world::AgentWorld;
@@ -49,6 +51,20 @@ fn hook_event(message: Event) -> HookEvent {
     }
 }
 
+/// What the monitor work done away from the loop (`input_switch`) reports back to it.
+enum VcpEvent {
+    /// The inputs read after the rebuild `rebuild`.
+    Read {
+        rebuild: u64,
+        results: Vec<(InputRead, Result<u16, String>)>,
+    },
+    /// A switch this machine attempted.
+    Switched {
+        switch: Box<InputSwitch>,
+        outcome: Outcome,
+    },
+}
+
 /// The agent: the reconciler, the world it acts on, the hook it drives.
 pub struct Agent<W> {
     reconciler: Reconciler,
@@ -83,8 +99,49 @@ pub struct Agent<W> {
     /// Retire prepared work when a newer request or rebuilt layout replaces it.
     wallpaper_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
     wallpaper_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
-    vcp: std::sync::Arc<tokio::sync::Mutex<crate::vcp::Service>>,
-    remote: std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>,
+    /// Where the wallpaper is painted: nowhere ([`NoDesktop`](crate::desktop::NoDesktop))
+    /// unless `main` installs the session's (`with_desktop`). A test cannot reach the
+    /// developer's desktop by forgetting a double.
+    desktop: std::sync::Arc<dyn crate::desktop::Desktop>,
+    /// Counts the reads of this machine's wallpapers for its masters: only the latest
+    /// one's pictures are sent.
+    wallpaper_reads: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// The property panel's monitor control, when this agent offers it
+    /// (`with_monitor_control`); the lock is also the one DDC/CI bus of this machine, so
+    /// the input switching holds it too, with or without a panel to serve.
+    vcp: std::sync::Arc<tokio::sync::Mutex<Option<crate::vcp::Service>>>,
+    /// The network TV remotes, when this agent has a configuration to read them from
+    /// (`with_remote_config`): none by default, so a test never loads the user's pairings.
+    remote: Option<std::sync::Arc<tokio::sync::Mutex<crate::remote::Service>>>,
+    /// The multi-PC mode, when this agent offers it.
+    peers: Option<crate::peers::Service>,
+    /// The monitors' input, read and written for the multi-PC mode (`input_switch`).
+    /// [`NoDdc`](crate::vcp::NoDdc) unless `main` or a test hands one over.
+    ddc: std::sync::Arc<dyn crate::vcp::Ddc>,
+    vcp_events: UnboundedSender<VcpEvent>,
+    vcp_events_rx: Option<UnboundedReceiver<VcpEvent>>,
+    /// This machine's monitors' inputs, as last read, by monitor id: what a master is
+    /// told selects this machine on each.
+    readings: std::collections::HashMap<String, u16>,
+    /// Why a monitor's input could not be read, as last said: said again only when it
+    /// changes, not at every display event.
+    read_failures: std::collections::HashMap<String, String>,
+    /// Whether a master is linked: only then are the panels this machine alone has
+    /// read, to tell it what selects this machine on them.
+    has_master: bool,
+    /// The selected remote of the last `Peers` state, with that state's number for the
+    /// choice (`PeersState::selection`); `None` before any. The zones this agent hands
+    /// the hook never lead to another remote ([`Agent::zones_fit`]).
+    selection_seen: Option<(u64, Option<String>)>,
+    /// The other machines the zones the hook holds lead to; `None` when that is not
+    /// known (no hook, a hook holding a layout this agent cannot name, a `Loaded` this
+    /// agent did not ask for).
+    hook_holds: Option<std::collections::BTreeSet<String>>,
+    /// The same for every `Load` sent and not yet answered, oldest first: the hook answers
+    /// each with `Loaded` or `LoadFailed`, in order.
+    loads_in_flight: std::collections::VecDeque<std::collections::BTreeSet<String>>,
+    /// What the multi-PC manager was last told of the hook's zones.
+    told_hook_ready: Option<Option<u64>>,
 }
 
 impl<W: AgentWorld> Agent<W> {
@@ -96,6 +153,7 @@ impl<W: AgentWorld> Agent<W> {
         hook: HookClient,
         inputs: UnboundedSender<Input>,
     ) -> Self {
+        let (vcp_events, vcp_events_rx) = tokio::sync::mpsc::unbounded_channel();
         Agent {
             reconciler: Reconciler::new(timings),
             world,
@@ -117,9 +175,48 @@ impl<W: AgentWorld> Agent<W> {
             excluded: None,
             wallpaper_generation: Default::default(),
             wallpaper_lock: Default::default(),
+            desktop: std::sync::Arc::new(crate::desktop::NoDesktop),
+            wallpaper_reads: Default::default(),
             vcp: Default::default(),
-            remote: Default::default(),
+            remote: None,
+            peers: None,
+            ddc: std::sync::Arc::new(crate::vcp::NoDdc),
+            vcp_events,
+            vcp_events_rx: Some(vcp_events_rx),
+            readings: Default::default(),
+            read_failures: Default::default(),
+            has_master: false,
+            selection_seen: None,
+            hook_holds: None,
+            loads_in_flight: Default::default(),
+            told_hook_ready: None,
         }
+    }
+
+    /// Reads and writes the monitors' input through `ddc`: the system's DDC/CI in `main`
+    /// ([`SystemDdc`](crate::vcp::SystemDdc)), the tests' recording double elsewhere.
+    pub fn with_ddc(mut self, ddc: std::sync::Arc<dyn crate::vcp::Ddc>) -> Self {
+        self.ddc = ddc;
+        self
+    }
+
+    /// Paints the wallpaper on `desktop`: the session's in `main`
+    /// ([`SystemDesktop`](crate::desktop::SystemDesktop)), a recording double in a test.
+    pub fn with_desktop(mut self, desktop: std::sync::Arc<dyn crate::desktop::Desktop>) -> Self {
+        self.desktop = desktop;
+        self
+    }
+
+    /// Serves the property panel's monitor controls through `service` (`ddcutil`, dxva2).
+    pub fn with_monitor_control(mut self, service: crate::vcp::Service) -> Self {
+        self.vcp = std::sync::Arc::new(tokio::sync::Mutex::new(Some(service)));
+        self
+    }
+
+    /// Offers the multi-PC mode (see [`crate::peers`]).
+    pub fn with_peers(mut self, peers: crate::peers::Service) -> Self {
+        self.peers = Some(peers);
+        self
     }
 
     /// Follows system sleep from `signals` (Linux: `sleep::watch`).
@@ -138,13 +235,15 @@ impl<W: AgentWorld> Agent<W> {
         self.handle(Input::Hook(HookEvent::Suspended));
     }
 
-    /// Serves the frontends' requests coming out of `calls` (see [`api`]).
+    /// Drives the network TV remotes paired in `path` (`samsung-tizen.json`, …).
     pub fn with_remote_config(mut self, path: std::path::PathBuf) -> Self {
-        self.remote =
-            std::sync::Arc::new(tokio::sync::Mutex::new(crate::remote::Service::new(path)));
+        self.remote = Some(std::sync::Arc::new(tokio::sync::Mutex::new(
+            crate::remote::Service::new(path),
+        )));
         self
     }
 
+    /// Serves the frontends' requests coming out of `calls` (see [`api`]).
     pub fn with_api(mut self, calls: UnboundedReceiver<Call>) -> Self {
         self.calls = Some(calls);
         self
@@ -229,10 +328,11 @@ impl<W: AgentWorld> Agent<W> {
                     match self.world.wallpaper_settings(&layout_id) {
                         Err(e) => Err(e),
                         Ok(settings) => {
+                            let desktop = self.desktop.clone();
                             tokio::spawn(async move {
                                 let supported = tokio::time::timeout(
                                     std::time::Duration::from_secs(5),
-                                    crate::desktop::is_supported(),
+                                    desktop.is_supported(),
                                 )
                                 .await
                                 .unwrap_or(false);
@@ -267,6 +367,7 @@ impl<W: AgentWorld> Agent<W> {
                             let generation = self.wallpaper_generation.clone();
                             let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
                             let lock = self.wallpaper_lock.clone();
+                            let desktop = self.desktop.clone();
                             tokio::spawn(async move {
                                 let _guard = lock.lock().await;
                                 let cache = job.images.clone();
@@ -275,7 +376,7 @@ impl<W: AgentWorld> Agent<W> {
                                 let result = async {
                                     let supported = tokio::time::timeout(
                                         std::time::Duration::from_secs(5),
-                                        crate::desktop::is_supported(),
+                                        desktop.is_supported(),
                                     ).await.unwrap_or(false);
                                     if !supported {
                                         return Err("This desktop has no supported wallpaper service.".into());
@@ -286,7 +387,7 @@ impl<W: AgentWorld> Agent<W> {
                                     let applied = if generation.load(Ordering::SeqCst) != expected {
                                         Err("Settings saved, but the displays changed before application.".into())
                                     } else {
-                                        crate::desktop::apply_checked(&screens).await
+                                        desktop.apply(screens).await
                                     };
                                     applied_successfully = applied.is_ok();
                                     Ok(serde_json::json!({
@@ -297,7 +398,7 @@ impl<W: AgentWorld> Agent<W> {
                                 }.await;
                                 client.send(api::answer(id, result));
                                 if applied_successfully {
-                                    crate::wallpaper_cache::cleanup(cache, store).await;
+                                    crate::wallpaper_cache::cleanup(cache, store, desktop).await;
                                 }
                             });
                             return;
@@ -319,8 +420,8 @@ impl<W: AgentWorld> Agent<W> {
                     Err("The display layout changed; reload before using the remote.".into())
                 } else if let Err(error) = self.world.vcp_target(&monitor) {
                     Err(error)
-                } else {
-                    match self.remote.clone().try_lock_owned() {
+                } else if let Some(remote) = self.remote.clone() {
+                    match remote.try_lock_owned() {
                         Err(_) => Err(
                             "A remote command is already running. Try again when it finishes."
                                 .into(),
@@ -335,6 +436,8 @@ impl<W: AgentWorld> Agent<W> {
                             return;
                         }
                     }
+                } else {
+                    Err("This agent drives no network remote.".into())
                 }
             }
             Request::Vcp {
@@ -359,10 +462,15 @@ impl<W: AgentWorld> Agent<W> {
                             ),
                             Ok(mut service) => {
                                 tokio::spawn(async move {
-                                    let result =
-                                        service.execute(target, write).await.and_then(|state| {
-                                            serde_json::to_value(state).map_err(|e| e.to_string())
-                                        });
+                                    let result = match service.as_mut() {
+                                        Some(service) => service.execute(target, write).await,
+                                        None => {
+                                            Err("This agent offers no monitor control.".to_owned())
+                                        }
+                                    }
+                                    .and_then(|state| {
+                                        serde_json::to_value(state).map_err(|e| e.to_string())
+                                    });
                                     client.send(api::answer(id, result));
                                 });
                                 return;
@@ -521,7 +629,7 @@ impl<W: AgentWorld> Agent<W> {
                 self.tell_shortcut();
                 self.tell_binding();
                 self.tell_excluded();
-                self.reload_changed_options();
+                self.reload_changed_zones();
                 saved.map(|()| serde_json::Value::Null)
             }
             Request::SaveWallpaper {
@@ -577,11 +685,390 @@ impl<W: AgentWorld> Agent<W> {
                 }
             }
             Request::SeenProcesses => Ok(serde_json::json!(self.seen.list())),
+            Request::Peers => return self.ask_peers(id, client, PeerRequest::State),
+            Request::SetMultiPc {
+                enabled,
+                port,
+                name,
+            } => {
+                return self.ask_peers(
+                    id,
+                    client,
+                    PeerRequest::Set {
+                        enabled,
+                        port,
+                        name,
+                    },
+                )
+            }
+            Request::PeerConnect { address } => {
+                return self.ask_peers(id, client, PeerRequest::Connect(address))
+            }
+            Request::PeerAccept { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Accept(machine_id))
+            }
+            Request::PeerRefuse { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Refuse(machine_id))
+            }
+            Request::PeerForget { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Forget(machine_id))
+            }
+            Request::PeerWallpapers { machine_id } => {
+                return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
+            }
+            Request::SetActiveSource {
+                layout_id,
+                monitor,
+                source,
+            } => self
+                .world
+                .set_active_source(&layout_id, &monitor, &source)
+                .map(|switch| {
+                    eprintln!("[lbm-agent] {monitor} now shows {source}");
+                    // A panel wired to both machines on two inputs is switched too, away
+                    // from the loop: the answer never waits on a monitor. Without a known
+                    // input value only the routing follows the choice, which is all a
+                    // hardware KVM needs.
+                    if let Some(switch) = switch {
+                        self.switch_input(switch);
+                    }
+                    // The zone of the panel has changed hands: a running engine must
+                    // route it to the machine now shown.
+                    self.reload_changed_zones();
+                    serde_json::Value::Null
+                }),
         };
         client.send(api::answer(id, result));
         if let Some(report) = report {
             self.forward("Probed", &report);
         }
+    }
+
+    /// A multi-PC request. What needs the network is answered from a task of its own,
+    /// as the TV remote's and the VCP's are: the loop never waits on another machine.
+    fn ask_peers(&mut self, id: u64, client: api::Client, request: PeerRequest) {
+        let turning_on = matches!(request, PeerRequest::Set { enabled: true, .. });
+        let Some(peers) = &mut self.peers else {
+            client.send(api::answer(
+                id,
+                Err("this agent does not offer the multi-PC mode".into()),
+            ));
+            return;
+        };
+        match peers.request(request) {
+            Answer::Now(result) => {
+                client.send(api::answer(id, result));
+            }
+            Answer::Later(result) => {
+                tokio::spawn(async move {
+                    client.send(api::answer(id, result.await));
+                });
+            }
+        }
+        // A manager just started has no screens to tell its masters yet.
+        if turning_on {
+            self.tell_peers_the_displays();
+        }
+    }
+
+    /// This machine's screens to the multi-PC manager, while the mode is on: they are
+    /// what a master is told this remote shows. Read again from the system only then,
+    /// so that an agent with the mode off pays nothing for it.
+    fn tell_peers_the_displays(&mut self) {
+        if !self.peers.as_ref().is_some_and(|p| p.enabled()) {
+            return;
+        }
+        let mut displays = self.world.peer_displays();
+        for display in &mut displays {
+            display.input_source = self
+                .world
+                .display_monitor(&display.id)
+                .and_then(|monitor| self.readings.get(&monitor))
+                .copied();
+        }
+        if let Some(peers) = &mut self.peers {
+            peers.local_displays(displays);
+        }
+    }
+
+    /// Reads the input of the panels this machine shows (`input_switch::reads`), away
+    /// from the loop. Asked after a rebuild — a display event — and when a master links;
+    /// never on a timer.
+    fn read_inputs(&mut self) {
+        if !self.peers.as_ref().is_some_and(|p| p.enabled()) {
+            return;
+        }
+        let reads = self.world.input_reads(self.has_master);
+        if reads.is_empty() {
+            if !self.readings.is_empty() {
+                self.readings.clear();
+                self.tell_peers_the_displays();
+            }
+            return;
+        }
+        let rebuild = self.reconciler.rebuild_count();
+        let (ddc, bus, events) = (self.ddc.clone(), self.vcp.clone(), self.vcp_events.clone());
+        tokio::spawn(async move {
+            // One request at a time on the monitors, the property panel's included.
+            let _bus = bus.lock_owned().await;
+            let mut results = Vec::with_capacity(reads.len());
+            for read in reads {
+                let result = ddc.read(read.target.clone(), crate::vcp::INPUT).await;
+                results.push((read, result));
+            }
+            let _ = events.send(VcpEvent::Read { rebuild, results });
+        });
+    }
+
+    /// What the reads found: remembered on the sources shown, and told to the masters.
+    fn inputs_read(&mut self, rebuild: u64, results: Vec<(InputRead, Result<u16, String>)>) {
+        // A newer rebuild has read, or is reading, the panels as they are now.
+        if rebuild != self.reconciler.rebuild_count() {
+            return;
+        }
+        let mut learnt = Vec::new();
+        let mut readings = std::collections::HashMap::new();
+        for (read, result) in results {
+            match result {
+                Ok(value) => {
+                    self.read_failures.remove(&read.monitor);
+                    readings.insert(read.monitor.clone(), value);
+                    learnt.push((read, value));
+                }
+                // A monitor without DDC/CI, behind a KVM, or a machine without ddcutil:
+                // its input stays unknown, which only means it is never switched.
+                Err(error) => {
+                    if self.read_failures.get(&read.monitor) != Some(&error) {
+                        eprintln!(
+                            "[lbm-agent] the input of {} could not be read: {error}",
+                            read.monitor
+                        );
+                        self.read_failures.insert(read.monitor.clone(), error);
+                    }
+                }
+            }
+        }
+        for (read, value) in &learnt {
+            if self.readings.get(&read.monitor) != Some(value) {
+                eprintln!("[lbm-agent] {} shows input {value:#04x}", read.monitor);
+            }
+        }
+        self.world.learn_inputs(&learnt);
+        if readings != self.readings {
+            self.readings = readings;
+            self.tell_peers_the_displays();
+        }
+    }
+
+    /// Switches a panel's input for the user's choice, away from the loop.
+    fn switch_input(&mut self, switch: InputSwitch) {
+        eprintln!(
+            "[lbm-agent] switching {} to input {:#04x}",
+            switch.monitor, switch.value
+        );
+        let (ddc, bus, events) = (self.ddc.clone(), self.vcp.clone(), self.vcp_events.clone());
+        tokio::spawn(async move {
+            let mut service = bus.lock_owned().await;
+            let outcome = input_switch::execute(&*ddc, &switch).await;
+            // Whatever the property panel read of that monitor may be wrong now.
+            if let Some(service) = service.as_mut() {
+                service.forget();
+            }
+            let _ = events.send(VcpEvent::Switched {
+                switch: Box::new(switch),
+                outcome,
+            });
+        });
+    }
+
+    fn input_switched(&mut self, switch: InputSwitch, outcome: Outcome) {
+        let (monitor, value) = (&switch.monitor, switch.value);
+        match outcome {
+            Outcome::AlreadyShown => {
+                eprintln!("[lbm-agent] {monitor} already shows input {value:#04x}")
+            }
+            Outcome::Written => eprintln!("[lbm-agent] {monitor} switched to input {value:#04x}"),
+            Outcome::Ask(ask, why) => {
+                eprintln!(
+                    "[lbm-agent] {monitor} cannot be switched from here ({why}): asking {}",
+                    ask.machine_id
+                );
+                let sent = self
+                    .peers
+                    .as_mut()
+                    .is_some_and(|p| p.select_input(&ask.machine_id, &ask.display, value));
+                if !sent {
+                    self.switch_given_up(&switch, "the multi-PC mode is off");
+                }
+            }
+            Outcome::Failed(why) => self.switch_given_up(&switch, &why),
+        }
+    }
+
+    /// Nobody could switch the panel: said, and a choice that only the switch could
+    /// have made good is given up.
+    fn switch_given_up(&mut self, switch: &InputSwitch, why: &str) {
+        eprintln!(
+            "[lbm-agent] {} could not be switched to input {:#04x}: {why}",
+            switch.monitor, switch.value
+        );
+        if self.world.switch_failed(&switch.monitor, &switch.source) {
+            self.reload_changed_zones();
+        }
+    }
+
+    /// This machine's master asks for one of its monitors to be switched.
+    fn select_input(&mut self, from: String, display: String, value: u16) {
+        let target = match self.world.select_input_target(&display) {
+            Ok(target) => target,
+            Err(error) => {
+                eprintln!("[lbm-agent] {from} asked to switch {display}: {error}");
+                return;
+            }
+        };
+        let (ddc, bus) = (self.ddc.clone(), self.vcp.clone());
+        tokio::spawn(async move {
+            let mut service = bus.lock_owned().await;
+            let result = input_switch::switch_locally(&*ddc, target, value).await;
+            if let Some(service) = service.as_mut() {
+                service.forget();
+            }
+            match result {
+                Ok(true) => eprintln!("[lbm-agent] {display} switched to input {value:#04x}"),
+                Ok(false) => eprintln!("[lbm-agent] {display} already shows input {value:#04x}"),
+                Err(error) => eprintln!(
+                    "[lbm-agent] {display} could not be switched to input {value:#04x}: {error}"
+                ),
+            }
+        });
+    }
+
+    /// What the multi-PC manager reports changed: a machine paired, linked, left, or —
+    /// for a remote of this machine — reported its screens.
+    ///
+    /// The screens of the remotes of this machine are part of its layout: a remote
+    /// linking, leaving or changing its screens is a display change, and goes the way
+    /// of one — the debounce and the settle loop, then the rebuild, the profile of the
+    /// new set of monitors, and the hook handed the result if the user wants it hooked.
+    /// The same path as a local change, so that a link flapping is absorbed as a
+    /// compositor's burst of notifications is.
+    fn peers_changed(&mut self, state: crate::peers::PeersState) {
+        let event = api::peers_event(&state);
+        self.subscribers.retain(|s| s.send(event.clone()));
+        let has_master = state.enabled
+            && state.peers.iter().any(|p| {
+                p.state == PeerState::Paired
+                    && p.role == lbm_net::wire::Role::Master
+                    && p.peer.connected
+            });
+        let master_linked = has_master && !self.has_master;
+        self.has_master = has_master;
+        self.selection_seen = Some((
+            state.selection,
+            state.selected_remote.clone().filter(|_| state.enabled),
+        ));
+        if self.world.set_remote_screens(state.remote_screens()) {
+            eprintln!("[lbm-agent] the remote machines' screens changed");
+            self.handle(Input::DisplayChanged);
+        }
+        self.tell_peers_the_hook_zones();
+        // A master that links needs what selects this machine on its panels, which a
+        // machine without a master does not read — and what its screens show.
+        if master_linked {
+            self.read_inputs();
+            self.read_wallpapers();
+        }
+    }
+
+    /// Whether zones leading to `hosts` may be handed to the hook now: only if they lead to
+    /// no machine but the selected remote, as the agent last heard of it. The layout is
+    /// rebuilt for a new choice only after the display-change debounce; a `Load` of the
+    /// layout built for the previous one (a user's Start, the watchdog) meanwhile would
+    /// put that remote's zones back under a connection relaying to another. The rebuild
+    /// that is on its way sends the right ones.
+    fn zones_fit(&self, hosts: &std::collections::BTreeSet<String>) -> bool {
+        let selected = self
+            .selection_seen
+            .as_ref()
+            .and_then(|(_, selected)| selected.as_ref());
+        hosts.iter().all(|host| Some(host) == selected)
+    }
+
+    /// Tells the multi-PC manager whether the hook's zones are fit for the selected remote
+    /// (`peers::Service::hook_ready`): every zone it holds and every one on its way leads
+    /// to no other machine. Until then the manager keeps no connection to the hook's input
+    /// endpoint, and the borders to the other machines are walls.
+    fn tell_peers_the_hook_zones(&mut self) {
+        let ready = self.selection_seen.as_ref().and_then(|(selection, _)| {
+            let fit = self.hook_holds.as_ref().is_some_and(|h| self.zones_fit(h))
+                && self.loads_in_flight.iter().all(|h| self.zones_fit(h));
+            fit.then_some(*selection)
+        });
+        if self.told_hook_ready == Some(ready) {
+            return;
+        }
+        if let Some(peers) = &mut self.peers {
+            peers.hook_ready(ready);
+            self.told_hook_ready = Some(ready);
+        }
+    }
+
+    /// The zones the hook holds are unknown from now on (a new connection, or none).
+    fn hook_zones_unknown(&mut self) {
+        self.hook_holds = None;
+        self.loads_in_flight.clear();
+        self.tell_peers_the_hook_zones();
+    }
+
+    /// Reads what this machine's screens show and hands it, drawn small, to the masters
+    /// it is a remote of (docs/multi-pc.md, "Wallpapers"). Away from the loop: the
+    /// desktop can take its time and the drawing is work. Asked after a rebuild — a
+    /// display event — and when a master links; never on a timer, so a wallpaper changed
+    /// with no display event reaches the master at the next one.
+    ///
+    /// Only while a master is linked: a machine nobody watches reads nothing.
+    fn read_wallpapers(&mut self) {
+        if !self.has_master {
+            return;
+        }
+        let Some(sink) = self.peers.as_ref().and_then(|p| p.wallpaper_sink()) else {
+            return;
+        };
+        let displays = self.world.peer_displays();
+        let desktop = self.desktop.clone();
+        use std::sync::atomic::Ordering;
+        let generation = self.wallpaper_reads.clone();
+        let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        tokio::spawn(async move {
+            let shown = match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                desktop.shown(),
+            )
+            .await
+            {
+                Ok(Ok(shown)) => shown,
+                Ok(Err(error)) => {
+                    eprintln!("[lbm-agent] multi-PC: the wallpapers cannot be read: {error}");
+                    return;
+                }
+                Err(_) => {
+                    eprintln!("[lbm-agent] multi-PC: the desktop did not say what it shows");
+                    return;
+                }
+            };
+            let drawn = tokio::task::spawn_blocking(move || {
+                crate::peers::wallpapers::thumbnails(&displays, &shown)
+            })
+            .await;
+            // A newer read is under way, or done: this one is about screens that were.
+            if generation.load(Ordering::SeqCst) != expected {
+                return;
+            }
+            match drawn {
+                Ok(wallpapers) => sink.send(wallpapers),
+                Err(error) => eprintln!("[lbm-agent] multi-PC: drawing the wallpapers: {error}"),
+            }
+        });
     }
 
     /// A frontend's connection ended.
@@ -624,6 +1111,7 @@ impl<W: AgentWorld> Agent<W> {
         let generation = self.wallpaper_generation.clone();
         let expected = generation.fetch_add(1, Ordering::SeqCst) + 1;
         let lock = self.wallpaper_lock.clone();
+        let desktop = self.desktop.clone();
         tokio::spawn(async move {
             let _guard = lock.lock().await;
             if generation.load(Ordering::SeqCst) != expected {
@@ -637,8 +1125,8 @@ impl<W: AgentWorld> Agent<W> {
             .await;
             match prepared {
                 Ok(Ok(screens)) if generation.load(Ordering::SeqCst) == expected => {
-                    if crate::desktop::apply(&screens).await {
-                        crate::wallpaper_cache::cleanup(cache, store).await;
+                    if desktop.apply(screens).await.is_ok() {
+                        crate::wallpaper_cache::cleanup(cache, store, desktop).await;
                     }
                 }
                 Ok(Err(error)) => eprintln!("[lbm-agent] wallpaper: {error}"),
@@ -668,13 +1156,14 @@ impl<W: AgentWorld> Agent<W> {
             }
         };
         let lock = self.wallpaper_lock.clone();
+        let desktop = self.desktop.clone();
         tokio::spawn(async move {
             let _pending = pending;
             let _guard = lock.lock().await;
             if generation.load(std::sync::atomic::Ordering::SeqCst) != expected {
                 return;
             }
-            crate::desktop::apply(&screens).await;
+            let _ = desktop.apply(screens).await;
         });
     }
 
@@ -696,10 +1185,11 @@ impl<W: AgentWorld> Agent<W> {
     ///
     /// Sent before any layout, so the first `Run` of a connection is decided against
     /// the user's list and not against an empty one.
-    /// Some options travel inside the layout the hook holds (the touchscreen ones): a
-    /// running engine only gets them with a new Load. Nothing is sent when the zones
-    /// did not change, and a stopped engine picks them up at its next Start.
-    fn reload_changed_options(&mut self) {
+    /// Some options travel inside the layout the hook holds (the touchscreen ones), and
+    /// so does which machine a shared panel shows: a running engine only gets them with
+    /// a new Load. Nothing is sent when the zones did not change, and a stopped engine
+    /// picks them up at its next Start.
+    fn reload_changed_zones(&mut self) {
         if !matches!(
             self.reconciler.engine(),
             EngineState::Running | EngineState::Paused
@@ -797,12 +1287,18 @@ impl<W: AgentWorld> Agent<W> {
         tokio::pin!(shutdown);
         let mut calls = self.calls.take();
         let mut sleep = self.sleep.take();
+        let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
+        let mut vcp_events = self.vcp_events_rx.take();
         loop {
             self.publish();
             if self.quitting {
                 // The Quit must reach the hook before the process goes.
                 let _ = tokio::time::timeout(std::time::Duration::from_secs(2), self.hook.flush())
                     .await;
+                // The other machines are told rather than left to notice the silence.
+                if let Some(peers) = &mut self.peers {
+                    peers.stop().await;
+                }
                 return;
             }
             let input = tokio::select! {
@@ -839,6 +1335,38 @@ impl<W: AgentWorld> Agent<W> {
                     }
                     continue;
                 },
+                notice = async {
+                    match &mut peer_notices {
+                        Some(notices) => notices.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match notice {
+                        Some(Notice::Peers(state)) => self.peers_changed(state),
+                        Some(Notice::SelectInput { from, display, value }) => {
+                            self.select_input(from, display, value)
+                        }
+                        None => peer_notices = None,
+                    }
+                    continue;
+                },
+                event = async {
+                    match &mut vcp_events {
+                        Some(events) => events.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match event {
+                        Some(VcpEvent::Read { rebuild, results }) => {
+                            self.inputs_read(rebuild, results)
+                        }
+                        Some(VcpEvent::Switched { switch, outcome }) => {
+                            self.input_switched(*switch, outcome)
+                        }
+                        None => vcp_events = None,
+                    }
+                    continue;
+                },
                 signal = signals.recv() => match signal {
                     Some(HookSignal::Connected) => {
                         eprintln!("[lbm-agent] hook connected");
@@ -849,6 +1377,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.bound = None;
                         self.excluded = None;
+                        self.hook_zones_unknown();
                         if let Some(launcher) = &mut self.launcher {
                             launcher.on_connected();
                         }
@@ -864,6 +1393,7 @@ impl<W: AgentWorld> Agent<W> {
                         // for the whole of this connection and not only once it runs.
                         self.tell_binding();
                         self.tell_excluded();
+                        self.hook_greeted_with(&layout);
                         Input::Hook(HookEvent::Greeted(layout))
                     }
                     Some(HookSignal::Message(message)) => {
@@ -878,6 +1408,19 @@ impl<W: AgentWorld> Agent<W> {
                             {
                                 self.shortcut_unavailable = None;
                             }
+                            // The answer to the oldest Load on its way; one this agent did
+                            // not send leaves the hook holding what it cannot name.
+                            Event::Loaded { .. } => {
+                                self.hook_holds = self.loads_in_flight.pop_front();
+                                self.tell_peers_the_hook_zones();
+                            }
+                            // A document the hook could not read: it keeps what it held.
+                            Event::LoadFailed => {
+                                if self.loads_in_flight.pop_front().is_none() {
+                                    self.hook_holds = None;
+                                }
+                                self.tell_peers_the_hook_zones();
+                            }
                             _ => {}
                         }
                         self.forward(message.name(), &message.payload());
@@ -890,6 +1433,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.hook_connected = false;
                         self.shortcut_unavailable = None;
                         self.on_the_wire = None;
+                        self.hook_zones_unknown();
                         Input::Hook(HookEvent::Dead)
                     }
                     Some(HookSignal::Unreachable) => {
@@ -905,6 +1449,22 @@ impl<W: AgentWorld> Agent<W> {
             };
             self.handle(input);
         }
+    }
+
+    /// What a hook that just greeted this agent holds: nothing, the zones this agent would
+    /// hand it now (the same document, by its fingerprint), or a layout it cannot name —
+    /// one a previous life of the agent sent, perhaps with a remote's zones that are not
+    /// the selected one's. That one is unknown, and fit for nothing until replaced.
+    fn hook_greeted_with(&mut self, layout: &str) {
+        self.hook_holds = if layout.is_empty() {
+            Some(Default::default())
+        } else {
+            self.world
+                .zones()
+                .filter(|(zones, _)| protocol::fingerprint(zones) == layout)
+                .map(|(zones, _)| zone_hosts(&zones))
+        };
+        self.tell_peers_the_hook_zones();
     }
 
     /// No hook answers: launch one, if this agent launches hooks.
@@ -934,10 +1494,36 @@ impl<W: AgentWorld> Agent<W> {
 
     /// One input through the reconciler, then its effects.
     pub fn handle(&mut self, input: Input) {
+        let rebuilds = self.reconciler.rebuild_count();
         let effects = self.reconciler.handle(input, &mut self.world);
         for effect in effects {
             self.apply(effect);
         }
+        // Every rebuild is this machine's display change, decided by the reconciler:
+        // the masters it is a remote of hear of it from here, with no watcher of its own.
+        if self.reconciler.rebuild_count() != rebuilds {
+            self.tell_peers_the_displays();
+            // The panels' inputs as they are after this display change; what is read
+            // only ever reaches the layout and the masters, never a monitor.
+            self.read_inputs();
+            self.read_wallpapers();
+        }
+    }
+
+    /// Whether `zones` may be handed to the hook ([`Agent::zones_fit`]), and if so,
+    /// counted as on their way until the hook answers.
+    fn loading(&mut self, zones: &str) -> bool {
+        let hosts = zone_hosts(zones);
+        if !self.zones_fit(&hosts) {
+            eprintln!(
+                "[lbm-agent] the layout still leads to a machine no longer selected: \
+                 the rebuild on its way is sent instead"
+            );
+            return false;
+        }
+        self.loads_in_flight.push_back(hosts);
+        self.tell_peers_the_hook_zones();
+        true
     }
 
     fn apply(&mut self, effect: Effect) {
@@ -952,6 +1538,9 @@ impl<W: AgentWorld> Agent<W> {
                     if !foreign && self.world.prepare_for_engine() {
                         eprintln!("[lbm-agent] outputs moved for the engine: waiting for them");
                         let _ = self.inputs.send(Input::DisplayChanged);
+                        return;
+                    }
+                    if !self.loading(&zones) {
                         return;
                     }
                     let load = Command::Load {
@@ -982,6 +1571,9 @@ impl<W: AgentWorld> Agent<W> {
                 if self.reconciler.engine() == EngineState::Running
                     && self.on_the_wire.as_ref() == Some(&zones)
                 {
+                    return;
+                }
+                if !self.loading(&zones) {
                     return;
                 }
                 eprintln!(
@@ -1041,6 +1633,20 @@ impl<W: AgentWorld> Agent<W> {
             }
         }
     }
+}
+
+/// The other machines the zones of a document lead to (their `Host`), read as the hook
+/// reads them. A document that does not read leads nowhere: the hook refuses it.
+fn zone_hosts(zones: &str) -> std::collections::BTreeSet<String> {
+    lbm_zones::ZonesLayout::from_xml(zones)
+        .map(|layout| {
+            layout
+                .all_zones
+                .iter()
+                .filter_map(|&zone| layout.arena[zone].host.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// What the hook said about the shortcut, if it is about the one wanted now: a verdict on

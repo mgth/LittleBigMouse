@@ -18,7 +18,7 @@ pub mod zone_link;
 // `crate::geometry`.
 use lbm_geom as geometry;
 
-pub use layout::{Algorithm, ZonesLayout};
+pub use layout::{Algorithm, HostPoint, ZonesLayout};
 pub use zone::Zone;
 pub use zone_link::ZoneLink;
 

@@ -131,6 +131,100 @@ pub fn bezel_fill(visuals: &egui::Visuals, selected: bool) -> egui::Color32 {
     }
 }
 
+/// The hue a remote monitor's bezel leans towards. Blue-violet because every other hue
+/// on the map already means something: green is the selection and a passage, red a
+/// wall, amber a warning.
+const REMOTE_HUE: egui::Color32 = egui::Color32::from_rgb(112, 132, 232);
+
+/// How the bezel is shifted towards blue: red and green taken out, blue put in, in
+/// amounts that leave its brightness about where the theme put it.
+///
+/// A shift and not a blend towards [`REMOTE_HUE`]: a blend pulls a dark bezel up
+/// towards a mid blue and a light one down, which costs the name printed on it its
+/// contrast on both themes — measured, a third of it on egui's dark theme.
+const REMOTE_SHIFT: (i16, i16, i16) = (-14, -8, 40);
+
+/// The bezel of a monitor showing another machine (docs/multi-pc.md): the local fill,
+/// shifted towards blue. Derived from the theme's own fill rather than fixed, so it is
+/// a dark blue-grey on a dark theme and a pale one on a light theme, and the name's
+/// text colour reads on it as well as on a local bezel.
+pub fn remote_bezel_fill(visuals: &egui::Visuals, selected: bool) -> egui::Color32 {
+    let base = bezel_fill(visuals, selected);
+    let shift = |v: u8, by: i16| (i16::from(v) + by).clamp(0, 255) as u8;
+    // A fill already at full blue (a light theme's selection) cannot take more: what
+    // it cannot take is taken out of red and green instead, half each.
+    let short = (REMOTE_SHIFT.2 - (255 - i16::from(base.b()))).max(0) / 2;
+    egui::Color32::from_rgba_unmultiplied(
+        shift(base.r(), REMOTE_SHIFT.0 - short),
+        shift(base.g(), REMOTE_SHIFT.1 - short),
+        shift(base.b(), REMOTE_SHIFT.2),
+        base.a(),
+    )
+}
+
+/// Which machine a monitor is showing, when that is worth saying: in the multi-PC mode,
+/// for a monitor showing a remote machine, or a panel two machines know.
+///
+/// Apart from [`Look`] on purpose: a local monitor has no host, and every frame drawn
+/// before the multi-PC mode existed is drawn exactly as it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Host<'a> {
+    /// The machine's name, as the badge prints it.
+    pub machine: &'a str,
+    /// The monitor is showing another machine: its bezel is tinted.
+    pub remote: bool,
+    /// The panel is known on more than one machine, and could show another.
+    pub shared: bool,
+}
+
+impl Host<'_> {
+    /// What the badge says, and what it is called in the accessibility tree.
+    pub fn badge(&self) -> String {
+        if self.shared {
+            format!("{} \u{b7} shared", self.machine)
+        } else {
+            self.machine.to_owned()
+        }
+    }
+}
+
+/// The badge: a small pill at the top of the lit part, centred — the corners are where
+/// the Info and Location modes write their rows. Over the picture rather
+/// than on the plastic, because the top bezel already carries the name and a thin one
+/// has no room for a second line; and at the app's own size, like the details, because
+/// a machine name scaled down with the map would be unreadable on the desktops that
+/// have most machines.
+fn badge(ui: &mut egui::Ui, content: egui::Rect, host: &Host) {
+    let text = host.badge();
+    let inside = content.shrink(4.0);
+    if inside.width() < 16.0 || inside.height() < 10.0 {
+        return;
+    }
+    let colour = if host.remote {
+        REMOTE_HUE
+    } else {
+        crate::theme::MUTED
+    };
+    let galley = ui.painter().layout_no_wrap(
+        text.clone(),
+        egui::TextStyle::Small.resolve(ui.style()),
+        ui.visuals().text_color(),
+    );
+    let padding = egui::vec2(6.0, 2.0);
+    let size = (galley.size() + padding * 2.0).min(inside.size());
+    let pill = egui::Rect::from_center_size(
+        egui::pos2(inside.center().x, inside.top() + size.y / 2.0),
+        size,
+    );
+    let painter = ui
+        .painter()
+        .with_clip_rect(inside.intersect(ui.clip_rect()));
+    painter.rect_filled(pill, size.y / 2.0, colour.gamma_multiply(0.85));
+    painter.galley(pill.min + padding, galley, ui.visuals().text_color());
+    let response = ui.allocate_rect(pill, egui::Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
+}
+
 /// What is written on a frame, as opposed to where the frame is.
 ///
 /// A struct rather than more arguments, because the frame is going to gain the wallpaper
@@ -326,12 +420,33 @@ pub fn monitor(ui: &mut egui::Ui, drawn: &Drawn, look: &Look) -> egui::Rect {
     monitor_with_panorama(ui, drawn, look, None)
 }
 
+/// [`monitor`], saying which machine it is showing: a tinted bezel for another
+/// machine, and a badge with the machine's name. Without a host it is [`monitor`].
+pub fn monitor_on(
+    ui: &mut egui::Ui,
+    drawn: &Drawn,
+    look: &Look,
+    host: Option<&Host>,
+) -> egui::Rect {
+    monitor_drawn(ui, drawn, look, None, host)
+}
+
 /// A shared image behind every panel, clipped before the glass reflection is drawn.
 pub fn monitor_with_panorama(
     ui: &mut egui::Ui,
     drawn: &Drawn,
     look: &Look,
     panorama: Option<(&egui::TextureHandle, egui::Rect)>,
+) -> egui::Rect {
+    monitor_drawn(ui, drawn, look, panorama, None)
+}
+
+fn monitor_drawn(
+    ui: &mut egui::Ui,
+    drawn: &Drawn,
+    look: &Look,
+    panorama: Option<(&egui::TextureHandle, egui::Rect)>,
+    host: Option<&Host>,
 ) -> egui::Rect {
     let Look {
         name,
@@ -341,7 +456,10 @@ pub fn monitor_with_panorama(
         details,
         probe,
     } = *look;
-    let fill = bezel_fill(ui.visuals(), selected);
+    let fill = match host {
+        Some(host) if host.remote => remote_bezel_fill(ui.visuals(), selected),
+        _ => bezel_fill(ui.visuals(), selected),
+    };
     let painter = ui.painter();
     // The bezel is what is between the two rectangles; drawing the outside first and
     // the lit part over it is the whole of it.
@@ -437,6 +555,9 @@ pub fn monitor_with_panorama(
     }
     if let Some(probe) = probe {
         probe.draw(ui, drawn.content);
+    }
+    if let Some(host) = host {
+        badge(ui, drawn.content, host);
     }
 
     if let Some(logo) = logo {

@@ -107,6 +107,8 @@ fn edid(physical_width: f64, physical_height: f64) -> WindowsEdid {
 fn edid_model(physical_width: f64, physical_height: f64, model: &str) -> WindowsEdid {
     WindowsEdid {
         manufacturer_code: Some("SAM".to_owned()),
+        product_code: Some("1234".to_owned()),
+        serial: None,
         model: Some(model.to_owned()),
         serial_number: Some("S/N: S1".to_owned()),
         video_interface: Some("Dvi".to_owned()),

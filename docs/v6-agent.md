@@ -155,6 +155,33 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   l'utilisateur seuls, aucun client distant ni d'une autre session ; étiqueté intégrité
   moyenne quand l'agent est élevé, sans quoi un frontend non élevé ne pourrait pas écrire.
   Les tests de l'API passent sur les deux plateformes (socket, tube).
+- Mode multi-PC (`peers`, lot 5a de `docs/multi-pc.md`, qui en décrit le détail) :
+  `multi-pc.json` dans le répertoire de configuration (`Enabled` faux par défaut, `Port`,
+  `Name`). Éteint, rien n'écoute et rien ne tourne : le service n'est qu'un fichier de
+  réglages et le magasin d'appairage, lus à la demande. Allumé, un gestionnaire (tâche à
+  part, pilotée par canaux : la boucle n'attend jamais le réseau) tient l'identité,
+  `peers.json`, l'écoute, les appairages en attente de l'utilisateur, les liens et les
+  rappels (1 s doublé jusqu'à 30 s). Distant : ses écrans partent à l'ouverture du lien puis
+  à chaque reconstruction de la mise en page (le chemin de changement d'écran du
+  réconciliateur, pas de surveillance en plus), les lots d'entrée vont au point de
+  terminaison d'entrée du hook, fermé à la fin du lien. Maître : derniers `Displays` gardés
+  par distant, lots du hook relayés au distant lié (un seul à la fois pour l'instant). API
+  additive (capacité `MultiPc`, protocole inchangé) : `Peers`, `SetMultiPc`, `PeerConnect`,
+  `PeerAccept`, `PeerRefuse`, `PeerForget`, `SetActiveSource`, événement `Peers`.
+- Écrans distants dans la mise en page (lot 5b) : `Agent::peers_changed` passe au monde les
+  écrans des machines dont celle-ci est le maître (appairées, liées, rôle `Remote`, ayant
+  envoyé leurs `Displays`, triées par empreinte) ; un changement de cet ensemble est un
+  `DisplayChanged` comme un autre (anti-rebond, stabilisation, reconstruction, profil,
+  `Load`+`Run` si voulu). La signature d'écrans y ajoute une empreinte des écrans distants,
+  puisqu'un distant ne partageant que des dalles déjà connues ne change pas l'identifiant.
+  La reconstruction fusionne (`lbm_display::peer::merge_peer`) entre les écrans locaux et
+  le calcul de l'identifiant, avant le chargement du profil. `Desktop` reste le bureau local
+  (une dalle partagée montrant l'autre machine en fait toujours partie) ; fond d'écran et
+  VCP ignorent les écrans distants. Un document dont les sources ne nomment pas les mêmes
+  machines que la mise en page courante est refusé même à identifiant égal.
+  `SetActiveSource { LayoutId, Monitor, Source }` choisit la machine qu'affiche une dalle
+  partagée (source attachée seulement), enregistre, et renvoie les zones à un moteur en
+  marche ; l'écriture VCP 0x60 viendra au lot 8 (point d'accroche marqué dans `runtime.rs`).
 - Élévation au démarrage sous Windows (`elevation`, C# `WindowsElevation`, #512/#400) :
   avant même le verrou d'instance, si `StartElevated` est demandé (store, ou registre 5.x
   tant que l'import n'a pas eu lieu) **et** que l'utilisateur peut élever (jeton filtré
@@ -226,6 +253,26 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   le plugin C# lui envoie ses réglages au lieu d'écrire et d'appliquer lui-même (les deux
   côtés balayaient mutuellement leurs tranches). Sous Windows, `IDesktopWallpaper` n'est
   toujours pas porté.
+
+- **Ce qu'un test ne peut pas toucher.** Le bureau, le bus DDC/CI, le panneau VCP et les
+  télécommandes réseau sont des capacités qu'on donne à l'`Agent`, comme `with_api` ou
+  `with_launcher` : sans elles, il a `desktop::NoDesktop` (rien n'est peint, l'éditeur dit
+  « non pris en charge »), `vcp::NoDdc`, aucun panneau et aucune télécommande. Seul `main`
+  installe `SystemDesktop`, `SystemDdc`, `with_monitor_control` et `with_remote_config` ; un
+  test qui veut voir ce qui aurait été peint passe un `desktop::FakeDesktop`. C'est arrivé :
+  un test de l'API a repeint le premier écran du développeur (Plasma apparie par position,
+  et la sortie de repli d'un test est en 0,0 comme tout écran principal) avec une image de
+  son répertoire temporaire. De même, `ApplyTopology` sous Linux passe par le backend de la
+  découverte du monde et non par un `Backend::detect()` refait sur place : un monde de test
+  (sorties décrites ou de repli) n'a aucun compositeur à déplacer.
+
+- **Fonds d'écran d'un poste distant** (mode multi-PC, `docs/multi-pc.md`, « Wallpapers ») :
+  le `Desktop` sait aussi dire ce que chaque sortie affiche (`shown`, en lecture seule, le
+  lecteur partagé avec la fenêtre : `lbm_wallpaper::desktop`). Un agent distant le lit, tant
+  qu'un maître est relié, à la liaison et après chaque reconstruction — jamais sur minuterie
+  —, en dessine une vignette par écran (`peers::wallpapers`, 384 px de large, 96 Kio par
+  écran, 512 Kio par message) et l'envoie (`Wallpapers`). Le maître garde la dernière, la
+  signale par `WallpaperRevision` dans l'état `Peers` et la sert par `PeerWallpapers`.
 
 ## Suite
 

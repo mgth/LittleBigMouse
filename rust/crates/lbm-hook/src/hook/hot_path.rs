@@ -136,19 +136,35 @@ pub fn route_move<E: CursorEnv>(
     env: &mut E,
     point: Point<i32>,
 ) -> Routed {
+    route_move_then(engine, env, point, |_, _, _| ()).0
+}
+
+/// [`route_move`], then `then` under the same lock, with the engine, the cursor and
+/// whether the engine handled the move — `None` when the lock was contended and
+/// nothing ran. For the evdev master, which has to know which machine the routed
+/// position is on (`ZonesLayout::host_point`) and must not take the lock twice per
+/// report to find out.
+#[inline]
+pub fn route_move_then<E: CursorEnv, R>(
+    engine: &Mutex<MouseEngine>,
+    env: &mut E,
+    point: Point<i32>,
+    then: impl FnOnce(&MouseEngine, &E, bool) -> R,
+) -> (Routed, Option<R>) {
     let mut guard = match engine.try_lock() {
         Ok(g) => g,
         Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => return Routed::Contended,
+        Err(std::sync::TryLockError::WouldBlock) => return (Routed::Contended, None),
     };
 
     let mut e = MouseEventArg::new(point);
     guard.on_mouse_move(env, &mut e);
+    let after = then(&guard, env, e.handled);
     if e.handled {
         CROSSINGS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Routed::Crossed
+        (Routed::Crossed, Some(after))
     } else {
-        Routed::Passed
+        (Routed::Passed, Some(after))
     }
 }
 
@@ -293,6 +309,31 @@ mod tests {
         assert_eq!(routed, Routed::Passed);
         assert!(!routed.handled());
         assert_eq!(env.pos, before, "an interior move must not warp the cursor");
+    }
+
+    /// What every backend that warps a real cursor gets from a layout with another
+    /// machine's screen in it (docs/multi-pc.md): that screen's pixels do not exist
+    /// here, so its border is the wall it would be without it. Only the evdev master
+    /// ever puts such zones in play (`ZonesLayout::set_remote_enterable`).
+    #[test]
+    fn another_machines_zone_is_never_entered_by_a_backend_that_warps_a_real_cursor() {
+        let xml = FIXTURE.replace(
+            r#"<Zone Id="1" Name="Right">"#,
+            r#"<Zone Id="1" Name="Right" Host="abcd" HostX="0" HostY="0">"#,
+        );
+        let mut e = MouseEngine::new();
+        e.load(ZonesLayout::from_xml(&xml).unwrap());
+        let engine = Mutex::new(e);
+        let mut env = FakeCursor::new();
+        route_move(&engine, &mut env, Point::new(-100, 1000));
+        let before = env.pos;
+        let routed = route_move(&engine, &mut env, Point::new(10, 1000));
+        assert_eq!(
+            routed,
+            Routed::Passed,
+            "crossed into another machine's zone"
+        );
+        assert_eq!(env.pos, before, "the cursor was warped");
     }
 
     #[test]

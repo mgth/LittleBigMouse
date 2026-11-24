@@ -1,4 +1,6 @@
-use super::{Entry, Rect, Repeat, Style};
+use super::{Entry, Repeat};
+use crate::Style;
+use lbm_layout::geo::Rect;
 use std::{path::PathBuf, process::Command};
 
 // No writes: read the live containment for each active screen, preserving its group.
@@ -73,7 +75,7 @@ fn parse(text: &str) -> Result<Vec<Entry>, String> {
         .collect())
 }
 fn color(text: &str) -> [u8; 4] {
-    if let Ok(color) = lbm_wallpaper::render::color(text) {
+    if let Ok(color) = crate::render::color(text) {
         return color;
     }
     let channels: Option<Vec<u8>> = text.split(',').map(|s| s.trim().parse().ok()).collect();

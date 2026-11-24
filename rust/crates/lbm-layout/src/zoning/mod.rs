@@ -72,6 +72,14 @@ pub struct Zone {
     pub top_links: Vec<ZoneLink>,
     pub right_links: Vec<ZoneLink>,
     pub bottom_links: Vec<ZoneLink>,
+    /// The machine whose screen this is, `None` for this machine's (docs/multi-pc.md).
+    pub host: Option<String>,
+    /// What [`Zone::pixels_bounds`] was translated by to put that machine's desktop
+    /// in the engine's pixel space ([`Layout::host_pixel_offsets`]); zero for this
+    /// machine. The hook subtracts it before emitting to the host.
+    ///
+    /// [`Layout::host_pixel_offsets`]: crate::model::Layout::host_pixel_offsets
+    pub host_offset: (i32, i32),
 }
 
 impl Zone {
@@ -98,6 +106,8 @@ impl Zone {
             top_links: Vec::new(),
             right_links: Vec::new(),
             bottom_links: Vec::new(),
+            host: None,
+            host_offset: (0, 0),
         }
     }
 }

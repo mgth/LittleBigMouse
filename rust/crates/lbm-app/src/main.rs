@@ -144,6 +144,13 @@ struct App {
     detected: lbm_app::properties::Detected,
     /// The connected agent announced `IntrinsicSize`: a size may cross the detected shape.
     agent_keeps_intrinsic_size: bool,
+    /// The multi-PC mode: what the agent says about the other machines, and the remote
+    /// screens the layout is built with.
+    machines: lbm_app::machines::Controller,
+    /// A shared panel's switch, while the agent has not answered it.
+    switching: Option<lbm_app::machines::Switch>,
+    /// What became of the last switch, when it is worth saying.
+    switch_note: Option<String>,
     /// The model sizes of each document in flight, by request id: what the agent holds
     /// once it answers it. An old agent compares the next document with those.
     held_pending: HashMap<u64, lbm_app::properties::Held>,
@@ -196,6 +203,10 @@ struct App {
     textures: HashMap<String, egui::TextureHandle>,
     desktop_wallpaper: lbm_app::desktop_wallpaper::Watcher,
     desktop_textures: HashMap<String, egui::TextureHandle>,
+    /// The remotes' wallpapers, as their agents drew them (multi-PC).
+    remote_wallpapers: lbm_app::remote_wallpapers::RemoteWallpapers,
+    /// Their textures, uploaded once per change, by `remote_wallpapers::key_of`.
+    remote_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
     wallpapers: HashMap<String, egui::TextureHandle>,
     wallpaper: lbm_app::wallpaper_editor::Editor,
@@ -247,13 +258,26 @@ fn icons_root() -> Option<PathBuf> {
 }
 
 /// The displays now, as the agent's `Discovery` finds them — the same two calls, without
-/// the agent.
+/// the agent — and the remote machines' screens the agent reported (`remotes`, empty
+/// outside the multi-PC mode).
 ///
 /// The layout comes back whole rather than reduced to its screens, because the window
 /// keeps it: a drag writes a position into it and [`screens_of`] reads the result.
-fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detected)> {
+///
+/// **Two orders, and the second is the agent's.** Without remotes this is what it has
+/// always been: `populate` with no loader, then the store over the placed result. With
+/// remotes it is [`lbm_app::machines::build`] — this machine's monitors, the remotes
+/// merged, the id, the store, then the placement — because the layout id must be the
+/// one the agent computes over the same monitors, and a remote monitor never placed is
+/// put to the right of the others only once the store has said where the rest are.
+fn detect(
+    remotes: &[lbm_app::machines::Remote],
+) -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detected)> {
     let mut layout = Layout::new(LayoutOptions::default());
     let mut reports = HashMap::new();
+    // The model sizes before the store is applied, taken inside the remote path, where
+    // the store is applied before the placement.
+    let mut detected = None;
 
     #[cfg(windows)]
     let built = {
@@ -267,13 +291,33 @@ fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detecte
                         )),
                     );
                 }
-                lbm_layout::windows::populate(
-                    &mut layout,
-                    lbm_display::windows::thread_dpi_awareness(),
-                    &tree.layout_input(),
-                    |_| Ok::<(), std::convert::Infallible>(()),
-                )
-                .is_ok()
+                let monitors = tree.layout_input();
+                if remotes.is_empty() {
+                    lbm_layout::windows::populate(
+                        &mut layout,
+                        lbm_display::windows::thread_dpi_awareness(),
+                        &monitors,
+                        |_| Ok::<(), std::convert::Infallible>(()),
+                    )
+                    .is_ok()
+                } else {
+                    // `windows::populate`'s first half, as it does it.
+                    lbm_app::machines::build(
+                        &mut layout,
+                        |layout| {
+                            layout.dpi_awareness = lbm_display::windows::thread_dpi_awareness();
+                            for monitor in monitors.iter().filter(|m| !m.is_specialized) {
+                                lbm_layout::windows::add_or_update_monitor_device(layout, monitor);
+                            }
+                        },
+                        remotes,
+                        |layout| {
+                            detected = Some(lbm_app::properties::Detected::of(layout));
+                            read_stored(layout);
+                        },
+                    );
+                    true
+                }
             }
             Err(error) => {
                 eprintln!("[lbm-app] display discovery failed: {error}");
@@ -301,19 +345,50 @@ fn detect() -> Option<(Box<Layout>, DisplayReports, lbm_app::properties::Detecte
                 lbm_app::properties::report(&report),
             );
         }
-        // No loader: nothing is read from the store and nothing is written to it. The
-        // window shows the screens as they are, not as a saved profile arranges them.
-        lbm_layout::linux::populate(&mut layout, &outputs, |_| {
-            Ok::<(), std::convert::Infallible>(())
-        })
-        .is_ok()
+        if remotes.is_empty() {
+            // No loader: nothing is read from the store and nothing is written to it.
+            // The window shows the screens as they are, not as a saved profile arranges
+            // them.
+            lbm_layout::linux::populate(&mut layout, &outputs, |_| {
+                Ok::<(), std::convert::Infallible>(())
+            })
+            .is_ok()
+        } else {
+            // `linux::populate`'s first half, fallback output included.
+            lbm_app::machines::build(
+                &mut layout,
+                |layout| {
+                    if outputs.is_empty() {
+                        lbm_layout::linux::add_monitor(
+                            layout,
+                            &lbm_layout::linux::LinuxMonitor::fallback(),
+                        );
+                    }
+                    for output in &outputs {
+                        lbm_layout::linux::add_monitor(layout, output);
+                    }
+                },
+                remotes,
+                |layout| {
+                    detected = Some(lbm_app::properties::Detected::of(layout));
+                    read_stored(layout);
+                },
+            );
+            true
+        }
     };
 
     if !built {
         return None;
     }
-    let detected = lbm_app::properties::Detected::of(&layout);
-    read_stored(&mut layout);
+    let detected = match detected {
+        Some(detected) => detected,
+        None => {
+            let detected = lbm_app::properties::Detected::of(&layout);
+            read_stored(&mut layout);
+            detected
+        }
+    };
     let detected = detected.with_loaded(&layout);
     Some((Box::new(layout), reports, detected))
 }
@@ -502,6 +577,9 @@ impl App {
             reports: HashMap::new(),
             detected: Default::default(),
             agent_keeps_intrinsic_size: false,
+            machines: Default::default(),
+            switching: None,
+            switch_note: None,
             held_pending: HashMap::new(),
             property_error: None,
             resistance: lbm_ui::resistance::Editor::default(),
@@ -538,6 +616,8 @@ impl App {
             textures: HashMap::new(),
             desktop_wallpaper: Default::default(),
             desktop_textures: HashMap::new(),
+            remote_wallpapers: Default::default(),
+            remote_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
             wallpaper_preview_requested: false,
@@ -595,6 +675,13 @@ impl App {
                 });
                 self.send("SeenProcesses", serde_json::json!({}));
                 self.send_pending_options();
+                // The `Peers` event is a change; what there is now has to be asked.
+                self.machines.connected(&capabilities);
+                self.remote_wallpapers.connected(&capabilities);
+                self.switching = None;
+                if self.machines.offered {
+                    self.machines_request("Peers", serde_json::json!({}));
+                }
             }
             Event::Message(message) => self.agent_said(message),
             Event::Disconnected(why) => {
@@ -612,6 +699,9 @@ impl App {
                 self.probe = lbm_app::probe::Probe::default();
                 self.requests = None;
                 self.agent_keeps_intrinsic_size = false;
+                self.machines.disconnected();
+                self.remote_wallpapers.disconnected();
+                self.switching = None;
                 self.held_pending.clear();
                 self.state = lbm_ui::State::default();
                 self.previewed = None;
@@ -637,8 +727,10 @@ impl App {
         self.detecting = Some(generation);
         let found = self.found.clone();
         let waker = ctx.clone();
+        // The remotes as they are now: a change after this read invalidates it again.
+        let remotes = self.machines.remotes.clone();
         std::thread::spawn(move || {
-            let Some((layout, reports, detected)) = detect() else {
+            let Some((layout, reports, detected)) = detect(&remotes) else {
                 let _ = found.send(Found::DetectionFailed { generation });
                 waker.request_repaint();
                 return;
@@ -895,6 +987,162 @@ impl App {
         id
     }
 
+    /// A multi-PC request. Straight onto the writer, like the VCP and remote ones: its
+    /// answer belongs to the Machines page, never to a Save or a Start the bar waits on.
+    fn machines_request(&mut self, method: &'static str, extra: serde_json::Value) {
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        let id = self.next_id;
+        self.next_id += 1;
+        self.machines.sent(id, method);
+        if requests.send((id, method, extra)).is_err() {
+            self.machines
+                .answered(id, &Err("the agent stopped listening".into()));
+        }
+    }
+
+    /// What the user did on the Machines page.
+    fn machines_did(&mut self, did: lbm_ui::machines::Did) {
+        let (method, extra) = self.machines.request(&did);
+        self.machines_request(method, extra);
+    }
+
+    /// The agent's multi-PC state changed. When the remotes on the map are not the same
+    /// any more, the displays are read again — the same path a hotplug takes, so an
+    /// unsaved edit is kept until the user chooses to reload.
+    fn peers_changed(&mut self, state: &serde_json::Value) {
+        if self.machines.heard(state) {
+            self.refresh.invalidate();
+        }
+        let on_the_map: Vec<String> = self
+            .machines
+            .remotes
+            .iter()
+            .map(|r| r.machine_id.clone())
+            .collect();
+        self.remote_wallpapers.heard(state, &on_the_map);
+    }
+
+    /// The machine the selected monitor is showing, when it is not this one.
+    fn selected_remote(&self) -> Option<String> {
+        lbm_app::machines::remote_machine(self.layout.as_deref()?, self.selected.as_deref()?)
+    }
+
+    /// Makes a shared panel show `source`.
+    ///
+    /// Asked of the agent when there is one, since the panel is the agent's to switch
+    /// (and, later, to switch the monitor's input with). With none, or with one that
+    /// does not know the request, the switch is an edit of this window's: the document's
+    /// `ActiveSource` carries it on Save.
+    fn switch_source(&mut self, monitor: &str, source: &str) {
+        if self.switching.is_some() {
+            return;
+        }
+        let Some(layout) = self.layout.as_deref() else {
+            return;
+        };
+        let switch = lbm_app::machines::Switch {
+            id: self.next_id,
+            layout: layout.id.clone(),
+            monitor: monitor.to_owned(),
+            source: source.to_owned(),
+        };
+        self.switch_note = None;
+        let Some(requests) = &self.requests else {
+            self.switch_locally(&switch, false);
+            return;
+        };
+        self.next_id += 1;
+        if requests
+            .send((switch.id, "SetActiveSource", switch.request()))
+            .is_err()
+        {
+            self.switch_locally(&switch, false);
+            return;
+        }
+        self.switching = Some(switch);
+    }
+
+    /// The agent's answer to a switch.
+    fn switched(&mut self, result: &Result<serde_json::Value, String>) {
+        let Some(switch) = self.switching.take() else {
+            return;
+        };
+        match lbm_app::machines::switched(result) {
+            lbm_app::machines::Switched::Taken => self.switch_locally(&switch, true),
+            lbm_app::machines::Switched::Unknown => {
+                self.switch_locally(&switch, false);
+                self.switch_note =
+                    Some("This agent cannot switch screens yet: Save to keep the choice.".into());
+            }
+            lbm_app::machines::Switched::Refused(why) => {
+                self.switch_note = Some(format!("Switch refused: {why}"));
+            }
+        }
+    }
+
+    /// The switch in this window's layout, so the map shows the source now shown. `taken`
+    /// says the agent holds it already: the reference follows, so Save stays as it was.
+    fn switch_locally(&mut self, switch: &lbm_app::machines::Switch, taken: bool) {
+        let Some(layout) = self.layout.as_mut() else {
+            return;
+        };
+        // A layout rebuilt in between is not the one the switch was about.
+        if layout.id != switch.layout {
+            return;
+        }
+        layout.set_active_source(&switch.monitor, Some(switch.source.clone()));
+        if taken {
+            if let Some(reference) = self.saved.as_mut() {
+                reference
+                    .also(|l| l.set_active_source(&switch.monitor, Some(switch.source.clone())));
+            }
+        }
+        self.screens = screens_of(layout, self.mode);
+        self.probe.want(None, std::time::Instant::now());
+        self.outputs.panel.confirm = None;
+    }
+
+    /// The switch of the selected monitor, when two machines know its panel.
+    fn source_switch(&mut self, ui: &mut egui::Ui) {
+        let Some(layout) = self.layout.as_deref() else {
+            return;
+        };
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        if !lbm_app::machines::is_shared(layout, &id) {
+            return;
+        }
+        let sources = lbm_app::machines::sources(layout, &id, self.machines.here());
+        let active = layout.monitor(&id).and_then(|m| m.active_source.clone());
+        let enabled = !layout.is_virtual()
+            && !self.refresh.pending()
+            && !(self.outputs.changing() || self.topology_pending.is_some())
+            && self.drag.is_none()
+            && self.switching.is_none();
+        let chosen = lbm_ui::machines::source_switch(ui, &sources, active.as_deref(), enabled);
+        if let Some(note) = &self.switch_note {
+            ui.small(note);
+        }
+        ui.separator();
+        if let Some(source) = chosen {
+            self.switch_source(&id, &source);
+        }
+    }
+
+    /// The badge of every monitor in `shown`, in its order: `None` for a local one.
+    fn tags(&self, shown: &[MapMonitor<'_>]) -> Vec<Option<lbm_app::machines::Tag>> {
+        let Some(layout) = self.layout.as_deref() else {
+            return Vec::new();
+        };
+        shown
+            .iter()
+            .map(|m| lbm_app::machines::tag(layout, m.id, self.machines.here()))
+            .collect()
+    }
+
     fn restore_replacement_draft(&mut self, layout: &mut Layout) {
         let Some(draft) = self.replacement_draft.take() else {
             return;
@@ -1064,7 +1312,24 @@ impl App {
     /// The deciding is [`lbm_app::conversation`]'s, which has no window and no socket and
     /// can therefore be tested; what is left here is the two things that need both.
     fn agent_said(&mut self, message: Message) {
+        if let Message::Peers(state) = &message {
+            self.peers_changed(state);
+            return;
+        }
         if let Message::Answer { id, result } = &message {
+            if self.remote_wallpapers.answered(*id, result) {
+                return;
+            }
+            if let Some(changed) = self.machines.answered(*id, result) {
+                if changed {
+                    self.refresh.invalidate();
+                }
+                return;
+            }
+            if self.switching.as_ref().is_some_and(|s| s.id == *id) {
+                self.switched(result);
+                return;
+            }
             // A document the agent took is what it now compares the next one with.
             if let Some(held) = self.held_pending.remove(id) {
                 if result.is_ok() {
@@ -1269,9 +1534,12 @@ impl App {
                 name: &s.name,
                 mm_outside: s.mm_outside,
                 mm_content: s.mm_content,
+                // The editor's preview is of this desktop; a screen showing a remote
+                // shows that remote's wallpaper, every other one this desktop's.
                 wallpaper: (self.mode == lbm_ui::mode::Mode::Wallpaper)
                     .then(|| self.wallpapers.get(&s.id))
                     .flatten()
+                    .or_else(|| self.remote_texture(&s.id))
                     .or_else(|| self.desktop_textures.get(&s.id)),
                 logo: s
                     .logo
@@ -1402,9 +1670,54 @@ impl App {
                 .answered(id, &Err("The agent stopped listening.".into()));
         }
     }
+    /// The remote wallpaper of the screen `monitor` shows, when it shows a remote.
+    fn remote_texture(&self, monitor: &str) -> Option<&egui::TextureHandle> {
+        let key = lbm_app::remote_wallpapers::key_of(self.layout.as_deref()?, monitor)?;
+        self.remote_textures.get(&key)
+    }
+
+    /// Asks for the remotes' wallpapers the agent holds and this window does not, and
+    /// uploads them once they are in. Nothing on a timer: the agent's `Peers` event says
+    /// when there is something new.
+    fn sync_remote_wallpapers(&mut self, ctx: &egui::Context) {
+        if let Some(requests) = &self.requests {
+            for (machine, extra) in self.remote_wallpapers.wanted() {
+                let id = self.next_id;
+                self.next_id += 1;
+                self.remote_wallpapers.sent(id, machine);
+                if requests.send((id, "PeerWallpapers", extra)).is_err() {
+                    self.remote_wallpapers
+                        .answered(id, &Err("the agent stopped listening".into()));
+                }
+            }
+        }
+        if !self.remote_wallpapers.take_changed() {
+            return;
+        }
+        self.remote_textures = self
+            .remote_wallpapers
+            .pictures()
+            .map(|(key, pixels)| {
+                let size = [pixels.width() as usize, pixels.height() as usize];
+                let texture = ctx.load_texture(
+                    format!("remote-wallpaper:{key}"),
+                    egui::ColorImage::from_rgba_unmultiplied(size, pixels),
+                    egui::TextureOptions::LINEAR,
+                );
+                (key, texture)
+            })
+            .collect();
+        ctx.request_repaint();
+    }
+
     fn sync_wallpaper(&mut self, ctx: &egui::Context) {
         if let Some(layout) = &self.layout {
-            if let Some(pictures) = self.desktop_wallpaper.poll(layout) {
+            // This desktop's pictures, for this machine's screens: a remote screen's
+            // pixel rectangle would cut a piece of the local wallpaper out for it.
+            if let Some(pictures) = self
+                .desktop_wallpaper
+                .poll(&lbm_app::machines::local_view(layout))
+            {
                 self.desktop_textures.clear();
                 for (id, pixels) in pictures {
                     let size = [pixels.width() as usize, pixels.height() as usize];
@@ -1474,7 +1787,13 @@ impl App {
                     let screens = if settings.per_screen.is_empty() {
                         Vec::new()
                     } else {
-                        lbm_wallpaper::render::paint(&layout, &settings, true)?
+                        // This desktop's screens: the remote ones have wallpapers of
+                        // their own, set on their machine.
+                        lbm_wallpaper::render::paint(
+                            &lbm_app::machines::local_view(&layout),
+                            &settings,
+                            true,
+                        )?
                     };
                     Ok(WallpaperPreview {
                         screens,
@@ -1626,7 +1945,13 @@ impl App {
                 self.wallpaper_request(true);
             }
             let mut action = None;
-            let editable = !self.wallpaper.busy();
+            // The wallpaper is this desktop's: a screen showing another machine has its
+            // own, set over there.
+            let remote = self.selected_remote();
+            if let Some(machine) = &remote {
+                lbm_ui::machines::on_another_machine(ui, machine);
+            }
+            let editable = !self.wallpaper.busy() && remote.is_none();
             if let Some(settings) = &mut self.wallpaper.draft {
                 let before = settings.clone();
                 ui.add_enabled_ui(editable, |ui| {
@@ -1798,6 +2123,7 @@ impl App {
                 ui.separator();
             }
             self.screen_selector(ui);
+            self.source_switch(ui);
             self.screen_overlay_controls(ui);
             egui::ScrollArea::vertical()
                 .id_salt(("monitor-properties-scroll", self.mode.id()))
@@ -2002,9 +2328,19 @@ impl App {
     fn system_display_properties(&mut self, ui: &mut egui::Ui) {
         // Linux connectors and Windows target interface paths are both carried here;
         // monitor IDs and display names are not output identities.
+        // A monitor showing another machine is no output of this one: nothing in this
+        // machine's list stands for it, whatever its connector is called over there.
+        let remote = self.selected_remote();
+        if let Some(machine) = &remote {
+            ui.add_space(12.0);
+            ui.separator();
+            lbm_ui::machines::on_another_machine(ui, machine);
+        }
         let selected = self.layout.as_deref().and_then(|layout| {
             let monitor = layout.monitor(self.selected.as_deref()?)?;
-            let source = layout.source(monitor.active_source.as_deref()?)?;
+            let source = layout
+                .source(monitor.active_source.as_deref()?)
+                .filter(|s| s.source.is_local())?;
             source
                 .source
                 .interface_path
@@ -2070,9 +2406,13 @@ impl App {
     fn screen_overlay_controls(&mut self, ui: &mut egui::Ui) {
         use lbm_overlay::Mode;
         let (mode, label, selected) = match self.mode {
-            lbm_ui::mode::Mode::Location => {
-                (Mode::Rulers, "Rulers on screens", self.selected.is_some())
-            }
+            // Rulers are drawn on the selected screen, which must be one of this
+            // machine's to be drawn on at all.
+            lbm_ui::mode::Mode::Location => (
+                Mode::Rulers,
+                "Rulers on screens",
+                self.selected.is_some() && self.selected_remote().is_none(),
+            ),
             lbm_ui::mode::Mode::Resistance => (Mode::Resistance, "Resistance on screens", true),
             _ => return,
         };
@@ -2174,7 +2514,7 @@ impl App {
                 break;
             };
             let valid = lbm_overlay::scene::from_layout(
-                layout,
+                &lbm_app::machines::local_view(layout),
                 self.screen_overlay_mode,
                 self.selected.as_deref(),
             )
@@ -2276,8 +2616,10 @@ impl App {
             .resistance
             .guide()
             .and_then(lbm_app::resistance::overlay_reference);
+        // Bands go on this machine's screens only: a remote one's pixels are another
+        // desktop's, and drawn here they would land on top of a local screen.
         let result = lbm_overlay::scene::with_reference(
-            &drawn,
+            &lbm_app::machines::local_view(&drawn),
             self.screen_overlay_mode,
             self.selected.as_deref(),
             reference,
@@ -2313,7 +2655,11 @@ impl App {
         }
         let layout = self.layout.as_ref().filter(|l| !l.is_virtual())?;
         let monitor = layout.monitor(self.selected.as_deref()?)?;
-        let source = layout.source(monitor.active_source.as_deref()?)?;
+        // A remote source's connector names an output on the other machine — often the
+        // same name as one of this machine's, which a pattern would then cover.
+        let source = layout
+            .source(monitor.active_source.as_deref()?)
+            .filter(|s| s.source.is_local())?;
         source
             .source
             .interface_path
@@ -2341,6 +2687,7 @@ impl App {
                 .active_source
                 .as_deref()
                 .and_then(|id| layout.source(id))
+                .filter(|s| s.source.is_local())
             else {
                 continue;
             };
@@ -2426,13 +2773,20 @@ impl App {
     }
 
     fn vcp_properties(&mut self, ui: &mut egui::Ui) {
-        let key = self.wallpaper_key().and_then(|key| {
-            Some(lbm_app::vcp::Key {
-                layout: key.layout,
-                revision: key.revision,
-                monitor: self.selected.clone()?,
-            })
-        });
+        // DDC and a network remote are reached from the machine the monitor is plugged
+        // into, and this agent's `Vcp` and `Remote` look a monitor up among its own: a
+        // remote one is never selected for them.
+        let remote = self.selected_remote();
+        let key = self
+            .wallpaper_key()
+            .filter(|_| remote.is_none())
+            .and_then(|key| {
+                Some(lbm_app::vcp::Key {
+                    layout: key.layout,
+                    revision: key.revision,
+                    monitor: self.selected.clone()?,
+                })
+            });
         self.remote.select(key.clone());
         self.vcp.select(key);
         if self.requests.is_none() {
@@ -2449,6 +2803,10 @@ impl App {
         }
         if self.layout.as_ref().is_none_or(|l| l.is_virtual()) {
             ui.label("Select a local layout to control physical monitors.");
+            return;
+        }
+        if let Some(machine) = remote {
+            lbm_ui::machines::on_another_machine(ui, &machine);
             return;
         }
         if self.remote.needs_read() {
@@ -2753,6 +3111,7 @@ impl eframe::App for App {
 
         self.read_displays(&ctx, false);
         self.sync_wallpaper(&ctx);
+        self.sync_remote_wallpapers(&ctx);
         self.screen_overlay_input();
         if self.refresh.pending() && !self.dirty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
@@ -2964,7 +3323,10 @@ impl eframe::App for App {
                                             .find(|screen| screen.id == m.id)
                                             .and_then(|screen| screen.active_source.as_deref())
                                             .and_then(|id| l.source(id))
-                                            .is_some_and(|s| s.source.attached_to_desktop)
+                                            .is_some_and(|s| {
+                                                // The panorama spans this desktop.
+                                                s.source.attached_to_desktop && s.source.is_local()
+                                            })
                                     })
                                 })
                                 .cloned()
@@ -3012,9 +3374,15 @@ impl eframe::App for App {
                             });
                         }
 
-                        let mut gesture = map::draw_movable(
+                        let tags = self.tags(&shown);
+                        let hosts: Vec<_> = tags
+                            .iter()
+                            .map(|t| t.as_ref().map(lbm_app::machines::Tag::host))
+                            .collect();
+                        let mut gesture = map::draw_hosted(
                             ui,
                             &shown,
+                            &hosts,
                             &fit,
                             self.selected.as_deref(),
                             self.mode == lbm_ui::mode::Mode::Location,
@@ -3056,7 +3424,12 @@ impl eframe::App for App {
                         (owned(gesture), held.map(|(_, total, _)| total))
                     }
                     View::List => {
-                        list::draw(ui, at, &monitors, self.selected.as_deref());
+                        let tags = self.tags(&monitors);
+                        let hosts: Vec<_> = tags
+                            .iter()
+                            .map(|t| t.as_ref().map(lbm_app::machines::Tag::host))
+                            .collect();
+                        list::draw_hosted(ui, at, &monitors, &hosts, self.selected.as_deref());
                         let mut picked = None;
                         let placements = monitors
                             .iter()
@@ -3104,13 +3477,28 @@ impl eframe::App for App {
         let mut settings_open = self.settings_open;
         let mut settings_page = self.settings_page;
         let escape_closes = self.recording != lbm_ui::shortcut::Recording::Yes;
-        lbm_ui::options::drawer(
+        let mut machines_did = None;
+        lbm_ui::options::drawer_among(
             &ctx,
             settings_bounds,
             &mut settings_open,
             &mut settings_page,
+            lbm_ui::options::Page::offered(self.machines.offered),
             escape_closes,
             |ui, page| {
+                if page == lbm_ui::options::Page::Machines {
+                    // Not a layout setting: it does not wait for displays, and a reload
+                    // pending is not a reason to keep a machine from being accepted.
+                    let busy = self.machines.busy();
+                    machines_did = lbm_ui::machines::panel(
+                        ui,
+                        self.machines.state.as_ref(),
+                        &mut self.machines.panel,
+                        busy,
+                        self.machines.error.as_deref(),
+                    );
+                    return;
+                }
                 if self.refresh.pending()
                     || (self.outputs.changing() || self.topology_pending.is_some())
                 {
@@ -3160,6 +3548,9 @@ impl eframe::App for App {
         }
         self.settings_open = settings_open;
         self.settings_page = settings_page;
+        if let Some(did) = machines_did {
+            self.machines_did(did);
+        }
         for (id, edit) in inline_edits {
             if let Some(layout) = self.layout.as_mut() {
                 match lbm_app::properties::apply(
@@ -4312,5 +4703,666 @@ mod lifecycle_tests {
         assert!(app.wallpaper.stale);
         assert_eq!(app.wallpaper.draft.as_ref().unwrap().span_image_path, None);
         assert!(!app.wallpaper_preview_requested);
+    }
+}
+
+/// The multi-PC mode in the window (docs/multi-pc.md, lot 7): what the window asks, what
+/// it shows of another machine's monitors, and what it keeps away from them.
+#[cfg(test)]
+mod machines_tests {
+    use super::*;
+    use lbm_layout::remote::{merge_remote, RemoteMonitor};
+    use serde_json::json;
+
+    const LAPTOP: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+    /// This machine: a Dell on DP-1 at the origin.
+    fn desk() -> lbm_layout::linux::LinuxMonitor {
+        lbm_layout::linux::LinuxMonitor {
+            connector_name: "DP-1".into(),
+            width_mm: 597.0,
+            height_mm: 336.0,
+            edid: Some(lbm_layout::linux::LinuxEdid {
+                manufacturer_code: Some("DEL".into()),
+                product_code: Some("4065".into()),
+                serial: Some("00000000".into()),
+                serial_number: Some("ABC123".into()),
+                model: Some("DELL U2723QE".into()),
+                physical_width: 597.0,
+                physical_height: 336.0,
+                video_interface: Some("DisplayPort".into()),
+            }),
+            ..lbm_layout::linux::LinuxMonitor::fallback()
+        }
+    }
+
+    fn laptop_display(connector: &str, key: Option<String>, x: i32) -> RemoteMonitor {
+        RemoteMonitor {
+            id: connector.into(),
+            connector: connector.into(),
+            name: connector.into(),
+            pnp_code: key
+                .as_ref()
+                .map(|k| k.split('_').next().unwrap().to_owned()),
+            panel_key: key,
+            x,
+            width: 1920,
+            height: 1080,
+            scale: 1.0,
+            attached: true,
+            width_mm: 302.0,
+            height_mm: 188.0,
+            ..RemoteMonitor::default()
+        }
+    }
+
+    /// The desk's layout with the laptop merged in, in the agent's order. `shared`: the
+    /// laptop also has the Dell, on its HDMI port.
+    fn desk_and_laptop(shared: bool) -> Layout {
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::add_monitor(&mut layout, &desk());
+        let key = layout.monitors()[0].panel_key.clone();
+        assert!(key.is_some(), "the fixture's Dell has a panel key");
+        let mut displays = vec![laptop_display("eDP-1", None, -1920)];
+        if shared {
+            displays.push(laptop_display("HDMI-1", key, 0));
+        }
+        merge_remote(&mut layout, LAPTOP, "laptop", &displays);
+        layout.id = layout.compute_id();
+        layout.set_locations_from_system_configuration(false);
+        layout.anchor_on_primary();
+        layout
+    }
+
+    fn panel_of(layout: &Layout) -> String {
+        layout
+            .monitors()
+            .iter()
+            .find(|m| lbm_app::machines::remote_machine(layout, &m.id).is_some())
+            .map(|m| m.id.clone())
+            .expect("a monitor showing the laptop")
+    }
+
+    fn dell_of(layout: &Layout) -> String {
+        layout
+            .monitors()
+            .iter()
+            .find(|m| m.panel_key.as_deref().is_some_and(|k| k.starts_with("DEL")))
+            .map(|m| m.id.clone())
+            .unwrap()
+    }
+
+    /// An app holding `layout`, connected, the agent's stamp on that layout.
+    fn app_with(
+        layout: Layout,
+    ) -> (
+        App,
+        tokio::sync::mpsc::UnboundedReceiver<(u64, &'static str, serde_json::Value)>,
+    ) {
+        let mut app = App::with_config(egui::Context::default(), None);
+        let (requests, incoming) = tokio::sync::mpsc::unbounded_channel();
+        app.requests = Some(requests);
+        app.agent.layout = Some(lbm_app::refresh::Stamp::from_snapshot(
+            &json!({"LayoutId": layout.id, "LayoutRevision": 1}),
+        ));
+        app.refresh
+            .observe(app.agent.layout.clone().unwrap(), false, false);
+        let generation = app.refresh.begin(false).unwrap();
+        assert!(app.refresh.complete(generation, &layout.id));
+        app.saved = Some(lbm_app::saved::Reference::of(&layout));
+        app.screens = screens_of(&layout, app.mode);
+        app.layout = Some(Box::new(layout));
+        (app, incoming)
+    }
+
+    fn methods(
+        incoming: &mut tokio::sync::mpsc::UnboundedReceiver<(u64, &'static str, serde_json::Value)>,
+    ) -> Vec<(u64, &'static str, serde_json::Value)> {
+        std::iter::from_fn(|| incoming.try_recv().ok()).collect()
+    }
+
+    /// The properties panel, drawn once: its text, and every labelled node of its
+    /// accessibility tree with whether it is disabled.
+    fn properties(app: &mut App) -> (String, Vec<(String, bool)>) {
+        let ctx = egui::Context::default();
+        lbm_ui::theme::install(&ctx);
+        ctx.enable_accesskit();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1100., 2400.),
+                )),
+                ..Default::default()
+            },
+            |ui| app.properties(ui),
+        );
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let all: HashMap<_, _> = output
+            .platform_output
+            .accesskit_update
+            .map(|update| update.nodes.into_iter().collect())
+            .unwrap_or_default();
+        // A field's name is often a label beside it (`labelled_by`), as a screen reader
+        // reads it, rather than a label of its own.
+        let name = |node: &egui::accesskit::Node| {
+            node.label().map(str::to_owned).or_else(|| {
+                let by = all.get(node.labelled_by().first()?)?;
+                by.label().or(by.value()).map(str::to_owned)
+            })
+        };
+        let nodes = all
+            .values()
+            .filter_map(|node| Some((name(node)?, node.is_disabled())))
+            .collect();
+        (text, nodes)
+    }
+
+    fn disabled(nodes: &[(String, bool)], label: &str) -> bool {
+        nodes
+            .iter()
+            .filter(|(l, _)| l == label)
+            .map(|(_, disabled)| *disabled)
+            .reduce(|a, b| a && b)
+            .unwrap_or_else(|| panic!("no {label:?} in {nodes:?}"))
+    }
+
+    #[test]
+    fn the_machines_page_is_offered_only_by_an_agent_that_announces_the_mode() {
+        for (capabilities, offered) in [
+            (vec!["IntrinsicSize".to_owned()], false),
+            (vec!["IntrinsicSize".to_owned(), "MultiPc".to_owned()], true),
+        ] {
+            let mut app = App::with_config(egui::Context::default(), None);
+            let (requests, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+            app.session_event(lbm_app::session::Event::Connected {
+                requests,
+                snapshot: json!({"LayoutId": "A", "LayoutRevision": 1}),
+                capabilities,
+            });
+            let asked: Vec<&str> = methods(&mut incoming).into_iter().map(|r| r.1).collect();
+            assert_eq!(asked.contains(&"Peers"), offered, "{asked:?}");
+            assert_eq!(
+                lbm_ui::options::Page::offered(app.machines.offered)
+                    .contains(&lbm_ui::options::Page::Machines),
+                offered
+            );
+            app.session_event(lbm_app::session::Event::Disconnected("gone".into()));
+            assert!(!app.machines.offered, "the page goes with the agent");
+        }
+    }
+
+    #[test]
+    fn accepting_from_the_page_sends_peer_accept_and_its_answer_settles_nothing_else() {
+        let (mut app, mut incoming) = app_with(desk_and_laptop(false));
+        app.machines_did(lbm_ui::machines::Did::Accept(LAPTOP.into()));
+        let sent = methods(&mut incoming);
+        assert_eq!(sent.len(), 1);
+        let (id, method, extra) = &sent[0];
+        assert_eq!(*method, "PeerAccept");
+        assert_eq!(extra["MachineId"], LAPTOP);
+        assert!(app.machines.busy());
+        app.state.waiting = true;
+        app.agent_said(Message::Answer {
+            id: *id,
+            result: Ok(serde_json::Value::Null),
+        });
+        assert!(!app.machines.busy());
+        assert!(
+            app.state.waiting,
+            "a pairing answer never settles a Save or a Start"
+        );
+    }
+
+    #[test]
+    fn a_peers_event_reads_the_displays_again_only_when_the_remotes_change() {
+        let (mut app, _incoming) = app_with(desk_and_laptop(false));
+        let state = |peers: serde_json::Value| {
+            json!({"Enabled": true, "Port": 24817, "Name": "desk", "MachineId": "0f",
+                   "ListenAddress": null, "Error": null, "Peers": peers})
+        };
+        let connected = state(json!([{"MachineId": LAPTOP, "Name": "laptop",
+            "Address": "10.0.0.2:24817", "Connected": true, "Role": "Remote",
+            "State": "Paired", "Displays": [{"Id": "eDP-1", "X": 0, "Y": 0,
+            "Width": 1920, "Height": 1080, "Attached": true}]}]));
+        app.agent_said(Message::Peers(connected.clone()));
+        assert!(
+            app.refresh.pending(),
+            "a remote appeared: the map is read again"
+        );
+        assert_eq!(app.machines.remotes.len(), 1);
+
+        let generation = app.refresh.begin(false).unwrap();
+        let id = app.layout.as_ref().unwrap().id.clone();
+        assert!(app.refresh.complete(generation, &id));
+        app.agent_said(Message::Peers(connected));
+        assert!(!app.refresh.pending(), "nothing on the map changed");
+
+        // A machine waiting to be accepted puts nothing on the map.
+        app.agent_said(Message::Peers(state(json!([
+            {"MachineId": LAPTOP, "Name": "laptop", "Connected": true, "Role": "Remote",
+             "State": "Paired", "Displays": [{"Id": "eDP-1", "X": 0, "Y": 0,
+             "Width": 1920, "Height": 1080, "Attached": true}]},
+            {"MachineId": "ee", "Name": "stranger", "Connected": true, "Role": "Remote",
+             "State": "Pending", "Displays": []}
+        ]))));
+        assert!(!app.refresh.pending());
+    }
+
+    /// The `Peers` state of a desk with the laptop linked, its wallpapers at `revision`.
+    fn laptop_linked(revision: u64) -> serde_json::Value {
+        json!({"Enabled": true, "Port": 24817, "Name": "desk", "MachineId": "0f",
+               "ListenAddress": null, "Error": null, "SelectedRemote": LAPTOP, "Peers": [
+            {"MachineId": LAPTOP, "Name": "laptop", "Address": "10.0.0.2:24817",
+             "Connected": true, "Role": "Remote", "State": "Paired",
+             "WallpaperRevision": revision, "Displays": [
+                {"Id": "eDP-1", "X": -1920, "Y": 0, "Width": 1920, "Height": 1080,
+                 "Attached": true}]}]})
+    }
+
+    /// What each screen of the map is drawn over, by monitor id: the texture's id.
+    fn backdrops(app: &App) -> Vec<(String, Option<egui::TextureId>)> {
+        let logos = HashMap::new();
+        app.monitors(&logos)
+            .iter()
+            .map(|m| (m.id.to_owned(), m.wallpaper.map(|t| t.id())))
+            .collect()
+    }
+
+    /// The agent answers the one `PeerWallpapers` the window sent: the laptop's eDP-1 in
+    /// red, its HDMI-1 (the Dell, when shared) in green.
+    fn answer_wallpapers(
+        app: &mut App,
+        ctx: &egui::Context,
+        incoming: &mut tokio::sync::mpsc::UnboundedReceiver<(u64, &'static str, serde_json::Value)>,
+    ) {
+        app.sync_remote_wallpapers(ctx);
+        let asked: Vec<_> = methods(incoming)
+            .into_iter()
+            .filter(|(_, method, _)| *method == "PeerWallpapers")
+            .collect();
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        assert_eq!(asked[0].2, json!({ "MachineId": LAPTOP }));
+        app.agent_said(Message::Answer {
+            id: asked[0].0,
+            result: Ok(json!({ "MachineId": LAPTOP, "Revision": 1, "Wallpapers": [
+                { "Display": "eDP-1", "Color": "#FF0000" },
+                { "Display": "HDMI-1", "Color": "#00FF00" },
+            ]})),
+        });
+        app.sync_remote_wallpapers(ctx);
+        app.sync_remote_wallpapers(ctx);
+        assert!(methods(incoming).is_empty(), "asked once per revision");
+    }
+
+    #[test]
+    fn a_remote_screen_shows_its_machines_wallpaper_and_a_shared_panel_the_one_it_shows() {
+        let layout = desk_and_laptop(true);
+        let (laptop, dell) = (panel_of(&layout), dell_of(&layout));
+        let (mut app, mut incoming) = app_with(layout);
+        let ctx = egui::Context::default();
+        let capabilities = ["MultiPc".to_owned(), "PeerWallpapers".to_owned()];
+        app.machines.connected(&capabilities);
+        app.remote_wallpapers.connected(&capabilities);
+        // This desktop's picture of the Dell, as the watcher reads it.
+        let here = ctx.load_texture(
+            "desktop",
+            egui::ColorImage::filled([2, 2], egui::Color32::BLUE),
+            Default::default(),
+        );
+        app.desktop_textures.insert(dell.clone(), here.clone());
+        // Showing this machine: the Dell is local whichever way the merge left it.
+        let local_source = |app: &App| {
+            let layout = app.layout.as_deref().unwrap();
+            layout
+                .monitor(&dell)
+                .unwrap()
+                .sources
+                .iter()
+                .find(|s| layout.source(s).is_some_and(|s| s.source.is_local()))
+                .cloned()
+                .unwrap()
+        };
+        let source = local_source(&app);
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(source));
+
+        app.agent_said(Message::Peers(laptop_linked(1)));
+        answer_wallpapers(&mut app, &ctx, &mut incoming);
+        let drawn: HashMap<_, _> = backdrops(&app).into_iter().collect();
+        let red = app.remote_textures[&format!("{LAPTOP}/eDP-1")].id();
+        let green = app.remote_textures[&format!("{LAPTOP}/HDMI-1")].id();
+        assert_eq!(drawn[&laptop], Some(red), "the laptop's own screen");
+        assert_eq!(drawn[&dell], Some(here.id()), "the Dell shows this machine");
+
+        // The Dell switched to the laptop: the laptop's wallpaper on it, and back.
+        let remote_source = {
+            let layout = app.layout.as_deref().unwrap();
+            layout
+                .monitor(&dell)
+                .unwrap()
+                .sources
+                .iter()
+                .find(|s| layout.source(s).is_some_and(|s| !s.source.is_local()))
+                .cloned()
+                .unwrap()
+        };
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(remote_source));
+        assert_eq!(
+            backdrops(&app).into_iter().collect::<HashMap<_, _>>()[&dell],
+            Some(green)
+        );
+        let source = local_source(&app);
+        app.layout
+            .as_mut()
+            .unwrap()
+            .set_active_source(&dell, Some(source));
+        assert_eq!(
+            backdrops(&app).into_iter().collect::<HashMap<_, _>>()[&dell],
+            Some(here.id())
+        );
+    }
+
+    #[test]
+    fn a_local_only_layout_is_drawn_as_before_whatever_the_remotes_send() {
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::add_monitor(&mut layout, &desk());
+        layout.id = layout.compute_id();
+        let dell = layout.monitors()[0].id.clone();
+        let (mut app, mut incoming) = app_with(layout);
+        let ctx = egui::Context::default();
+        let capabilities = ["MultiPc".to_owned(), "PeerWallpapers".to_owned()];
+        app.machines.connected(&capabilities);
+        app.remote_wallpapers.connected(&capabilities);
+        let here = ctx.load_texture(
+            "desktop",
+            egui::ColorImage::filled([2, 2], egui::Color32::BLUE),
+            Default::default(),
+        );
+        app.desktop_textures.insert(dell.clone(), here.clone());
+        let before = backdrops(&app);
+        assert_eq!(before, [(dell, Some(here.id()))]);
+
+        // The laptop links and sends its pictures before this window has rebuilt its map
+        // with it: nothing of the laptop's lands on this machine's screen.
+        app.agent_said(Message::Peers(laptop_linked(1)));
+        answer_wallpapers(&mut app, &ctx, &mut incoming);
+        assert_eq!(app.remote_textures.len(), 2);
+        assert_eq!(backdrops(&app), before);
+    }
+
+    #[test]
+    fn a_remote_monitor_carries_its_machine_and_keeps_local_only_controls_away() {
+        let layout = desk_and_laptop(false);
+        let panel = panel_of(&layout);
+        let dell = dell_of(&layout);
+        let (mut app, mut incoming) = app_with(layout);
+
+        // On the map: a badge for the laptop's screen, none for the desk's.
+        let logos = HashMap::new();
+        let monitors = app.monitors(&logos);
+        let tags = app.tags(&monitors);
+        for (monitor, tag) in monitors.iter().zip(&tags) {
+            if monitor.id == panel {
+                let tag = tag.as_ref().expect("the remote screen has a badge");
+                assert_eq!(tag.machine, "laptop");
+                assert!(tag.remote && !tag.shared);
+            } else {
+                assert_eq!(*tag, None, "a local screen is drawn as it always was");
+            }
+        }
+
+        // VCP: neither DDC nor the network remote is asked about another machine's
+        // monitor.
+        app.mode = lbm_ui::mode::Mode::Vcp;
+        app.selected = Some(panel.clone());
+        let (text, _) = properties(&mut app);
+        assert!(text.contains("This screen is showing laptop"), "{text}");
+        let asked: Vec<&str> = methods(&mut incoming).into_iter().map(|r| r.1).collect();
+        assert!(
+            !asked.iter().any(|m| matches!(*m, "Vcp" | "Remote")),
+            "{asked:?}"
+        );
+        // Test patterns cover this machine's outputs only.
+        assert_eq!(app.test_pattern_target(), None);
+        let targets: Vec<String> = app
+            .test_pattern_screens()
+            .into_iter()
+            .map(|t| t.connector)
+            .collect();
+        assert_eq!(targets, ["DP-1"]);
+
+        // Location: the place stays editable, the rulers are for this machine's screens.
+        app.mode = lbm_ui::mode::Mode::Location;
+        let (text, nodes) = properties(&mut app);
+        assert!(
+            !disabled(&nodes, "X position"),
+            "a remote screen is placed here"
+        );
+        if lbm_overlay::SUPPORTED {
+            assert!(disabled(&nodes, "Rulers on screens"));
+        }
+        assert!(text.contains("This screen is showing laptop"), "{text}");
+        assert_eq!(
+            app.outputs.panel.selected, None,
+            "no local output stands for it"
+        );
+
+        // Size: the physical size and the borders stay editable too.
+        app.mode = lbm_ui::mode::Mode::Size;
+        let (_, nodes) = properties(&mut app);
+        assert!(!disabled(&nodes, "Panel width"));
+        assert!(!disabled(&nodes, "Left bezel"));
+
+        // The same controls on the desk's own screen, for comparison.
+        app.mode = lbm_ui::mode::Mode::Location;
+        app.selected = Some(dell);
+        let (_, nodes) = properties(&mut app);
+        if lbm_overlay::SUPPORTED {
+            assert!(!disabled(&nodes, "Rulers on screens"));
+        }
+        assert_eq!(app.outputs.panel.selected.as_deref(), Some("DP-1"));
+
+        // What the overlays and the desktop thumbnails walk: this machine's screens.
+        let layout = app.layout.as_ref().unwrap();
+        let local = lbm_app::machines::local_view(layout);
+        let attached: Vec<&str> = local
+            .sources()
+            .filter(|s| s.source.attached_to_desktop)
+            .map(|s| s.source.id.as_str())
+            .collect();
+        assert_eq!(attached, [app.selected.as_deref().unwrap()]);
+    }
+
+    #[test]
+    fn a_remote_monitor_is_dragged_and_placed_in_millimetres_like_a_local_one() {
+        let layout = desk_and_laptop(false);
+        let panel = panel_of(&layout);
+        let (mut app, _incoming) = app_with(layout);
+        app.mode = lbm_ui::mode::Mode::Location;
+        let before = app
+            .layout
+            .as_ref()
+            .unwrap()
+            .monitor(&panel)
+            .unwrap()
+            .location();
+        let ctx = egui::Context::default();
+        app.acted_on_the_map(
+            Some(Did::Dragged {
+                id: panel.clone(),
+                by: egui::vec2(10., 10.),
+            }),
+            None,
+            &ctx,
+        );
+        app.acted_on_the_map(
+            Some(Did::Dropped { id: panel.clone() }),
+            Some((0.0, -400.0)),
+            &ctx,
+        );
+        let after = app
+            .layout
+            .as_ref()
+            .unwrap()
+            .monitor(&panel)
+            .unwrap()
+            .location();
+        assert_ne!(before, after, "the drop moved it");
+        assert!(app.dirty(), "and Save carries it");
+        let (method, extra) = lbm_app::settings::save_layout(app.layout.as_ref().unwrap());
+        assert_eq!(method, "SaveLayout");
+        assert!(
+            extra.to_string().contains(&panel),
+            "the remote monitor is in the document"
+        );
+    }
+
+    #[test]
+    fn switching_a_shared_panel_asks_the_agent_and_the_map_follows() {
+        let layout = desk_and_laptop(true);
+        let dell = dell_of(&layout);
+        let local = layout
+            .monitor(&dell)
+            .unwrap()
+            .active_source
+            .clone()
+            .unwrap();
+        let remote = layout
+            .monitor(&dell)
+            .unwrap()
+            .sources
+            .iter()
+            .find(|s| **s != local)
+            .cloned()
+            .unwrap();
+        let (mut app, mut incoming) = app_with(layout);
+        app.mode = lbm_ui::mode::Mode::Size;
+        app.selected = Some(dell.clone());
+
+        let (text, nodes) = properties(&mut app);
+        assert!(text.contains("Showing this machine"), "{text}");
+        assert!(!disabled(&nodes, "Show laptop"));
+
+        app.switch_source(&dell, &remote);
+        let sent = methods(&mut incoming);
+        assert_eq!(sent.len(), 1);
+        let (id, method, extra) = &sent[0];
+        assert_eq!(*method, "SetActiveSource");
+        assert_eq!(extra["Monitor"], dell.as_str());
+        assert_eq!(extra["Source"], remote.as_str());
+        assert_eq!(extra["LayoutId"], app.layout.as_ref().unwrap().id.as_str());
+        let (_, nodes) = properties(&mut app);
+        assert!(disabled(&nodes, "Show laptop"), "one switch at a time");
+
+        app.agent_said(Message::Answer {
+            id: *id,
+            result: Ok(serde_json::Value::Null),
+        });
+        let layout = app.layout.as_ref().unwrap();
+        assert_eq!(
+            layout.monitor(&dell).unwrap().active_source.as_deref(),
+            Some(remote.as_str())
+        );
+        let screen = app.screens.iter().find(|s| s.id == dell).unwrap();
+        assert_eq!(
+            screen.source_id, remote,
+            "the map shows the laptop's source"
+        );
+        let logos = HashMap::new();
+        let monitors = app.monitors(&logos);
+        let tag = app
+            .tags(&monitors)
+            .into_iter()
+            .zip(&monitors)
+            .find(|(_, m)| m.id == dell)
+            .and_then(|(t, _)| t)
+            .unwrap();
+        assert_eq!(
+            tag,
+            lbm_app::machines::Tag {
+                machine: "laptop".into(),
+                remote: true,
+                shared: true
+            }
+        );
+        assert!(!app.dirty(), "the agent holds the switch: nothing to save");
+        let (text, _) = properties(&mut app);
+        assert!(text.contains("Showing laptop"), "{text}");
+
+        // An agent that does not know the request: the switch is an edit to save.
+        app.switch_source(&dell, &local);
+        let (id, _, _) = methods(&mut incoming).remove(0);
+        app.agent_said(Message::Answer {
+            id,
+            result: Err("bad request: unknown variant `SetActiveSource`".into()),
+        });
+        assert_eq!(
+            app.layout
+                .as_ref()
+                .unwrap()
+                .monitor(&dell)
+                .unwrap()
+                .active_source
+                .as_deref(),
+            Some(local.as_str())
+        );
+        assert!(app.dirty(), "Save carries the choice");
+        assert!(app.switch_note.is_some());
+
+        // A refusal changes nothing, and says why.
+        app.switch_source(&dell, &remote);
+        let (id, _, _) = methods(&mut incoming).remove(0);
+        app.agent_said(Message::Answer {
+            id,
+            result: Err("the laptop is not connected".into()),
+        });
+        assert_eq!(
+            app.layout
+                .as_ref()
+                .unwrap()
+                .monitor(&dell)
+                .unwrap()
+                .active_source
+                .as_deref(),
+            Some(local.as_str())
+        );
+        assert!(app
+            .switch_note
+            .as_deref()
+            .is_some_and(|n| n.contains("not connected")));
+    }
+
+    #[test]
+    fn a_layout_without_other_machines_is_drawn_and_gated_as_before() {
+        let mut layout = Layout::new(LayoutOptions::default());
+        lbm_layout::linux::populate(&mut layout, &[desk()], |_| Ok::<(), ()>(())).unwrap();
+        let (mut app, _incoming) = app_with(layout);
+        let logos = HashMap::new();
+        let monitors = app.monitors(&logos);
+        assert!(app.tags(&monitors).iter().all(Option::is_none));
+        assert!(matches!(
+            lbm_app::machines::local_view(app.layout.as_ref().unwrap()),
+            std::borrow::Cow::Borrowed(_)
+        ));
+        app.mode = lbm_ui::mode::Mode::Size;
+        app.selected = Some(app.layout.as_ref().unwrap().monitors()[0].id.clone());
+        let (text, _) = properties(&mut app);
+        assert!(!text.contains("Shared screen"), "{text}");
+        assert!(!text.contains("This screen is showing"), "{text}");
     }
 }

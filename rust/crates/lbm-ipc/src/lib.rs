@@ -10,7 +10,9 @@
 pub mod displays;
 pub mod endpoint;
 pub mod framing;
+pub mod input;
 pub mod instance;
+pub mod peer;
 pub mod probe;
 pub mod protocol;
 pub mod shortcut;

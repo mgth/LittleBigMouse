@@ -10,6 +10,7 @@ pub mod collation;
 pub mod geo;
 pub mod linux;
 pub mod model;
+pub mod remote;
 pub mod solve;
 pub mod wallpaper;
 pub mod windows;

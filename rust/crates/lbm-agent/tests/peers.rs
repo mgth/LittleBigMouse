@@ -1,0 +1,1216 @@
+//! The multi-PC manager over real sockets on loopback: pairing, the screens a remote
+//! publishes, and the input stream from one hook's endpoint to the other's.
+
+use std::path::Path;
+use std::time::Duration;
+
+use lbm_agent::peers::{
+    Answer, Notice, PeerRequest, PeerState, PeersState, Service, Settings, Setup,
+};
+use lbm_ipc::peer::PeerDisplay;
+use lbm_net::identity::Identity;
+use lbm_net::link::{self, Event, Link, LinkError};
+use lbm_net::peers::{PairedPeer, PeerStore};
+use lbm_net::wire::{Control, Hello, Role};
+use serde_json::Value;
+use tokio::sync::mpsc::UnboundedReceiver;
+
+const PATIENCE: Duration = Duration::from_secs(10);
+
+fn setup(input_endpoint: Option<String>) -> Setup {
+    setup_with(input_endpoint, link::Options::default())
+}
+
+fn setup_with(input_endpoint: Option<String>, options: link::Options) -> Setup {
+    Setup {
+        bind: "127.0.0.1".parse().unwrap(),
+        input_endpoint,
+        options,
+    }
+}
+
+/// A port nobody listens on right now.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+fn display(id: &str, x: i32) -> PeerDisplay {
+    PeerDisplay {
+        id: id.into(),
+        connector: format!("{id}-connector"),
+        name: id.into(),
+        edid: Some("AP///////wA=".into()),
+        x,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        scale: 1.0,
+        effective_dpi: 96.0,
+        orientation: 0,
+        frequency: 60.0,
+        primary: x == 0,
+        attached: true,
+        width_mm: 527.0,
+        height_mm: 296.0,
+        input_source: None,
+    }
+}
+
+/// One machine's manager, as the agent's loop would hold it.
+struct Node {
+    service: Service,
+    notices: UnboundedReceiver<Notice>,
+    /// The last state announced: what the agent's loop would know. Kept whole, unlike the
+    /// answer to `Peers`, which carries no `selection`.
+    last: Option<PeersState>,
+}
+
+impl Node {
+    fn new(directory: &Path, input_endpoint: Option<String>) -> Node {
+        Node::with_setup(directory, setup(input_endpoint))
+    }
+
+    fn with_setup(directory: &Path, setup: Setup) -> Node {
+        let mut service = Service::new(directory.to_owned(), setup);
+        let notices = service.take_notices().unwrap();
+        Node {
+            service,
+            notices,
+            last: None,
+        }
+    }
+
+    async fn ask(&mut self, request: PeerRequest) -> Result<Value, String> {
+        match self.service.request(request) {
+            Answer::Now(result) => result,
+            Answer::Later(result) => tokio::time::timeout(PATIENCE, result)
+                .await
+                .expect("an answer in time"),
+        }
+    }
+
+    async fn state(&mut self) -> PeersState {
+        serde_json::from_value(self.ask(PeerRequest::State).await.unwrap()).unwrap()
+    }
+
+    async fn turn_on(&mut self, port: u16, name: &str) -> PeersState {
+        let state = self
+            .ask(PeerRequest::Set {
+                enabled: true,
+                port: Some(port),
+                name: Some(name.into()),
+            })
+            .await
+            .unwrap();
+        serde_json::from_value(state).unwrap()
+    }
+
+    /// The first state, the latest announced or one announced later, that satisfies
+    /// `want`.
+    async fn until(&mut self, want: impl Fn(&PeersState) -> bool) -> PeersState {
+        while let Ok(notice) = self.notices.try_recv() {
+            if let Notice::Peers(state) = notice {
+                self.last = Some(state);
+            }
+        }
+        if let Some(last) = self.last.clone().filter(|state| want(state)) {
+            return last;
+        }
+        tokio::time::timeout(PATIENCE, async {
+            loop {
+                let Notice::Peers(state) = self.notices.recv().await.expect("notices") else {
+                    continue;
+                };
+                self.last = Some(state.clone());
+                if want(&state) {
+                    return state;
+                }
+            }
+        })
+        .await
+        .expect("the state wanted, in time")
+    }
+
+    /// Says, as the agent does once its hook confirmed zones leading to `machine_id` and
+    /// nowhere else, that the hook is fit for the choice of that remote; that choice's
+    /// number, for a test to repeat it later.
+    #[cfg(unix)]
+    async fn hook_ready_for(&mut self, machine_id: &str) -> u64 {
+        let state = self
+            .until(|s| s.selected_remote.as_deref() == Some(machine_id))
+            .await;
+        self.service.hook_ready(Some(state.selection));
+        state.selection
+    }
+}
+
+fn peer<'a>(state: &'a PeersState, machine_id: &str) -> Option<&'a lbm_agent::peers::PeerEntry> {
+    state.peers.iter().find(|p| p.peer.machine_id == machine_id)
+}
+
+fn linked(state: &PeersState, machine_id: &str) -> bool {
+    peer(state, machine_id).is_some_and(|p| p.peer.connected && p.state == PeerState::Paired)
+}
+
+/// A test master: an identity of its own, nothing else of an agent.
+async fn master_connects(identity: &Identity, address: &str) -> lbm_net::link::Pending {
+    link::connect(
+        address,
+        identity,
+        Hello::new("test master", "0", Role::Master),
+        link::Options::default(),
+    )
+    .await
+    .unwrap()
+}
+
+/// The next control message on `link`, skipping input.
+async fn next_control(link: &mut Link) -> Control {
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match link.next().await {
+                Some(Event::Control(message)) => return message,
+                Some(Event::Input(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("a control message in time")
+}
+
+/// Trusts `machine_id` in `directory`'s store, as a pairing the user made earlier.
+fn pair(directory: &Path, machine_id: &str, address: &str, role: Role) {
+    PeerStore::load(directory)
+        .insert(PairedPeer {
+            machine_id: machine_id.into(),
+            name: "paired".into(),
+            address: address.into(),
+            role,
+        })
+        .unwrap();
+}
+
+#[tokio::test]
+async fn with_the_mode_off_nothing_listens_and_no_identity_is_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    Settings {
+        enabled: false,
+        port,
+        name: None,
+    }
+    .save(dir.path())
+    .unwrap();
+    let mut node = Node::new(dir.path(), None);
+
+    let state = node.state().await;
+    assert!(!state.enabled);
+    assert_eq!(state.port, port);
+    assert_eq!(state.listen_address, None);
+    assert_eq!(state.machine_id, None);
+    assert!(state.peers.is_empty());
+    // The port is free: nobody took it.
+    std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
+    let error = node
+        .ask(PeerRequest::Connect("127.0.0.1:1".into()))
+        .await
+        .unwrap_err();
+    assert!(error.contains("off"), "{error}");
+
+    let names: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, ["multi-pc.json"], "no identity, no store");
+}
+
+#[tokio::test]
+async fn two_machines_pair_once_both_users_accept_and_stay_paired_after_a_restart() {
+    let (desk_dir, tower_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let tower_port = free_port();
+    let mut tower = Node::new(tower_dir.path(), None);
+    let tower_state = tower.turn_on(tower_port, "tower").await;
+    let tower_id = tower_state.machine_id.clone().unwrap();
+    assert_eq!(
+        tower_state.listen_address.as_deref(),
+        Some(format!("127.0.0.1:{tower_port}").as_str())
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    let desk_id = desk.turn_on(0, "desk").await.machine_id.unwrap();
+    assert_ne!(desk_id, tower_id);
+
+    // The desk connects: each side sees the other waiting, with its fingerprint.
+    let connected = desk
+        .ask(PeerRequest::Connect(format!("127.0.0.1:{tower_port}")))
+        .await
+        .unwrap();
+    assert_eq!(connected["MachineId"], tower_id);
+    assert_eq!(connected["Name"], "tower");
+    assert_eq!(connected["Role"], "Remote");
+    assert_eq!(connected["State"], "Pending");
+    let waiting = tower
+        .until(|s| peer(s, &desk_id).is_some_and(|p| p.state == PeerState::Pending))
+        .await;
+    let desk_seen = peer(&waiting, &desk_id).unwrap();
+    assert_eq!(desk_seen.peer.name, "desk");
+    assert_eq!(desk_seen.role, Role::Master);
+    assert!(!desk_seen.peer.connected);
+
+    // One yes is not a pairing.
+    desk.ask(PeerRequest::Accept(tower_id.clone()))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!linked(&desk.state().await, &tower_id));
+    tower
+        .ask(PeerRequest::Accept(desk_id.clone()))
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, &tower_id)).await;
+    let tower_now = tower.until(|s| linked(s, &desk_id)).await;
+    assert_eq!(peer(&tower_now, &desk_id).unwrap().role, Role::Master);
+
+    // Both stores hold the other; the desk knows where to call the tower back.
+    let desk_store = PeerStore::load(desk_dir.path());
+    let stored = desk_store.get(&tower_id).unwrap();
+    assert_eq!(stored.role, Role::Remote);
+    assert_eq!(stored.address, format!("127.0.0.1:{tower_port}"));
+    assert_eq!(
+        PeerStore::load(tower_dir.path())
+            .get(&desk_id)
+            .unwrap()
+            .role,
+        Role::Master
+    );
+
+    // Both restart: the desk calls the tower back, and nobody is asked anything.
+    desk.service.stop().await;
+    tower.service.stop().await;
+    drop((desk, tower));
+    let mut tower = Node::new(tower_dir.path(), None);
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.until(|s| linked(s, &tower_id)).await;
+    tower.until(|s| linked(s, &desk_id)).await;
+}
+
+#[tokio::test]
+async fn an_unknown_machine_waits_for_the_user_and_is_told_nothing() {
+    let tower_dir = tempfile::tempdir().unwrap();
+    let mut tower = Node::new(tower_dir.path(), None);
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    tower.service.local_displays(vec![display("A", 0)]);
+
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let pending = master_connects(&master, &address).await;
+    tower
+        .until(|s| peer(s, master.fingerprint()).is_some_and(|p| p.state == PeerState::Pending))
+        .await;
+
+    // The master says yes; the tower's user has not: no `Paired`, so no link and no
+    // screens — a frame other than `Paired` would fail the accept as a protocol error.
+    let accepting = tokio::spawn(pending.accept());
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(!accepting.is_finished(), "nothing but Hello until accepted");
+    let state = tower.state().await;
+    let waiting = peer(&state, master.fingerprint()).unwrap();
+    assert_eq!(waiting.state, PeerState::Pending);
+    assert!(!waiting.peer.connected);
+    assert!(PeerStore::load(tower_dir.path()).peers().is_empty());
+
+    tower
+        .ask(PeerRequest::Refuse(master.fingerprint().to_owned()))
+        .await
+        .unwrap();
+    let refused = tokio::time::timeout(PATIENCE, accepting)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(refused, Err(LinkError::Refused(_))), "{refused:?}");
+    tower.until(|s| s.peers.is_empty()).await;
+    assert!(PeerStore::load(tower_dir.path()).peers().is_empty());
+}
+
+#[tokio::test]
+async fn a_remote_publishes_its_screens_at_link_up_and_after_a_display_change() {
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+
+    let mut tower = Node::new(tower_dir.path(), None);
+    tower.service.local_displays(vec![display("A", 0)]);
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .expect("a paired master is accepted without asking");
+    let Control::Displays { revision, displays } = next_control(&mut link).await else {
+        panic!("Displays first");
+    };
+    assert_eq!(displays, [display("A", 0)]);
+
+    tower
+        .service
+        .local_displays(vec![display("A", 0), display("B", 1920)]);
+    let Control::Displays {
+        revision: next,
+        displays,
+    } = next_control(&mut link).await
+    else {
+        panic!("Displays again");
+    };
+    assert!(next > revision, "{next} after {revision}");
+    assert_eq!(displays, [display("A", 0), display("B", 1920)]);
+
+    // The same screens again are no change.
+    tower
+        .service
+        .local_displays(vec![display("A", 0), display("B", 1920)]);
+    let quiet = tokio::time::timeout(Duration::from_millis(300), next_control(&mut link)).await;
+    assert!(quiet.is_err(), "nothing new to say: {quiet:?}");
+}
+
+/// A stand-in for a hook's input endpoint: what it is sent, batch by batch, and `None`
+/// when the client closes the connection.
+#[cfg(unix)]
+mod endpoint {
+    use std::path::Path;
+    use std::time::Duration;
+
+    use lbm_ipc::input::{read_batch, write_batch};
+    use tokio::sync::mpsc;
+
+    pub struct Endpoint {
+        pub path: String,
+        pub received: mpsc::UnboundedReceiver<Option<Vec<u8>>>,
+        /// Batches written to the client of the moment (a master hook's capture).
+        pub to_client: mpsc::UnboundedSender<Vec<u8>>,
+    }
+
+    pub fn serve(directory: &Path, name: &str) -> Endpoint {
+        serve_after(directory, name, Duration::ZERO)
+    }
+
+    /// As [`serve`], with a hook that only starts reading `pause` after the client
+    /// connected: one too busy to keep up for a while. A client that connects again is
+    /// served again, as the hook serves its newest client; the pause is the first's.
+    pub fn serve_after(directory: &Path, name: &str, pause: Duration) -> Endpoint {
+        let path = directory.join(name);
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let (received_tx, received) = mpsc::unbounded_channel();
+        let (to_client, mut outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
+        let current = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let writer = current.clone();
+        tokio::spawn(async move {
+            // What is written before a client connects waits for it.
+            while let Some(batch) = outgoing.recv().await {
+                loop {
+                    if let Some(writer) = writer.lock().await.as_mut() {
+                        let _ = write_batch(writer, &batch).await;
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        });
+        tokio::spawn(async move {
+            let mut pause = pause;
+            while let Ok((stream, _)) = listener.accept().await {
+                tokio::time::sleep(std::mem::take(&mut pause)).await;
+                let (mut reader, writer) = tokio::io::split(stream);
+                *current.lock().await = Some(writer);
+                let received_tx = received_tx.clone();
+                tokio::spawn(async move {
+                    while let Ok(batch) = read_batch(&mut reader).await {
+                        let _ = received_tx.send(Some(batch));
+                    }
+                    let _ = received_tx.send(None);
+                });
+            }
+        });
+        Endpoint {
+            path: path.to_string_lossy().into_owned(),
+            received,
+            to_client,
+        }
+    }
+
+    impl Endpoint {
+        pub async fn next(&mut self) -> Option<Vec<u8>> {
+            tokio::time::timeout(super::PATIENCE, self.received.recv())
+                .await
+                .expect("something from the client in time")
+                .expect("the endpoint task")
+        }
+    }
+}
+
+#[cfg(unix)]
+fn batch(x: i32) -> Vec<u8> {
+    use lbm_ipc::input::{encode, InputEvent};
+    encode(&[InputEvent::Motion { x, y: 2 * x }])
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_masters_batches_reach_the_remotes_hook_in_order_and_its_end_releases_the_hook() {
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let mut hook = endpoint::serve(tower_dir.path(), "input.sock");
+
+    let mut tower = Node::new(tower_dir.path(), Some(hook.path.clone()));
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+
+    let sender = link.sender();
+    for x in 1..=5 {
+        sender.input(&batch(x)).await.unwrap();
+    }
+    for x in 1..=5 {
+        assert_eq!(hook.next().await, Some(batch(x)));
+    }
+
+    // The link ends: the hook's connection with it, so the hook releases what is held.
+    sender.close("done").await;
+    assert_eq!(hook.next().await, None);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends() {
+    let (desk_dir, tower_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let desk_id = Identity::load_or_create(desk_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let tower_id = Identity::load_or_create(tower_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let tower_port = free_port();
+    pair(tower_dir.path(), &desk_id, "", Role::Master);
+    pair(
+        desk_dir.path(),
+        &tower_id,
+        &format!("127.0.0.1:{tower_port}"),
+        Role::Remote,
+    );
+    let mut desk_hook = endpoint::serve(desk_dir.path(), "desk-input.sock");
+    let mut tower_hook = endpoint::serve(tower_dir.path(), "tower-input.sock");
+
+    let mut tower = Node::new(tower_dir.path(), Some(tower_hook.path.clone()));
+    tower.turn_on(tower_port, "tower").await;
+    let mut desk = Node::new(desk_dir.path(), Some(desk_hook.path.clone()));
+    desk.turn_on(0, "desk").await;
+    desk.until(|s| linked(s, &tower_id)).await;
+    tower.until(|s| linked(s, &desk_id)).await;
+    desk.hook_ready_for(&tower_id).await;
+
+    // What the desk's hook captures goes to the tower's hook, in order. The desk's
+    // agent connects to its hook's endpoint once a remote is linked; batches written
+    // before that would have nobody to read them.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    for x in 1..=5 {
+        desk_hook.to_client.send(batch(x)).unwrap();
+    }
+    for x in 1..=5 {
+        assert_eq!(tower_hook.next().await, Some(batch(x)));
+    }
+
+    // The desk turns the mode off: the link ends, and with it both hooks' streams.
+    desk.ask(PeerRequest::Set {
+        enabled: false,
+        port: None,
+        name: None,
+    })
+    .await
+    .unwrap();
+    assert_eq!(tower_hook.next().await, None);
+    assert_eq!(desk_hook.next().await, None);
+    tower.until(|s| !linked(s, &desk_id)).await;
+}
+
+/// The next `SelectInput` the manager passes on to its agent, if one comes `within`.
+async fn select_input(node: &mut Node, within: Duration) -> Option<(String, String, u16)> {
+    tokio::time::timeout(within, async {
+        loop {
+            if let Notice::SelectInput {
+                from,
+                display,
+                value,
+            } = node.notices.recv().await.expect("notices")
+            {
+                return (from, display, value);
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+#[tokio::test]
+async fn only_this_machines_master_may_switch_its_monitors() {
+    // The tower's master asks for an input: the tower's agent hears of it.
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let mut tower = Node::new(tower_dir.path(), None);
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    link.sender()
+        .control(&Control::SelectInput {
+            display: "DEL4065_ABC123".into(),
+            value: 0x11,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        select_input(&mut tower, PATIENCE).await,
+        Some((
+            master.fingerprint().to_owned(),
+            "DEL4065_ABC123".to_owned(),
+            0x11
+        ))
+    );
+
+    // The desk's remote asks the same of the desk: a remote has no say over its
+    // master's monitors, and the desk's agent hears nothing.
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let laptop = Identity::load_or_create(laptop_dir.path()).unwrap();
+    let mut listener = link::listen(
+        "127.0.0.1:0",
+        &laptop,
+        Hello::new("laptop", "0", Role::Remote),
+        link::Options::default(),
+    )
+    .await
+    .unwrap();
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk = Node::new(desk_dir.path(), None);
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the desk calls its remote back")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    laptop_link
+        .sender()
+        .control(&Control::SelectInput {
+            display: "DP-1".into(),
+            value: 0x0f,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        select_input(&mut desk, Duration::from_millis(500)).await,
+        None
+    );
+
+    // The other way round is the desk's to ask: the laptop is told.
+    assert!(desk
+        .service
+        .select_input(laptop.fingerprint(), "HDMI-1", 0x11));
+    assert_eq!(
+        next_control(&mut laptop_link).await,
+        Control::SelectInput {
+            display: "HDMI-1".into(),
+            value: 0x11
+        }
+    );
+    drop(link);
+}
+
+//==================//
+// One session      //
+//==================//
+
+#[cfg(unix)]
+const CTRL: u16 = 29;
+#[cfg(unix)]
+const BTN_LEFT: u16 = 0x110;
+#[cfg(unix)]
+const KEY_A: u16 = 30;
+
+/// What a remote's hook holds pressed after the stream it was sent, counted the way its
+/// session counts (`lbm-hook/src/remote/mod.rs`): nothing before an `Enter`, and
+/// everything released on a `Leave` or at the end of the connection.
+#[cfg(unix)]
+#[derive(Default)]
+struct Held {
+    driven: bool,
+    keys: std::collections::BTreeSet<u16>,
+    buttons: std::collections::BTreeSet<u16>,
+}
+
+#[cfg(unix)]
+impl Held {
+    fn apply(&mut self, batch: &[u8]) {
+        use lbm_ipc::input::{decode, InputEvent};
+        for event in decode(batch).unwrap() {
+            match event {
+                InputEvent::Enter { .. } => self.driven = true,
+                InputEvent::Leave => self.end(),
+                _ if !self.driven => {}
+                InputEvent::Key { code, pressed } => {
+                    if pressed {
+                        self.keys.insert(code);
+                    } else {
+                        self.keys.remove(&code);
+                    }
+                }
+                InputEvent::Button { code, pressed } => {
+                    if pressed {
+                        self.buttons.insert(code);
+                    } else {
+                        self.buttons.remove(&code);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn end(&mut self) {
+        self.driven = false;
+        self.keys.clear();
+        self.buttons.clear();
+    }
+}
+
+/// A batch as large as a frame carries: few of them fill any buffer on the way.
+#[cfg(unix)]
+fn flood() -> Vec<u8> {
+    use lbm_ipc::input::{encode, InputEvent};
+    let events: Vec<InputEvent> = (0..7000)
+        .map(|i| InputEvent::Motion { x: i, y: i })
+        .collect();
+    encode(&events)
+}
+
+/// The events of the next input batch on `link`, skipping control messages.
+#[cfg(unix)]
+async fn next_input(link: &mut Link) -> Vec<lbm_ipc::input::InputEvent> {
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match link.next().await {
+                Some(Event::Input(batch)) => return lbm_ipc::input::decode(&batch).unwrap(),
+                Some(Event::Control(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("an input batch in time")
+}
+
+/// Nothing comes on `link` for a while.
+#[cfg(unix)]
+async fn silent(link: &mut Link) -> bool {
+    tokio::time::timeout(Duration::from_millis(300), next_input(link))
+        .await
+        .is_err()
+}
+
+/// A remote of a test's own: a listener under a fresh identity.
+#[cfg(unix)]
+async fn a_remote(
+    name: &str,
+    options: link::Options,
+) -> (tempfile::TempDir, Identity, link::Listener) {
+    let directory = tempfile::tempdir().unwrap();
+    let identity = Identity::load_or_create(directory.path()).unwrap();
+    let listener = link::listen(
+        "127.0.0.1:0",
+        &identity,
+        Hello::new(name, "0", Role::Remote),
+        options,
+    )
+    .await
+    .unwrap();
+    (directory, identity, listener)
+}
+
+/// The link a master made to `listener`, accepted.
+#[cfg(unix)]
+async fn linked_from(listener: &mut link::Listener) -> Link {
+    tokio::time::timeout(PATIENCE, listener.next())
+        .await
+        .expect("the master connects")
+        .unwrap()
+        .unwrap()
+        .accept()
+        .await
+        .unwrap()
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_batch_the_link_has_no_room_for_ends_the_session_and_the_remote_is_told_leave() {
+    use lbm_ipc::input::{encode, InputEvent};
+    // A link that stalls on purpose here, and must not be taken for lost meanwhile.
+    let stalling = link::Options {
+        keepalive: Duration::from_secs(60),
+        queue: 1,
+        ..link::Options::default()
+    };
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", stalling.clone()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let mut desk_hook = endpoint::serve(desk_dir.path(), "desk-input.sock");
+    let mut desk = Node::with_setup(
+        desk_dir.path(),
+        setup_with(Some(desk_hook.path.clone()), stalling),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.until(|s| linked(s, laptop.fingerprint())).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Ctrl goes down on the laptop, which then reads nothing while the hook's stream
+    // outgrows every buffer on the way — Ctrl's release last.
+    desk_hook
+        .to_client
+        .send(encode(&[
+            InputEvent::Enter { x: 0, y: 0 },
+            InputEvent::Key {
+                code: CTRL,
+                pressed: true,
+            },
+        ]))
+        .unwrap();
+    for _ in 0..400 {
+        desk_hook.to_client.send(flood()).unwrap();
+    }
+    desk_hook
+        .to_client
+        .send(encode(&[InputEvent::Key {
+            code: CTRL,
+            pressed: false,
+        }]))
+        .unwrap();
+
+    // A batch found no room: the agent lets go of the hook, which comes home.
+    assert_eq!(desk_hook.next().await, None);
+
+    // The laptop reads again: whatever was lost on the way, the session ends with a
+    // `Leave`, and its hook holds nothing.
+    let mut held = Held::default();
+    let mut pressed = false;
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            match laptop_link.next().await {
+                Some(Event::Input(batch)) => {
+                    held.apply(&batch);
+                    pressed |= held.keys.contains(&CTRL);
+                    if lbm_ipc::input::decode(&batch).unwrap() == [InputEvent::Leave] {
+                        return;
+                    }
+                }
+                Some(Event::Control(_)) => {}
+                other => panic!("the link ended: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("a Leave in time");
+    assert!(pressed, "Ctrl reached the laptop");
+    assert!(held.keys.is_empty(), "{:?} left pressed", held.keys);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_batch_the_remotes_hook_has_no_room_for_ends_its_stream_so_the_hook_releases_ctrl() {
+    use lbm_ipc::input::{encode, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    // A hook busy for a while (less than the agent's patience with one write): the
+    // agent's queue to it fills.
+    let mut hook =
+        endpoint::serve_after(tower_dir.path(), "input.sock", Duration::from_millis(700));
+    let mut tower = Node::new(tower_dir.path(), Some(hook.path.clone()));
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+
+    let sender = link.sender();
+    sender
+        .input(&encode(&[
+            InputEvent::Enter { x: 0, y: 0 },
+            InputEvent::Key {
+                code: CTRL,
+                pressed: true,
+            },
+        ]))
+        .await
+        .unwrap();
+    for _ in 0..120 {
+        sender.input(&flood()).await.unwrap();
+    }
+    sender
+        .input(&encode(&[InputEvent::Key {
+            code: CTRL,
+            pressed: false,
+        }]))
+        .await
+        .unwrap();
+
+    // Ctrl is released on the tower: by its release if that got through, else by the end
+    // of the connection.
+    let mut held = Held::default();
+    let mut pressed = false;
+    loop {
+        match hook.next().await {
+            Some(batch) => {
+                held.apply(&batch);
+                pressed |= held.keys.contains(&CTRL);
+            }
+            None => {
+                held.end();
+                break;
+            }
+        }
+        if pressed && !held.keys.contains(&CTRL) {
+            break;
+        }
+    }
+    assert!(pressed, "Ctrl reached the tower's hook");
+    assert!(held.keys.is_empty(), "{:?} left pressed", held.keys);
+
+    // The master is told the session ended: it would otherwise go on sending into a
+    // session the tower no longer has, its pointer away and its keyboards held.
+    tokio::time::timeout(PATIENCE, async {
+        while next_control(&mut link).await != Control::InputReset {}
+    })
+    .await
+    .expect("the master is told the session ended");
+
+    // Once what was queued has drained, the master's next crossing works: a fresh
+    // `Enter`, then a key, reach the tower's hook and are taken.
+    while tokio::time::timeout(Duration::from_millis(300), hook.received.recv())
+        .await
+        .is_ok()
+    {}
+    sender
+        .input(&encode(&[
+            InputEvent::Enter { x: 5, y: 5 },
+            InputEvent::Key {
+                code: KEY_A,
+                pressed: true,
+            },
+        ]))
+        .await
+        .unwrap();
+    let mut after = Held::default();
+    while !after.keys.contains(&KEY_A) {
+        match hook.next().await {
+            Some(batch) => after.apply(&batch),
+            None => after.end(),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_that_ended_the_session_brings_the_masters_pointer_home_for_a_fresh_crossing() {
+    use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, crossing);
+
+    // The laptop's hook could not keep up: the laptop ended the session and says so.
+    laptop_link
+        .sender()
+        .control(&Control::InputReset)
+        .await
+        .unwrap();
+
+    // The desk's hook loses its client (it comes home and lets go of the keyboards), the
+    // laptop is told `Leave`, and a new connection carries the next crossing.
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the connection ends")
+            .is_err(),
+        "the hook's connection is closed"
+    );
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    let mut successor = accept().await;
+    let again = [
+        InputEvent::Enter { x: 20, y: 20 },
+        InputEvent::Key {
+            code: KEY_A,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut successor, &encode(&again)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, again);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn when_the_master_hook_goes_the_remote_is_told_leave_before_anything_from_its_successor() {
+    use lbm_ipc::input::{encode, write_batch, InputEvent};
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    desk.hook_ready_for(laptop.fingerprint()).await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    // The pointer crosses to the laptop and a drag starts there.
+    let mut hook = accept().await;
+    let press = [
+        InputEvent::Enter { x: 10, y: 10 },
+        InputEvent::Button {
+            code: BTN_LEFT,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&press)).await.unwrap();
+    assert_eq!(next_input(&mut laptop_link).await, press);
+
+    // The hook exits with the button down; the next one starts and crosses at once.
+    drop(hook);
+    let mut successor = accept().await;
+    write_batch(
+        &mut successor,
+        &encode(&[InputEvent::Enter { x: 20, y: 20 }]),
+    )
+    .await
+    .unwrap();
+
+    // The laptop releases the drag before it hears anything of the new hook.
+    assert_eq!(next_input(&mut laptop_link).await, [InputEvent::Leave]);
+    assert_eq!(
+        next_input(&mut laptop_link).await,
+        [InputEvent::Enter { x: 20, y: 20 }]
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_it_alone_gets_the_input(
+) {
+    use lbm_ipc::input::{encode, read_batch, write_batch, InputEvent};
+    let (_a_dir, alpha, mut alpha_listener) = a_remote("alpha", link::Options::default()).await;
+    let (_b_dir, beta, mut beta_listener) = a_remote("beta", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        alpha.fingerprint(),
+        &alpha_listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    // Paired, but called back by nobody: the desk connects to it by hand, last.
+    pair(desk_dir.path(), beta.fingerprint(), "", Role::Remote);
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.turn_on(0, "desk").await;
+    let accept = || async {
+        tokio::time::timeout(PATIENCE, hook_listener.accept())
+            .await
+            .expect("the agent connects to the hook")
+            .unwrap()
+            .0
+    };
+
+    let mut alpha_link = linked_from(&mut alpha_listener).await;
+    alpha_link
+        .sender()
+        .control(&Control::Displays {
+            revision: 1,
+            displays: vec![display("A1", 0)],
+        })
+        .await
+        .unwrap();
+    desk.until(|s| linked(s, alpha.fingerprint())).await;
+    let (connected, beta_link) = tokio::join!(
+        desk.ask(PeerRequest::Connect(beta_listener.local_addr().to_string())),
+        linked_from(&mut beta_listener)
+    );
+    connected.unwrap();
+    let mut beta_link = beta_link;
+    beta_link
+        .sender()
+        .control(&Control::Displays {
+            revision: 1,
+            displays: vec![display("B1", 0)],
+        })
+        .await
+        .unwrap();
+    let both = desk
+        .until(|s| {
+            [alpha.fingerprint(), beta.fingerprint()].iter().all(|id| {
+                peer(s, id).is_some_and(|p| p.peer.connected && !p.peer.displays.is_empty())
+            })
+        })
+        .await;
+
+    // Alpha linked first and stays the one driven although beta linked after it.
+    assert_eq!(both.selected_remote.as_deref(), Some(alpha.fingerprint()));
+    let merged: Vec<String> = both
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, [alpha.fingerprint().to_owned()]);
+    // The hook holds zones leading to alpha alone: until it does, nothing is relayed.
+    let alpha_choice = desk.hook_ready_for(alpha.fingerprint()).await;
+    let mut hook = accept().await;
+    let crossing = [
+        InputEvent::Enter { x: 5, y: 5 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &encode(&crossing)).await.unwrap();
+    assert_eq!(next_input(&mut alpha_link).await, crossing);
+    assert!(silent(&mut beta_link).await, "beta hears nothing");
+
+    // Alpha goes: beta is selected now. The hook's connection ends at once (its pointer
+    // comes home)...
+    drop(alpha_link);
+    let now = desk
+        .until(|s| s.selected_remote.as_deref() == Some(beta.fingerprint()))
+        .await;
+    let merged: Vec<String> = now
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, [beta.fingerprint().to_owned()]);
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the old connection ends")
+            .is_err(),
+        "the first connection is closed"
+    );
+
+    // ...but the hook still holds alpha's zones: the rebuild for beta has not reached it.
+    // No connection is made meanwhile, so the hook keeps the border to alpha's old zone a
+    // wall; were one made, a crossing there would be an `Enter` for beta. A word about
+    // alpha's choice, late or repeated, says nothing about this one.
+    desk.service.hook_ready(Some(alpha_choice));
+    let early = tokio::time::timeout(Duration::from_millis(500), hook_listener.accept()).await;
+    if let Ok(Ok((mut early, _))) = early {
+        let crossing_into_alpha = [
+            InputEvent::Enter { x: 5, y: 5 },
+            InputEvent::Button {
+                code: BTN_LEFT,
+                pressed: true,
+            },
+        ];
+        let _ = write_batch(&mut early, &encode(&crossing_into_alpha)).await;
+        assert!(silent(&mut beta_link).await, "beta hears nothing");
+        panic!("the agent connected to the hook while it held alpha's zones");
+    }
+    assert!(silent(&mut beta_link).await, "beta hears nothing");
+
+    // The hook confirmed zones leading to beta: the next connection relays to beta from
+    // its first batch.
+    desk.hook_ready_for(beta.fingerprint()).await;
+    let mut successor = accept().await;
+    let entering = [InputEvent::Enter { x: 7, y: 7 }];
+    write_batch(&mut successor, &encode(&entering))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut beta_link).await, entering);
+}

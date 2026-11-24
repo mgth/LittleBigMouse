@@ -18,9 +18,21 @@ pub fn draw(
     monitors: &[MapMonitor<'_>],
     selected: Option<&str>,
 ) {
-    if let Some(m) = monitors.iter().find(|m| Some(m.id) == selected) {
+    draw_hosted(ui, available, monitors, &[], selected);
+}
+
+/// [`draw`], with the machine each monitor is showing (see [`map::draw_hosted`]).
+pub fn draw_hosted(
+    ui: &mut egui::Ui,
+    available: egui::Rect,
+    monitors: &[MapMonitor<'_>],
+    hosts: &[Option<frame::Host<'_>>],
+    selected: Option<&str>,
+) {
+    if let Some(i) = monitors.iter().position(|m| Some(m.id) == selected) {
+        let m = &monitors[i];
         let fit = map::fit_in(screen_rect(available), extent_of(Some(m)));
-        frame::monitor(
+        frame::monitor_on(
             ui,
             &fit.place(m),
             &Look {
@@ -31,6 +43,7 @@ pub fn draw(
                 details: m.details,
                 probe: m.probe,
             },
+            hosts.get(i).copied().flatten().as_ref(),
         );
     } else {
         ui.centered_and_justified(|ui| {

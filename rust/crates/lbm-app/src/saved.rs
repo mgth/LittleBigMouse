@@ -50,6 +50,14 @@ impl Reference {
         self.0 == crate::settings::document(layout)
     }
 
+    /// An edit the agent has taken without a Save — a shared panel switched by
+    /// `SetActiveSource` — made to the reference as well, so it does not light Save on a
+    /// layout that is otherwise what was loaded.
+    pub fn also(&mut self, edit: impl FnOnce(&mut Layout)) {
+        edit(&mut self.1);
+        self.0 = crate::settings::document(&self.1);
+    }
+
     /// A first-run profile may not exist on disk. Restore the exact loaded/accepted
     /// state before overlaying any newer stored profile, including default borders
     /// whose absence from a DTO would not clear an edited ownership flag.

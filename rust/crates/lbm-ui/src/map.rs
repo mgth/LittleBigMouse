@@ -258,8 +258,25 @@ pub fn draw_movable<'a>(
     selected: Option<&str>,
     movable: bool,
 ) -> Option<Gesture<'a>> {
+    draw_hosted(ui, monitors, &[], fit, selected, movable)
+}
+
+/// [`draw_movable`], with the machine each monitor is showing in the multi-PC mode:
+/// `hosts[i]` belongs to `monitors[i]`, and a monitor past the end of `hosts`, or with
+/// `None`, is a local one drawn as it always was ([`frame::monitor_on`]).
+///
+/// A slice beside the monitors rather than a field of [`MapMonitor`]: the map's
+/// appetite stays what it was for every desktop that has no other machine on it.
+pub fn draw_hosted<'a>(
+    ui: &mut egui::Ui,
+    monitors: &[MapMonitor<'a>],
+    hosts: &[Option<frame::Host<'_>>],
+    fit: &Fit,
+    selected: Option<&str>,
+    movable: bool,
+) -> Option<Gesture<'a>> {
     let mut gesture = None;
-    for m in monitors {
+    for (i, m) in monitors.iter().enumerate() {
         let drawn = fit.place(m);
         // Sensed before it is painted: the rect has to be claimed for the pointer
         // whether or not anything is drawn inside it, and a screen too small to be
@@ -279,7 +296,7 @@ pub fn draw_movable<'a>(
                 egui::Sense::click()
             },
         );
-        frame::monitor(
+        frame::monitor_on(
             ui,
             &drawn,
             &Look {
@@ -290,6 +307,7 @@ pub fn draw_movable<'a>(
                 details: m.details,
                 probe: m.probe,
             },
+            hosts.get(i).copied().flatten().as_ref(),
         );
         if response.clicked() {
             gesture = Some(Gesture::Clicked(m.id));

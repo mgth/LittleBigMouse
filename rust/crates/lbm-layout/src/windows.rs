@@ -55,6 +55,11 @@ pub struct WindowsMonitor {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowsEdid {
     pub manufacturer_code: Option<String>,
+    /// Four upper-case hex digits. Not in the ids (the PnP code has it already); read
+    /// for [`WindowsEdid::panel_key`].
+    pub product_code: Option<String>,
+    /// The binary serial, eight hex digits; read for [`WindowsEdid::panel_key`] only.
+    pub serial: Option<String>,
     /// The 0xFC descriptor string, `""` when absent.
     pub model: Option<String>,
     /// The 0xFF descriptor string, `""` when absent.
@@ -64,6 +69,19 @@ pub struct WindowsEdid {
     /// First detailed timing's image size, in mm. Never rotated.
     pub physical_width: f64,
     pub physical_height: f64,
+}
+
+impl WindowsEdid {
+    /// What identifies the panel across machines: [`crate::model::panel_key`]. The
+    /// Windows monitor id cannot serve, it carries the week, the year and the checksum.
+    pub fn panel_key(&self) -> Option<String> {
+        crate::model::panel_key(
+            self.manufacturer_code.as_deref(),
+            self.product_code.as_deref(),
+            self.serial_number.as_deref(),
+            self.serial.as_deref(),
+        )
+    }
 }
 
 /// A monitor below an adapter source: C#'s `MonitorDeviceConnection`.
@@ -380,6 +398,7 @@ pub fn create_physical_monitor(
 ) -> Monitor {
     let mut physical = Monitor::new(id, model);
     physical.device_id = Some(monitor.id.clone());
+    physical.panel_key = monitor.edid.as_ref().and_then(WindowsEdid::panel_key);
     physical.serial_number = Some(
         monitor
             .edid

@@ -79,6 +79,10 @@ pub enum Page {
     Layout,
     Applications,
     Advanced,
+    /// The multi-PC mode (docs/multi-pc.md). Not in [`Page::ALL`]: it is offered only
+    /// while the agent announces `MultiPc`, so a window talking to an agent without it
+    /// shows the drawer exactly as before — see [`Page::offered`].
+    Machines,
 }
 
 impl Page {
@@ -97,16 +101,46 @@ impl Page {
             Self::Layout => "Layout",
             Self::Applications => "Applications",
             Self::Advanced => "Advanced",
+            Self::Machines => "Machines",
+        }
+    }
+
+    /// The pages to offer: every one of [`Page::ALL`], and Machines after them when the
+    /// agent can run the multi-PC mode.
+    pub fn offered(machines: bool) -> &'static [Page] {
+        const WITH_MACHINES: [Page; 6] = [
+            Page::General,
+            Page::Mouse,
+            Page::Layout,
+            Page::Applications,
+            Page::Advanced,
+            Page::Machines,
+        ];
+        if machines {
+            &WITH_MACHINES
+        } else {
+            &Page::ALL
         }
     }
 }
 
 pub fn navigation(ui: &mut egui::Ui, page: &mut Page) {
+    navigation_among(ui, page, &Page::ALL);
+}
+
+/// The same, over the pages given. A page that is no longer offered falls back to the
+/// first one, so a drawer left on Machines does not stay on a page that has gone.
+pub fn navigation_among(ui: &mut egui::Ui, page: &mut Page, pages: &[Page]) {
+    if !pages.contains(page) {
+        if let Some(first) = pages.first() {
+            *page = *first;
+        }
+    }
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         ui.spacing_mut().button_padding = egui::vec2(7.0, 6.0);
-        for item in Page::ALL {
-            ui.selectable_value(page, item, item.label());
+        for item in pages {
+            ui.selectable_value(page, *item, item.label());
         }
     });
 }
@@ -119,6 +153,19 @@ pub fn drawer(
     bounds: egui::Rect,
     open: &mut bool,
     page: &mut Page,
+    escape_closes: bool,
+    content: impl FnMut(&mut egui::Ui, Page),
+) {
+    drawer_among(ctx, bounds, open, page, &Page::ALL, escape_closes, content);
+}
+
+/// [`drawer`] over the pages given ([`Page::offered`]).
+pub fn drawer_among(
+    ctx: &egui::Context,
+    bounds: egui::Rect,
+    open: &mut bool,
+    page: &mut Page,
+    pages: &[Page],
     escape_closes: bool,
     mut content: impl FnMut(&mut egui::Ui, Page),
 ) {
@@ -170,7 +217,7 @@ pub fn drawer(
                         });
                     });
                     ui.add_space(5.0);
-                    navigation(ui, page);
+                    navigation_among(ui, page, pages);
                     ui.add_space(5.0);
                     ui.separator();
                     let compact_key = ui.id().with(("support-compact", *page as u8));
@@ -197,7 +244,7 @@ pub fn drawer(
         });
 }
 
-fn note(ui: &mut egui::Ui, description: &str) {
+pub(crate) fn note(ui: &mut egui::Ui, description: &str) {
     if !description.is_empty() {
         ui.add(
             egui::Label::new(
@@ -210,7 +257,7 @@ fn note(ui: &mut egui::Ui, description: &str) {
     }
 }
 
-fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(9.0);
     ui.label(egui::RichText::new(title).size(13.0).strong());
     crate::theme::card()
@@ -249,7 +296,7 @@ fn row<R>(
     .inner
 }
 
-fn toggle(
+pub(crate) fn toggle(
     ui: &mut egui::Ui,
     icon: Icon,
     header: &str,
@@ -631,6 +678,7 @@ pub fn panel(
             });
         }
         Page::Applications => {} // The separately loaded excluded list is owned by the caller.
+        Page::Machines => {}     // Drawn from the agent's multi-PC state: see `crate::machines`.
     }
     what
 }

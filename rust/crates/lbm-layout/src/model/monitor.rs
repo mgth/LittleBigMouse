@@ -71,6 +71,12 @@ pub struct Monitor {
     /// Top-left of the panel in the layout, in mm: `DepthProjection.X/Y`.
     pub(crate) location: Point,
     pub border_resistance: BorderResistance,
+    /// What identifies the panel across machines ([`panel_key`]): set by detection
+    /// from the EDID, `None` without a serial. Never persisted — the ids are, and this
+    /// is only read to recognise a remote's display as one of ours (docs/multi-pc.md).
+    ///
+    /// [`panel_key`]: super::panel_key
+    pub panel_key: Option<String>,
 }
 
 impl Monitor {
@@ -92,6 +98,7 @@ impl Monitor {
             depth_ratio: Ratio::uniform(1.0),
             location: Point::new(0.0, 0.0),
             border_resistance: BorderResistance::default(),
+            panel_key: None,
         }
     }
 
@@ -106,4 +113,29 @@ impl Monitor {
     pub fn location(&self) -> Point {
         self.location
     }
+}
+
+/// The cross-machine identity of a panel (docs/multi-pc.md, "Model"): EDID
+/// manufacturer and product codes, then the serial string, else the binary serial.
+///
+/// Never the checksum, the week or the interface: they differ between the inputs of one
+/// monitor, which is exactly what two machines sharing it are plugged into. `None` when
+/// the EDID carries no serial at all — an empty string or an all-zero binary serial is
+/// what a manufacturer writes when it does not number its panels, and two such panels
+/// of one model would otherwise be taken for one.
+pub fn panel_key(
+    manufacturer_code: Option<&str>,
+    product_code: Option<&str>,
+    serial_number: Option<&str>,
+    binary_serial: Option<&str>,
+) -> Option<String> {
+    let manufacturer = manufacturer_code.filter(|s| !s.is_empty())?;
+    let serial = serial_number
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| binary_serial.filter(|s| !s.is_empty() && s.chars().any(|c| c != '0')))?;
+    Some(format!(
+        "{manufacturer}{}_{serial}",
+        product_code.unwrap_or("")
+    ))
 }

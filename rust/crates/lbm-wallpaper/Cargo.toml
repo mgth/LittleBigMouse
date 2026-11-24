@@ -9,6 +9,16 @@ publish = false
 lbm-layout = { path = "../lbm-layout" }
 lbm-store = { path = "../lbm-store" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+# Plasma's answer to the read-only wallpaper script (`desktop::query`).
+serde_json.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Plasma stores the picture as a `file://` URL.
+url = "2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"]
 
 [dev-dependencies]
 tempfile.workspace = true

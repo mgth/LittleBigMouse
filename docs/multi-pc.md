@@ -293,7 +293,9 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   the same pictures again are sent to nobody.
   - **Plasma**: inotify on the directory of `plasma-org.kde.plasma.desktop-appletsrc`
     (`$XDG_CONFIG_HOME`), which plasmashell replaces by a rename when a containment's
-    wallpaper is configured. plasmashell's `wallpaperChanged` D-Bus signal is not used:
+    wallpaper is configured. The session (`XDG_CURRENT_DESKTOP`) says this is Plasma,
+    not the file: a Plasma that has not saved its configuration yet is watched for the
+    first time it does. plasmashell's `wallpaperChanged` D-Bus signal is not used:
     it is emitted by its `setWallpaper` method only, not by the settings dialog. What
     Plasma changes without writing its configuration — the next picture of a slide
     show — is not seen, nor read: the reader reads that configuration.

@@ -275,7 +275,8 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   signale par `WallpaperRevision` dans l'état `Peers` et la sert par `PeerWallpapers`.
   Le signal du bureau (`Desktop::watch`, `wallpaper_watch.rs`) n'est que des événements, et
   n'existe que tant qu'un maître est relié : inotify sur
-  `plasma-org.kde.plasma.desktop-appletsrc` sous Plasma (le signal D-Bus `wallpaperChanged`
+  `plasma-org.kde.plasma.desktop-appletsrc` sous Plasma, que le fichier existe déjà ou
+  non — c'est la session qui dit Plasma (le signal D-Bus `wallpaperChanged`
   de plasmashell n'est émis que par sa méthode `setWallpaper`, pas par le dialogue de
   réglages) ; sous Windows la diffusion `WM_SETTINGCHANGE`/`SPI_SETDESKWALLPAPER` reçue par
   la fenêtre de `winwatch` et un `RegNotifyChangeKeyValue` sur `HKCU\Control Panel\Desktop` ;

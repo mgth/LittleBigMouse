@@ -111,15 +111,33 @@ pub fn is_wallpaper_message(msg: u32, wparam: usize) -> bool {
     msg == WM_SETTINGCHANGE && wparam == SPI_SETDESKWALLPAPER
 }
 
-/// Where plasmashell keeps its containments, wallpapers included.
+/// The file plasmashell keeps its containments in, wallpapers included.
 #[cfg(target_os = "linux")]
-pub fn plasma_config() -> Option<std::path::PathBuf> {
+pub const PLASMA_CONFIG: &str = "plasma-org.kde.plasma.desktop-appletsrc";
+
+/// The user's configuration directory, as the environment names it.
+#[cfg(target_os = "linux")]
+pub fn config_dir() -> Option<std::path::PathBuf> {
     use std::path::{Path, PathBuf};
-    let config = std::env::var_os("XDG_CONFIG_HOME")
+    std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .filter(|p| !p.as_os_str().is_empty())
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".config")))?;
-    Some(config.join("plasma-org.kde.plasma.desktop-appletsrc"))
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".config")))
+}
+
+/// The file to watch in `config_dir` for this `session`, if it is Plasma's.
+///
+/// The session says so, not the file: a Plasma that has not written its configuration
+/// yet (a new account, a configuration just wiped) is the one whose first wallpaper would
+/// otherwise never be seen by a master already linked. The file being there counts too,
+/// for an agent started without the session's variables.
+#[cfg(target_os = "linux")]
+pub fn plasma_config(
+    session: &lbm_display::linux::desktop::DesktopEnvironment,
+    config_dir: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let file = config_dir.join(PLASMA_CONFIG);
+    (session.is_kde() || file.exists()).then_some(file)
 }
 
 /// Says `changes` whenever `file` is written or replaced, until the watch is dropped.
@@ -269,6 +287,35 @@ mod tests {
             std::fs::write(&staged, "[Containments][1][Wallpaper]\nImage=newer\n").unwrap();
             std::fs::rename(&staged, &file).unwrap();
             assert!(said(&mut received).await, "the second rename was not seen");
+        }
+
+        /// A master linked before Plasma first wrote its configuration: the session says
+        /// what to watch, and the file appearing is the first change.
+        #[tokio::test]
+        async fn a_plasma_session_is_watched_before_its_configuration_exists() {
+            use lbm_display::linux::desktop::DesktopEnvironment;
+
+            let config = tempfile::tempdir().unwrap();
+            let plasma = DesktopEnvironment::new(Some("KDE"), None);
+            let gnome = DesktopEnvironment::new(Some("ubuntu:GNOME"), None);
+            assert_eq!(
+                plasma_config(&gnome, config.path()),
+                None,
+                "another desktop, and no file of Plasma's: nothing to watch"
+            );
+            let file = plasma_config(&plasma, config.path())
+                .expect("a Plasma session is watched whether or not it has saved anything");
+            assert!(!file.exists());
+
+            let (changes, mut received) = channel();
+            let _watching = watch_file(&file, changes).expect("no inotify watch to test with");
+            let staged = config.path().join(format!("{PLASMA_CONFIG}.Ab56"));
+            std::fs::write(&staged, "[Containments][1][Wallpaper]\nImage=first\n").unwrap();
+            std::fs::rename(&staged, &file).unwrap();
+            assert!(said(&mut received).await, "the first save was not seen");
+
+            // The file alone is enough for an agent started without the session's variables.
+            assert_eq!(plasma_config(&gnome, config.path()), Some(file));
         }
 
         #[tokio::test]

@@ -205,9 +205,12 @@ impl Desktop for SystemDesktop {
 /// shell's broadcast and registry key. See `wallpaper_watch`.
 #[cfg(target_os = "linux")]
 fn watch(changes: Changes) -> Option<Watching> {
-    // The file is Plasma's: where there is none, this is another desktop — one this
-    // agent cannot read the wallpapers of either — and nothing is installed.
-    let file = crate::wallpaper_watch::plasma_config().filter(|file| file.exists())?;
+    // Plasma or nothing: any other desktop is one this agent cannot read the wallpapers
+    // of either. The session decides, so that a Plasma which has not saved its
+    // configuration yet is watched for the first time it does.
+    let session = lbm_display::linux::desktop::DesktopEnvironment::current();
+    let file =
+        crate::wallpaper_watch::plasma_config(&session, &crate::wallpaper_watch::config_dir()?)?;
     crate::wallpaper_watch::watch_file(&file, changes)
         .inspect_err(|error| {
             eprintln!(

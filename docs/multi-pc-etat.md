@@ -271,7 +271,16 @@ Windows actuel ne connaît pas les zones distantes.
   le développement : la machine était verrouillée.
 
 Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
-couvrirait aussi les fenêtres élevées pour un utilisateur standard.
+couvrirait aussi les fenêtres élevées pour un utilisateur standard. Conception :
+[`multi-pc-service-windows.md`](multi-pc-service-windows.md), option B validée le
+2026-11-24 ; injecteur (#824) et service (#825) en revue. Essayé sur la vm124 sans le
+service (même lancement, depuis la session 0) : invite UAC annulée par Échap injecté,
+fenêtre élevée au premier plan pilotée, session verrouillée atteinte (`Winlogon`, effet
+non vu à l'œil). Jamais tournés : le service sous le SCM, un compte standard, le réseau
+du service (étape 4), l'installeur (étape 5).
+Son point principal : un canal agent → service limité à l'utilisateur ne suffit pas (tout
+processus de l'utilisateur peut se faire passer pour l'agent, donc valider une invite
+UAC) ; le service reçoit lui-même le flux d'un maître approuvé par un administrateur.
 
 ### 4. Maîtres Linux sans evdev
 
@@ -476,7 +485,8 @@ macOS n'a de sens qu'après.
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
-   Windows ») ; reste le service Windows pour le bureau sécurisé.
+   Windows ») ; reste le service Windows pour le bureau sécurisé et l'utilisateur
+   standard (conception : [`multi-pc-service-windows.md`](multi-pc-service-windows.md)).
 6. Presse-papiers : essayer le palier 1 sur la paire réelle, puis les fichiers (palier 3),
    puis le palier 2.
 7. Plusieurs esclaves.

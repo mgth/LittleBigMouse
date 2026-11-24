@@ -1,0 +1,345 @@
+# Service Windows de l'esclave multi-PC : conception
+
+> **Statut : option B (§ 1) validée par le mainteneur le 2026-11-24.** Choix par défaut
+> retenus pour les autres questions, en attendant son avis : port à part, `SendSAS` en
+> dernière étape optionnelle, écran de connexion hors de cette série (§ 2). Rien de ce qui
+> suit n'a tourné, sauf ce que dit « Essai du 2026-11-24 » (§ 6). Les comportements de Windows marqués *(à vérifier)* ne sont connus que
+> par la documentation ou par l'usage qu'en font d'autres outils, pas par un essai ici.
+
+Contexte : [`multi-pc-etat.md`](multi-pc-etat.md), « 3. Esclave Windows : les deux
+trous ». L'esclave injecte par `SendInput` depuis `lbm-hook` (`remote/windows.rs`), un
+processus de la session de l'utilisateur, au niveau d'intégrité de l'agent qui l'a lancé.
+Deux cas lui échappent :
+
+1. **Le bureau sécurisé** (`winsta0\winlogon`) : invite UAC, écran de verrouillage,
+   écran Ctrl+Alt+Suppr. Seul SYSTEM peut ouvrir ce bureau, et `SendInput` n'atteint que
+   le bureau d'entrée auquel le thread appelant est attaché.
+2. **Les fenêtres élevées ou UIAccess** (`osk.exe`, Gestionnaire des tâches, une console
+   administrateur) pour un **utilisateur standard** : UIPI jette tout, mouvement compris
+   (essai vm124 du 2026-11-24). Un administrateur à jeton fractionné a déjà
+   `StartElevated` ; un utilisateur standard n'a rien.
+
+Un service SYSTEM couvre les deux. Le reste de ce document dit comment, et surtout
+**comment ne pas en faire un contournement d'UAC** : l'autostart élevé en était un (PR #742
+et #743), un service qui injecte au-dessus de tout en serait un bien pire.
+
+## 1. Le point dur : qui a le droit de nourrir l'injecteur
+
+Un processus qui injecte sur le bureau sécurisé peut cliquer « Oui » dans une invite de
+consentement UAC. Quiconque peut lui dicter ses entrées peut donc :
+
+- lancer lui-même `ShellExecute(..., "runas", payload)` puis valider l'invite : pour un
+  administrateur à jeton fractionné, c'est l'admin sans consentement ;
+- piloter une console administrateur déjà ouverte, ou l'écran de verrouillage.
+
+La demande initiale proposait un **canal agent → service limité à l'utilisateur**. Ce n'est
+pas suffisant, et c'est la principale correction de cette conception : l'agent tourne en
+intégrité moyenne, sous le compte de l'utilisateur. N'importe quel processus de ce même
+utilisateur, au même niveau, peut :
+
+- ouvrir le même pipe (la DACL « utilisateur seulement » le laisse passer) ;
+- injecter du code dans l'agent (`OpenProcess` avec tous les droits est permis entre
+  processus du même utilisateur et du même niveau) ;
+- réécrire `peers.json` dans `%APPDATA%` pour y ajouter son propre « maître ».
+
+Un canal limité à l'utilisateur donne donc l'injection sur le bureau sécurisé à **tout
+logiciel qui tourne sous ce compte**. C'est exactement la frontière que le bureau sécurisé
+existe pour tenir.
+
+Trois façons d'ancrer la confiance ailleurs :
+
+| | Qui nourrit l'injecteur | Ce qu'un processus moyen de l'esclave peut faire | Coût |
+|---|---|---|---|
+| A | l'agent, par un pipe à DACL utilisateur | **tout** (pipe, injection dans l'agent, `peers.json`) | faible ; **rejeté** |
+| B | **le service lui-même**, qui reçoit le flux d'entrée du maître par TLS mutuel, depuis un maître qu'un **administrateur** a approuvé dans un magasin protégé | rien : il n'a ni la clé du maître, ni le droit d'écrire le magasin, ni celui d'ouvrir un processus SYSTEM | une seconde connexion TLS, terminée en SYSTEM ; un changement côté maître |
+| C | l'agent, relevé en intégrité haute par le service | toujours `peers.json` et la configuration, écrits par l'utilisateur ; et l'agent entier (réseau, JSON, fonds, presse-papiers) devient la surface protégée | lourd et toujours troué ; **rejeté** |
+
+**Recommandation : B.** La racine de confiance devient « un maître approuvé par un
+administrateur de l'esclave », ce qui est la définition même de la fonction : le clavier du
+maître sert de clavier à l'esclave, y compris sur le bureau sécurisé.
+
+Risque résiduel, à écrire dans l'aide et dans l'installeur : **qui contrôle la session du
+maître contrôle le bureau sécurisé de l'esclave**, comme un clavier USB qu'on y aurait
+branché. Un logiciel malveillant en intégrité moyenne *sur le maître* peut injecter dans
+l'agent du maître et taper sur l'invite UAC de l'esclave. Deskflow et Synergy, qui font
+tourner leur cœur en SYSTEM sur l'esclave, ont la même propriété. C'est la raison pour
+laquelle la fonction est désactivée par défaut et soumise à un administrateur de l'esclave,
+maître par maître.
+
+### Approbation d'un maître
+
+- Magasin : `%ProgramData%\LittleBigMouse\service\trusted-masters.json`, dossier créé par
+  l'installeur avec une DACL explicite, sans héritage : SYSTEM et Administrateurs en
+  contrôle total, rien d'autre (pas même la lecture pour les utilisateurs : elle n'est
+  pas nécessaire). Si la DACL du dossier ou du fichier laisse écrire quelqu'un d'autre
+  (même contrôle que `lbm-agent/src/admin_only.rs`, sorti dans `lbm-admin-only`), le
+  service le dit et **ne fait confiance à aucun maître** ; c'est son propre dossier
+  d'installation mal protégé qui l'empêche de démarrer. Un dossier créé d'avance par un
+  utilisateur (`%ProgramData%` le permet) échoue à ce contrôle : refus, jamais confiance.
+- Contenu : empreintes de certificat de maître (`MachineId` de `lbm-net`) et le nom
+  affiché au moment de l'approbation. Rien d'autre : pas de chemin, pas de commande.
+- Écriture : seulement par `lbm-service.exe trust <empreinte>` / `untrust`, lancé élevé.
+  L'interface de l'esclave propose « Autoriser <maître> sur le bureau sécurisé », qui
+  relance cette commande par `runas` : une invite UAC, ou une demande d'identifiants pour
+  un utilisateur standard (c'est voulu : il faut un administrateur).
+- La commande élevée **affiche elle-même** le nom et l'empreinte et demande confirmation,
+  au lieu de faire confiance à son argument : sinon un processus moyen qui guette le clic
+  pourrait lancer la même commande avec sa propre empreinte, et l'utilisateur
+  consentirait à l'invite UAC qu'il attendait. L'empreinte est celle que la page Machines
+  du maître affiche déjà ; l'utilisateur les compare.
+- Le service est notifié d'un changement par un code de contrôle SCM privé (128),
+  envoyé par la commande élevée ; il relit alors le magasin. Pas de surveillance du
+  fichier.
+- **Un retrait prend effet tout de suite**, pas seulement à la connexion suivante : à la
+  relecture, toute connexion d'un maître qui n'est plus dans le magasin est fermée, et
+  l'injecteur reçoit un `Leave`, donc relâche ce que ce flux tenait enfoncé. Un magasin
+  devenu illisible ou mal protégé ferme toutes les connexions de la même façon.
+- Lecture, modification et écriture se font sous un même verrou (fichier
+  `trusted-masters.lock` à côté du magasin) : deux administrateurs qui approuvent et
+  retirent en même temps ne peuvent pas rétablir un maître dont le retrait a été
+  confirmé. Le dossier est contrôlé **avant** toute écriture ; le nouveau texte va dans un
+  fichier créé exprès, puis est renommé sur le magasin.
+
+## 2. Architecture
+
+```mermaid
+flowchart LR
+  subgraph M["Maître (Linux ou Windows)"]
+    MA["lbm-agent"]
+  end
+  subgraph S["Esclave Windows"]
+    subgraph S0["Session 0"]
+      SVC["lbm-service<br/>SYSTEM<br/>écoute TLS 24818"]
+      TM[("trusted-masters.json<br/>SYSTEM + Admins")]
+    end
+    subgraph S1["Session console active"]
+      INJ["lbm-inject<br/>jeton SYSTEM déplacé dans la session<br/>suit le bureau d'entrée"]
+      SA["lbm-agent (utilisateur)"]
+      SH["lbm-hook (utilisateur)"]
+    end
+  end
+  MA -- "lien actuel 24817 : contrôle, fonds, presse-papiers" --> SA
+  MA -- "flux d'entrée, TLS mutuel" --> SVC
+  TM -. lu .-> SVC
+  SVC -- "tube nommé, SYSTEM seul" --> INJ
+  SVC -. "état, lecture seule" .-> SA
+```
+
+### `lbm-service` (session 0, LocalSystem)
+
+Binaire séparé, le plus petit possible ; plomberie SCM par le crate `windows-service`
+(déjà essayée dans le spike `spike/windows-service`, 127cc898).
+
+- **Écoute** le flux d'entrée sur un port à lui (proposé : 24818), TLS 1.3 mutuel avec
+  `lbm-net::tls` : la poignée de main prouve la clé du maître, le service n'accepte que
+  les empreintes du magasin. Sa propre identité (certificat et clé) vit dans le même
+  dossier protégé ; elle est distincte de celle de l'agent, que l'utilisateur peut lire.
+  N'écoute **que si le magasin n'est pas vide**.
+- Ne décode que des lots `lbm_ipc::input` (longueur bornée à `MAX_BATCH_SIZE`, puis événements binaires à étiquette), et
+  les passe à l'injecteur de la session console active. Aucun JSON, aucun fichier, aucune
+  commande venue du réseau ne fait autre chose qu'une entrée.
+- **Lance l'injecteur** dans la session console active : jeton SYSTEM du service,
+  `DuplicateTokenEx` + `SetTokenInformation(TokenSessionId)` (variante c du spike),
+  `CreateProcessAsUser` sur `winsta0\default`, sans héritage de handles : Windows n'en
+  transmet pas d'une session à l'autre, et le service est en session 0. Le lien est un
+  **tube nommé créé pour ce lancement** : nom tiré au hasard (`lbm-inject-` et 128 bits),
+  DACL qui n'accorde que SYSTEM, première et seule instance
+  (`FILE_FLAG_FIRST_PIPE_INSTANCE`, une instance au plus), clients distants refusés. Le
+  service vérifie que le client est le processus qu'il a lancé
+  (`GetNamedPipeClientProcessId`), l'injecteur que le serveur est le processus qui l'a
+  lancé (`GetNamedPipeServerProcessId`, contre `--server`). Un second tube,
+  `<nom>-log`, ramène les diagnostics de l'injecteur ; rien de ce qui y arrive n'est
+  interprété. Un injecteur qui n'a pas ouvert son entrée en 5 s est arrêté.
+- **Suit les sessions** par `SERVICE_CONTROL_SESSIONCHANGE` (c'est l'équivalent, pour un
+  service, de `WTSRegisterSessionNotification`, réservé aux fenêtres) :
+  `WTS_CONSOLE_CONNECT`/`DISCONNECT`, `WTS_SESSION_LOGON`/`LOGOFF`. À chaque changement
+  de session console : l'injecteur de l'ancienne est arrêté (fin du tube = relâchement de
+  tout ce qui est enfoncé), et la connexion du maître est fermée, ce qui ramène son
+  pointeur. Le suivant est lancé à l'`Enter` suivant. Les sessions RDP sont ignorées.
+  Fin d'un injecteur : `RegisterWaitForSingleObject` sur son handle de processus, aucune
+  scrutation.
+- **Hors de cette série : l'écran de connexion avant toute session.** Le maître trouve le
+  service par le `Hello` de l'agent de l'esclave, et aucun agent ne tourne avant qu'un
+  utilisateur ouvre sa session : même un maître approuvé n'a alors rien qui lui dise de
+  piloter. Le scénario couvert est donc **une session ouverte**, verrouillée ou non. Une
+  suite possible : le maître garde, de la dernière liaison authentifiée, l'adresse et
+  l'empreinte épinglée du service et la disposition des écrans de l'esclave, et se
+  connecte directement au service quand aucun lien d'agent n'existe. Le service, lui,
+  saurait déjà lancer un injecteur dans la session console de l'écran de connexion.
+- Publie un état en lecture seule pour l'agent de la session (piloté ou non, par quel
+  maître, bureau courant) : un pipe nommé dont la DACL accorde à SYSTEM l'écriture et à
+  l'utilisateur de la session console **la lecture seule**, côté service ; rien de ce que
+  l'agent y écrirait n'est lu.
+- Ctrl+Alt+Suppr : `SendInput` ne le produit pas. Le service peut appeler `SendSAS`,
+  à condition que la stratégie `SoftwareSASGeneration` l'autorise aux services
+  (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`). Modifier une
+  stratégie système est une décision à part : proposé comme **dernière étape, en option
+  de l'installeur décochée**, l'injecteur signalant au service la combinaison reçue.
+
+### `lbm-inject` (session console, SYSTEM)
+
+Tout ce que fait aujourd'hui l'esclave Windows de `lbm-hook`, et rien de plus.
+
+- Un second binaire du paquet `lbm-hook` (`src/inject_main.rs`), qui réutilise son module
+  `remote` (`Session`, `SendInputInjector`, `hider`, `keymap`, `coordinates`, `parking`)
+  sans rien changer au hook. Sortir ce module dans une bibliothèque à part, comme
+  proposé d'abord, l'aurait arraché à ce dont il dépend dans le hook (énumération des
+  écrans, uinput sous Linux, état partagé) pour un gain nul : ce qui est *lié* au binaire
+  n'est pas ce qu'il *exécute*, et seul `remote::stream::pump` lit son entrée. Mêmes
+  règles des deux côtés : rien avant `Enter`, tout relâché à la fin du flux, marque
+  `INJECTED` dans `dwExtraInfo` que le hook local laisse passer.
+- Lit les lots sur le tube nommé que le service lui désigne (`--pipe`, refusé s'il n'a
+  pas la forme du service) et écrit ses diagnostics sur le second ; pas de réseau, pas
+  de fichier, pas de configuration.
+- **Suit le bureau d'entrée sans scrutation** : le thread d'injection, qui n'a aucune
+  fenêtre ni crochet (condition de `SetThreadDesktop`), s'attache au bureau d'entrée
+  (`OpenInputDesktop` + `SetThreadDesktop`) à chaque `Enter` et quand `SendInput` en
+  injecte moins que demandé : il se rattache, et seulement si le bureau a changé, renvoie
+  une fois le reste du lot (`remote::stream::send_following`). Pas d'abonnement à
+  `EVENT_SYSTEM_DESKTOPSWITCH` dans cette étape : les deux déclencheurs suffisent tant que
+  `SendInput` échoue franchement hors du bureau d'entrée. *(À vérifier sur la vm124 ; si
+  l'échec est silencieux, l'événement devient nécessaire.)*
+- Le masquage du pointeur (`hider`) garde sa fenêtre, sur un **autre thread**, attaché à
+  `winsta0\default` ; sur le bureau sécurisé il n'y a rien à masquer.
+- La détection UIPI de la PR #818 (`foreground`) n'a plus d'objet ici : SYSTEM est au-dessus
+  de tous les niveaux. Elle reste pour le chemin sans service.
+
+Pourquoi SYSTEM et pas un jeton UIAccess pour le bureau par défaut : UIAccess passe UIPI,
+mais pas le bureau sécurisé ; il faudrait alors deux injecteurs et un passage de relais à
+chaque changement de bureau, pour un gain faible, puisque **le pouvoir sur les entrées est
+le même** (un processus UIAccess peut piloter une console administrateur). Ce qui compte
+est que l'injecteur ne puisse être nourri que par le service, et qu'il ne fasse rien
+d'autre qu'injecter. Un jeton UIAccess forgé par un service sans la signature ni le dossier
+protégé qu'exige AppInfo *(à vérifier)* serait de toute façon un chemin moins documenté.
+
+### Ce qui change ailleurs
+
+- **Agent de l'esclave** : annonce dans `Hello` une capacité `SecureInput` avec le port et
+  l'empreinte du service, **lue dans l'état publié par le service**, jamais dans sa
+  configuration. Il ne voit plus le flux d'entrée quand le service le porte ; son
+  indicateur « piloté par » (#816) vient de l'état du service.
+- **Agent du maître** : vers un esclave qui annonce `SecureInput`, et seulement si le
+  service a accepté sa connexion, il envoie le flux d'entrée sur cette connexion au lieu
+  du lien. Le reste ne change pas : fin de connexion = fin du saut, pointeur ramené,
+  `Leave`. Il épingle l'empreinte du service la première fois **sur le lien déjà
+  authentifié** avec l'agent ; une empreinte qui change ensuite est refusée, comme pour
+  un pair.
+- **Hook de l'esclave** : inchangé quand il n'y a pas de service. Avec service, il ne
+  reçoit plus d'entrée distante ; il continue de router la souris locale.
+- **Repli** : service absent, arrêté, magasin vide ou maître non approuvé → chemin
+  actuel par le lien et le hook, avec l'avertissement UIPI de la PR #818. Rien ne change
+  pour qui n'installe pas le service.
+
+## 3. Ce qui n'est pas une élévation exploitable
+
+Liste de contrôle pour la relecture de chaque PR :
+
+- Aucune entrée du service n'est lue depuis un endroit qu'un non-administrateur peut
+  écrire : magasin et identité dans le dossier protégé, vérifié au démarrage ; aucune
+  variable d'environnement de l'utilisateur ; `HKCU` jamais lu.
+- Le service ne lance **que** `lbm-inject.exe` situé à côté de lui, dans un dossier dont
+  il vérifie au démarrage qu'il n'est modifiable que par SYSTEM, Administrateurs et
+  TrustedInstaller (`admin_only`) — l'erreur de l'autostart élevé était précisément
+  d'exécuter en élevé un binaire d'un dossier modifiable. Chemin d'image du service entre
+  guillemets.
+- Le canal vers l'injecteur n'est ouvrable que par SYSTEM, sous un nom imprévisible,
+  et chaque bout vérifie l'autre par son numéro de processus. Le pipe d'état est créé par
+  le service (première instance, `FILE_FLAG_FIRST_PIPE_INSTANCE`), en lecture seule pour
+  l'utilisateur.
+- Le réseau avant authentification se limite à la poignée de main `rustls` ; après, à
+  `lbm_ipc::input::decode`, déjà testé et borné. Aucun chemin du réseau vers autre chose
+  que `SendInput` (et `SendSAS` si l'option est posée).
+- Pas de jeton lié élevé (variante b du spike) : il donnerait à l'injecteur les droits
+  d'administrateur de l'utilisateur sans invite, ce que rien ici ne demande.
+- Le service lui-même : DACL par défaut du SCM (seuls les administrateurs le contrôlent),
+  aucun code de contrôle privé qui fasse autre chose que relire le magasin.
+
+## 4. Installation, signature
+
+- **Installeur seulement** (`LittleBigMouse.Setup/LittleBigMouse.iss`) : une tâche
+  **décochée** « Autoriser le pilotage du bureau sécurisé par un autre PC (service
+  Windows) ». Cochée, elle crée le service (`sc create`, démarrage automatique différé,
+  actions de récupération), le dossier `%ProgramData%\LittleBigMouse\service` avec sa
+  DACL, et la règle de pare-feu du port 24818 (même forme que celle de 24817, PR #811).
+  Mise à jour : arrêt du service avant la copie, puis redémarrage ; **le dossier est
+  gardé**, avec l'identité du service et le magasin, sans quoi les maîtres approuvés
+  seraient oubliés et refuseraient la nouvelle empreinte qu'ils n'ont pas épinglée.
+  Désinstallation : suppression du service et de la règle ; le dossier n'est purgé qu'en
+  `usPostUninstall`, qu'Inno n'exécute pas lors d'une mise à jour par-dessus.
+- Le portable ne l'installe jamais ; ni l'agent ni l'UI ne savent installer le service.
+- Le dossier d'installation doit être sous Program Files pour que la vérification
+  `admin_only` passe : un choix de dossier ailleurs désactive la tâche (ou le service
+  refuse de démarrer, avec un message dans le journal d'événements).
+- **SignPath** : `lbm-service.exe` et `lbm-inject.exe` ajoutés aux binaires signés et au
+  contrôle « Verify signed binaries » de la release ; `SIGNING.md` les liste. Côté SignPath,
+  la configuration d'artefact est à compléter par le mainteneur (comme pour `lbm-agent.exe`).
+
+## 5. Étapes de code (PR vers `v6`, jamais empilées)
+
+1. **Cette conception.**
+2. Le binaire `lbm-inject` (lots sur le tube nommé du service, relâchements refusés gardés, rattachement au bureau d'entrée),
+   avec ses tests purs (boucle de lecture et relâchements, renvoi unique d'un lot) ;
+   `lbm_ipc::input::read_batch_blocking`.
+3. `lbm-service` : SCM, suivi des sessions (automate pur et testé : quelle session, quand
+   lancer, quand arrêter), lancement de l'injecteur, vérification `admin_only` du dossier
+   et du magasin, `trust`/`untrust`.
+4. Réseau : écoute TLS du service, capacité `SecureInput`, routage du flux par le maître ;
+   tests avec deux agents et un faux service sous Linux (le service est Windows seulement,
+   la logique de connexion ne l'est pas).
+5. Installeur, CI (binaires dans le portable et l'installeur), SignPath, pare-feu.
+6. Option `SendSAS`.
+
+Chaque étape : `cargo clippy --workspace --all-targets` propre sous Linux et pour
+`x86_64-pc-windows-gnu`.
+
+## 6. Essais réels prévus (vm124)
+
+Avec un compte administrateur, puis un compte standard (à créer seulement avec l'accord du
+mainteneur) ; service installé par l'installeur, maître Linux :
+
+- invite UAC (consentement, et demande d'identifiants pour le compte standard) ;
+- écran de verrouillage (Win+L) ;
+- `osk.exe`, Gestionnaire des tâches, console administrateur ;
+- changement rapide d'utilisateur, déconnexion, veille ;
+- maître non approuvé : refusé, repli sur le chemin actuel ;
+- `trust` avec une empreinte qui n'est pas celle affichée : la confirmation le montre ;
+- `untrust` pendant une session pilotée : la connexion tombe, rien ne reste enfoncé ;
+- mise à jour par l'installeur : un maître approuvé retrouve le même service.
+
+### Essai du 2026-11-24 (vm124, compte administrateur)
+
+Sans le service : `examples/inject_trial`, lancé en SYSTEM depuis la session 0
+(`qm guest exec`), fait le même lancement que lui, tube nommé compris, et écrit un script
+d'entrées. Binaires de #824 + #825 réunis (3ed05ec6), compilés pour
+`x86_64-pc-windows-gnu`. Le LBM v6 du mainteneur tournait en même temps dans la session.
+
+| Cas | Résultat |
+|---|---|
+| Canal : session 0 → session 1 par tube nommé | **marche** : l'injecteur démarre dans la session 1, ouvre son tube, ses diagnostics reviennent |
+| Bureau par défaut | **marche** : pointeur au pixel injecté (520, 410) |
+| Invite UAC (`Start-Process -Verb RunAs` depuis la session) | **marche** : l'injecteur passe sur `Winlogon`, Échap injecté annule l'invite (« L'opération a été annulée par l'utilisateur »), `consent.exe` se ferme |
+| Fenêtre élevée au premier plan (sonde WinForms lancée par une tâche `Highest`) | **marche** : mouvements, clic gauche et touche reçus (A → Q : disposition AZERTY de la VM, comme pour le hook) |
+| Pointeur au-dessus d'`osk.exe` (non au premier plan) | **marche** : pointeur au pixel injecté |
+| Écran de verrouillage (`LockWorkStation`), session verrouillée | l'injecteur passe sur `Winlogon`, `SendInput` prend tout (mouvement, Espace) ; **effet non vu à l'œil** (le bureau sécurisé ne se capture pas) |
+| Même chose ~6 s après le verrouillage | l'injecteur restait sur `Default` sans perte signalée : soit la bascule n'avait pas eu lieu, soit `SendInput` jette **en silence** hors du bureau d'entrée. Non tranché ; si c'est le second cas, l'abonnement à `EVENT_SYSTEM_DESKTOPSWITCH` devient nécessaire |
+
+Pas fait : contraste avec un injecteur non élevé contre la même fenêtre élevée (la sonde a
+cessé de s'afficher aux essais suivants ; le blocage depuis un processus moyen reste celui
+mesuré pour la PR #818) ; compte standard (aucun sur la VM) ; le service installé et
+démarré par le SCM ; Ctrl+Alt+Suppr ; changement d'utilisateur, veille ; maître réel (le
+réseau du service est l'étape 4).
+
+Effet de bord à connaître : un `osk.exe` ouvert au moment du verrouillage est relancé par
+ATBroker, côté utilisateur et sur l'écran de verrouillage (en SYSTEM).
+
+## Questions pour le mainteneur
+
+1. ~~**Ancrage de la confiance (B)**~~ : validé le 2026-11-24.
+2. **Port à part (24818) ou tunnel dans le lien existant** : le tunnel (l'agent relaie
+   des octets TLS opaques entre le maître et le service) évite une règle de pare-feu de
+   plus, au prix d'un type de trame et d'un relais dans l'agent. Préférence de départ :
+   port à part, plus simple.
+3. **Ctrl+Alt+Suppr** : faut-il l'option `SendSAS` (modification d'une stratégie système),
+   ou l'écran de verrouillage et l'invite UAC suffisent-ils ?
+4. **Écran de connexion avant toute session** : proposé hors de cette série (§ 2,
+   « Hors de cette série »), la suite possible y est décrite.

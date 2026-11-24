@@ -3,7 +3,7 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
-Mis à jour au fil des travaux : voir « Travaux en cours » à la fin.
+Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
 
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
@@ -49,8 +49,10 @@ pas tenue, le hook de l'esclave qui redémarre seul, est corrigé par la PR #806
 
 ## Ce qui a été essayé pour de bon
 
-Une seule paire : **maître Linux (KDE Plasma 6, Wayland, backend evdev) → esclave
-Windows 11**, avec un écran partagé par KVM.
+Une seule paire complète : **maître Linux (KDE Plasma 6, Wayland, backend evdev) →
+esclave Windows 11**, avec un écran partagé par KVM. L'esclave Linux et les fonctions
+Windows annexes ont été essayés à part le 2026-11-24, avec `examples/peer_drive` dans le
+rôle du maître (lignes marquées d'une PR : correctifs encore ouverts).
 
 | Essai | Résultat |
 |---|---|
@@ -61,16 +63,21 @@ Windows 11**, avec un écran partagé par KVM.
 | Clavier depuis le maître, page Machines | Essayé à la main par le mainteneur, sans défaut signalé |
 | Curseur masqué sur l'esclave Windows et sur le maître KWin | Vérifié |
 | Vignettes de fond d'écran distantes sur la carte | Vérifié à la liaison |
+| Esclave Linux (KWin 6, deux écrans d'échelles 1,66 et 1,25) : pointeur au pixel, clics gauche/droit/milieu, molette verticale et horizontale haute résolution, touches étendues, relâchement au `Leave` (bouton puis touches en ordre inverse) et à la chute du lien (1 ms si le maître meurt, 3 s par keepalive s'il se fige) | Vérifié avec `peer_drive`, après les deux correctifs de la PR #807 |
+| Fonds en direct, esclave Windows : diaporama, `SystemParametersInfo`, `IDesktopWallpaper`, clic dans Paramètres, Spotlight, passage en diaporama | Vérifié sur la vm124 : nouvelle vignette chez le maître en 1 à 2 s |
+| Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
+| Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (branche locale, pas encore en PR) |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 - la commutation VCP 0x60 (ni `ddcutil`, ni dxva2) ;
-- le suivi en direct des fonds d'écran (#801) : tests Linux seulement, chemin Windows
-  compilé mais jamais exécuté ;
-- un **esclave Linux** (injection uinput) ;
+- le suivi en direct des fonds d'écran sous Linux au-delà des tests (dialogue KDE) ;
+  côté Windows, le changement de diaporama sur minuterie et celui quotidien de Spotlight ;
+- un esclave Linux piloté par un vrai maître (seulement par `peer_drive`), et son hook
+  tué en pleine session ;
 - le masquage du curseur maître sous X11 (XFixes) et sous un compositeur autre que KWin ;
-- la molette, les boutons autres que le gauche, la correspondance verticale exacte à la
-  traversée ;
+- la molette et les boutons autres que le gauche **sur l'esclave Windows** (vérifiés sur
+  l'esclave Linux), la correspondance verticale exacte à la traversée ;
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
   provoqués sur les machines.
@@ -85,15 +92,21 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   cours. Prouvé par tests, pas provoqué sur les machines.
 - La confirmation `Loaded` du hook n'est pas corrélée à un chargement précis : si le
   hook se reconnecte pendant qu'un `Load` est en vol, sa réponse peut être attribuée au
-  mauvais. Le corriger demande un identifiant de layout dans la réponse.
+  mauvais. *Corrigé par la PR #809, pas encore fusionnée* (identifiant facultatif dans
+  `Load`, renvoyé par `Loaded`/`LoadFailed`).
 - Fonds en mode « Span » sous Linux à une échelle différente de 1 : mal positionnés, y
   compris dans l'aperçu local.
-- Un échec de commutation d'entrée n'est visible que dans le journal de l'agent.
+- Un échec de commutation d'entrée, ou un lien refusé, n'est visible que dans le
+  journal de l'agent. *Corrigé par la PR #808, pas encore fusionnée* (état poussé
+  vers la page Machines et le badge de la carte).
 - Le premier lien avec un esclave qui apporte des écrans inconnus crée un profil
   **désactivé** : le moteur s'arrête jusqu'à ce que l'utilisateur l'active.
 - Esclave Linux : si son propre backend evdev route, une souris locale reprend d'où ce
-  backend avait laissé le curseur, pas d'où le maître l'a laissé ; et les tout premiers
-  événements après la création du périphérique uinput peuvent être perdus.
+  backend avait laissé le curseur, pas d'où le maître l'a laissé. Deux autres défauts
+  trouvés à l'essai sont *corrigés par la PR #807, pas encore fusionnée* : un esclave
+  dont le moteur local est arrêté n'injectait pas le pointeur (il ne connaissait son
+  bureau que par un `Load`), et KWin 6 jette ce qu'un périphérique uinput émet dans ses
+  ~300 premières millisecondes, d'où un premier `Enter` sans effet.
 
 ## Matrice de support
 
@@ -134,11 +147,11 @@ mesures.
 Avant d'écrire du code neuf, lever les « jamais essayé » ci-dessus. Trois d'entre eux
 ne demandent que du temps sur les machines actuelles :
 
-- **Esclave Linux** : inverser les rôles n'est pas encore possible (pas de maître
-  Windows), mais deux machines Linux suffisent, ou l'exemple `peer_drive` qui joue le
-  maître sans hook.
-- **VCP 0x60** sur un moniteur câblé sur deux entrées, dans les deux sens.
-- **Fonds en direct** : dialogue KDE, Paramètres Windows 11, diaporama, Spotlight.
+- ~~**Esclave Linux**~~ : fait avec `peer_drive` (PR #807) ; reste un essai entre deux
+  vraies machines Linux.
+- **VCP 0x60** sur un moniteur câblé sur deux entrées, dans les deux sens. Le Samsung
+  G80SD n'a pas de VCP : il faut un autre écran.
+- ~~**Fonds en direct**~~ : fait sous Windows ; reste le dialogue KDE.
 
 ### 2. Maître Windows
 
@@ -170,8 +183,12 @@ Windows actuel ne connaît pas les zones distantes.
   `SendInput`, soumis à UIPI : depuis un hook non élevé, rien n'est garanti quand une
   fenêtre élevée a le focus. Une option existe déjà : `StartElevated` lance, pour un
   administrateur à jeton fractionné, un agent élevé dont le hook hérite du niveau
-  d'intégrité (`lbm-agent/src/elevation.rs`). **À essayer** pour l'injection multi-PC
-  avant d'écrire quoi que ce soit ; un utilisateur standard reste sans solution.
+  d'intégrité (`lbm-agent/src/elevation.rs`). **Essayé sur la vm124** : depuis un agent
+  non élevé, rien ne passe, pas même le mouvement ; depuis un agent élevé, tout passe.
+  Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
+  l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de
+  `--config-dir` (branche locale). Un utilisateur standard reste sans solution hors
+  service Windows.
 - **Bureau sécurisé** (UAC, écran de verrouillage, Ctrl+Alt+Suppr) : hors d'atteinte
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
   le développement : la machine était verrouillée.
@@ -209,16 +226,22 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
 - **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
   viendrait après.
-- **Pare-feu Windows** : la règle d'entrée sur le port 24817 a été posée à la main
-  pendant les essais ; l'installeur ne la crée pas.
-- **Retour d'erreur vers l'interface** : commutation d'entrée échouée, lien refusé.
+- **Pare-feu Windows** : fait sur une branche locale, pas encore en PR. L'installeur
+  Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
+  `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
+  d'un nouveau réseau sous Windows 11 : une règle « Privé » y resterait inactive ; à
+  confirmer par le mainteneur), et la retire à la désinstallation. L'essai a révélé que
+  l'installeur v6 **n'embarquait pas `lbm-agent.exe`** et que la désinstallation
+  tuait le hook avant l'agent, qui le relançait ; les deux sont corrigés. Non essayés :
+  la mise à jour par-dessus une installation, la signature de `lbm-agent.exe`.
+- ~~**Retour d'erreur vers l'interface**~~ : PR #808.
 - **Profil désactivé au premier lien** : décider si un esclave nouvellement appairé
   doit activer son profil d'office.
 - **Traductions** de la page Machines : non vérifié.
 - **Tests de bout en bout** avec les vrais binaires sur deux machines : aujourd'hui les
   tests d'intégration tournent en boucle locale avec un faux hook, et la revue a montré
   deux fois que cette doublure masquait un défaut.
-- Les deux faiblesses de protocole listées plus haut.
+- ~~Les deux faiblesses de protocole listées plus haut~~ : PR #806 et #809.
 
 ## Presse-papiers partagé
 
@@ -381,10 +404,13 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| `InputReset` quand le hook de l'esclave tombe | PR #806 | Ouverte, en attente de fusion |
-| Corrélation `Load`/`Loaded` par identifiant | `fix/multi-pc-loaded-id-v6` | En cours |
-| Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | `feat/multi-pc-ui-errors-v6` | En cours |
-| Automate de traversée sorti du module evdev | `refactor/multi-pc-crossing-v6` | En cours |
-| Indicateur de machine pilotée, synchronisation des verrous, pointeur verrouillé sur une machine | `feat/multi-pc-small-features-v6` | En cours ; le verrouillage attend l'automate partagé |
-| Règle de pare-feu 24817 dans l'installeur, essai de `StartElevated`, fonds en direct sous Windows | `feat/multi-pc-windows-vm124-v6` | En cours, sur la vm124 |
-| Esclave Linux essayé pour de bon | `test/multi-pc-linux-slave-v6` | En cours ; l'essai attend l'accord du mainteneur |
+| `InputReset` quand le hook de l'esclave tombe | PR #806 | Ouverte |
+| Esclave Linux : pointeur injecté moteur arrêté, premiers événements gardés | PR #807 | Ouverte ; essayé sur matériel |
+| Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | PR #808 | Ouverte ; UI vue seulement par kittest |
+| Corrélation `Load`/`Loaded` par identifiant | PR #809 | Ouverte ; build Windows non vérifié |
+| Automate de traversée sorti du module evdev (`hook::crossing`, trait `Platform`) | PR #810 | Ouverte ; refactoring pur |
+| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil côté protocole, agent et esclave | `claude/multi-pc-small-features-v6-98ec02`, 2 commits locaux | Pas poussé. L'émission des verrous par le maître et le verrouillage du pointeur attendent la fusion de #810 |
+| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | `claude/multi-pc-windows-vm124-v6-8f4948`, 3 commits locaux | Pas poussé ; vérifié sur la vm124 |
+
+Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
+échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

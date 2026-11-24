@@ -196,6 +196,15 @@ jobs:
     - name: Stage agent next to UI output
       run: Copy-Item rust\target\release\lbm-agent.exe (Join-Path $env:UI_OUTPUT 'lbm-agent.exe')
 
+    # The multi-PC input service and the injector it launches
+    # (docs/multi-pc-service-windows.md). In the portable too, where nothing installs
+    # them: the installer creates the service only when its task is ticked, and the
+    # service runs only from a folder administrators alone can change.
+    - name: Stage input service next to UI output
+      run: |
+        Copy-Item rust\target\release\lbm-service.exe (Join-Path $env:UI_OUTPUT 'lbm-service.exe')
+        Copy-Item rust\target\release\lbm-inject.exe (Join-Path $env:UI_OUTPUT 'lbm-inject.exe')
+
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
       with:
@@ -326,14 +335,16 @@ jobs:
 
     # A signing request can come back "successful" having signed nothing that
     # matters, so assert on the executables Windows will actually judge: the UI,
-    # the hook, and the agent the UI starts.
+    # the hook, the agent the UI starts, and the input service and its injector,
+    # which run as LocalSystem.
     - name: Verify signed binaries
       id: signed
       run: |
         $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
         if (-not $ui) { throw 'SignPath returned no signed UI executable' }
         $dir = $ui.Directory.FullName
-        foreach ($target in @($ui.FullName, (Join-Path $dir 'LittleBigMouse.Hook.exe'), (Join-Path $dir 'lbm-agent.exe'))) {
+        $names = 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
+        foreach ($target in @($ui.FullName) + ($names | ForEach-Object { Join-Path $dir $_ })) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target
           if ($sig.Status -ne 'Valid') { throw "$target signature: $($sig.StatusMessage)" }

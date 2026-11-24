@@ -38,6 +38,13 @@ OutputBaseFilename=LittleBigMouse_{#AppVer}
 CloseApplications=force
 RestartApplications=no
 
+[Tasks]
+; Off unless the user ticks it (docs/multi-pc-service-windows.md): a Windows service
+; that lets an approved master drive this PC everywhere, the UAC prompt and the lock
+; screen included. Masters are approved one by one, by an administrator, with
+; "lbm-service trust"; with none approved the service listens to nobody.
+Name: "secureinput"; Description: "Let another PC (multi-PC master) drive this one everywhere, UAC prompts and the lock screen included (Windows service, approved masters only)"; Flags: unchecked
+
 [Files]
 Source: "{#SourceDir}\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
@@ -166,6 +173,75 @@ begin
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+{ The input service of the multi-PC mode (docs/multi-pc-service-windows.md). It runs
+  as LocalSystem, so it must sit where only administrators can change it: the service
+  checks its folder itself and refuses to start otherwise, and this installer does not
+  create it outside Program Files. Its folder under ProgramData (identity and approved
+  masters) is made by the service, with a protected DACL, and kept across updates:
+  removing it would forget the approved masters and give the service a new identity,
+  which the masters that pinned the old one would refuse. }
+const
+  InputServiceName = 'LittleBigMouseInput';
+  InputServiceRuleName = 'Little Big Mouse (input service)';
+  InputServicePort = '24818';
+
+function RunSystem(const Exe, Params: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{sys}\' + Exe), Params, '', SW_HIDE,
+                 ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  if not Result then
+    Log(Exe + ' ' + Params + ' failed, exit code ' + IntToStr(ResultCode));
+end;
+
+{ net stop waits for the service to stop, which sc stop does not. Missing or stopped
+  service: a logged no-op. }
+procedure StopInputService;
+begin
+  RunSystem('net.exe', 'stop ' + InputServiceName);
+end;
+
+function InProgramFiles: Boolean;
+begin
+  Result := Pos(Lowercase(AddBackslash(ExpandConstant('{commonpf}'))),
+                Lowercase(AddBackslash(ExpandConstant('{app}')))) = 1;
+end;
+
+procedure RemoveInputService;
+begin
+  StopInputService;
+  RunSystem('sc.exe', 'delete ' + InputServiceName);
+  RunSystem('netsh.exe', 'advfirewall firewall delete rule name="' + InputServiceRuleName + '"');
+end;
+
+procedure InstallInputService;
+var
+  Exe: String;
+begin
+  Exe := ExpandConstant('{app}\lbm-service.exe');
+  { Over an older install: the same name, made anew with this version's path. }
+  RemoveInputService;
+  if not RunSystem('sc.exe', 'create ' + InputServiceName +
+                   ' binPath= "\"' + Exe + '\" run" start= delayed-auto' +
+                   ' DisplayName= "Little Big Mouse input service"') then begin
+    SuppressibleMsgBox('The Little Big Mouse input service could not be installed.',
+                       mbError, MB_OK, IDOK);
+    Exit;
+  end;
+  RunSystem('sc.exe', 'description ' + InputServiceName +
+            ' "Lets an approved multi-PC master drive this PC everywhere, UAC prompts and the lock screen included."');
+  { Restarted after a crash, at most twice a day before giving up until the next boot. }
+  RunSystem('sc.exe', 'failure ' + InputServiceName +
+            ' reset= 86400 actions= restart/5000/restart/30000');
+  { Same shape as the agent's rule: inbound TCP, this port, this program, the local
+    subnet; the link is mutual TLS and admits approved masters only. }
+  RunSystem('netsh.exe', 'advfirewall firewall add rule name="' + InputServiceRuleName + '"' +
+            ' dir=in action=allow protocol=TCP localport=' + InputServicePort +
+            ' program="' + Exe + '" remoteip=localsubnet profile=any enable=yes');
+  RunSystem('net.exe', 'start ' + InputServiceName);
+end;
+
 procedure StopLittleBigMouse;
 begin
   { Hard-kill the running app (UI loader, UI, agent, and the elevated hook) so their
@@ -178,6 +254,10 @@ begin
     so a hook killed while the agent still runs comes straight back and keeps its exe
     locked (seen on a test uninstall: the folder stayed behind with a hook started
     during the uninstall). Same for the UI, which starts an agent when none answers. }
+  { The service first, through the SCM (a kill would be taken for a crash and the
+    service restarted), and with it the injector it launched. }
+  StopInputService;
+  KillImage('lbm-inject.exe');
   KillImage('LittleBigMouse.Ui.Loader.exe');
   KillImage('LittleBigMouse.Ui.Avalonia.exe');
   KillImage('lbm-app.exe');
@@ -232,8 +312,18 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssPostInstall then begin
     AddFirewallRule;
+    if not WizardIsTaskSelected('secureinput') then
+      { Unticked on an update: a service installed before goes, its folder stays. }
+      RemoveInputService
+    else if InProgramFiles then
+      InstallInputService
+    else
+      SuppressibleMsgBox('The input service runs with system rights, so it is installed only ' +
+                         'in a folder under ' + ExpandConstant('{commonpf}') + '. ' +
+                         'It was not installed.', mbInformation, MB_OK, IDOK);
+  end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -258,8 +348,15 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then begin
+    RemoveInputService;
     StopLittleBigMouse;
     RemoveFirewallRule;
+  end;
+  { Only a real uninstall gets here, never an update: the approved masters and the
+    service's identity go, and the offer it published for the agents. }
+  if CurUninstallStep = usPostUninstall then begin
+    DelTree(ExpandConstant('{commonappdata}\LittleBigMouse\service'), True, True, True);
+    RegDeleteKeyIncludingSubkeys(HKLM64, 'SOFTWARE\LittleBigMouse\InputService');
   end;
 end;
 

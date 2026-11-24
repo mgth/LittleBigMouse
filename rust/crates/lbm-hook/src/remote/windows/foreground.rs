@@ -26,9 +26,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
-    PeekMessageW, PostThreadMessageW, TranslateMessage, PM_NOREMOVE, EVENT_SYSTEM_FOREGROUND, MSG, WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS, WM_APP,
+    DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, PeekMessageW,
+    PostThreadMessageW, TranslateMessage, EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP,
 };
 
 use crate::remote::blocking::{self, Foreground, Integrity, Reporter};
@@ -88,7 +88,11 @@ fn say(word: Option<Option<InjectionBlock>>) {
         Some(block) => eprintln!(
             "[LittleBigMouse.Hook] injection blocked: {} has the focus at a higher \
              integrity level than this hook",
-            if block.process.is_empty() { "a window" } else { &block.process }
+            if block.process.is_empty() {
+                "a window"
+            } else {
+                &block.process
+            }
         ),
         None => eprintln!("[LittleBigMouse.Hook] injection no longer blocked"),
     }
@@ -122,8 +126,7 @@ fn foreground(hwnd: Option<HWND>) -> Foreground {
         .unwrap_or_default();
     // LIMITED is granted on elevated processes, and is what OpenProcessToken needs.
     // SAFETY: the handle is closed below.
-    let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) })
-    else {
+    let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
         return Foreground::Unreadable { process };
     };
     let integrity = token_integrity(handle);

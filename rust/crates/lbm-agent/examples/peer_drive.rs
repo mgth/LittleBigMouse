@@ -258,7 +258,8 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
             }
             Step::Sleep(duration) => {
                 let deadline = tokio::time::Instant::now() + duration;
-                while let Ok(Some(block)) = tokio::time::timeout_at(deadline, blocked.recv()).await {
+                while let Ok(Some(block)) = tokio::time::timeout_at(deadline, blocked.recv()).await
+                {
                     if come_home(block, &mut over_there) {
                         send(&sender, vec![InputEvent::Leave], started).await?;
                     }

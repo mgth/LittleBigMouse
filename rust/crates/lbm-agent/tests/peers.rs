@@ -2156,9 +2156,8 @@ async fn a_remote_whose_injection_is_blocked_brings_the_pointer_home_and_the_sta
             .unwrap()
             .0
     };
-    let blocked = |s: &PeersState| {
-        peer(s, laptop.fingerprint()).and_then(|p| p.injection_blocked.clone())
-    };
+    let blocked =
+        |s: &PeersState| peer(s, laptop.fingerprint()).and_then(|p| p.injection_blocked.clone());
 
     // A block said while the pointer is home is shown, and brings nothing home.
     let mut hook = accept().await;

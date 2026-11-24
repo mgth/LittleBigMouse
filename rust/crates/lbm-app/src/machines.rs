@@ -597,7 +597,9 @@ mod tests {
         );
         blocked["Peers"][0]["InjectionBlocked"] = json!({"Process": "osk.exe"});
         assert_eq!(
-            read(&blocked).unwrap().0.peers[0].injection_blocked.as_deref(),
+            read(&blocked).unwrap().0.peers[0]
+                .injection_blocked
+                .as_deref(),
             Some("osk.exe")
         );
         assert!(
@@ -606,7 +608,9 @@ mod tests {
         );
         blocked["Peers"][0]["InjectionBlocked"] = json!({});
         assert_eq!(
-            read(&blocked).unwrap().0.peers[0].injection_blocked.as_deref(),
+            read(&blocked).unwrap().0.peers[0]
+                .injection_blocked
+                .as_deref(),
             Some(""),
             "a process that could not be read is still a block"
         );

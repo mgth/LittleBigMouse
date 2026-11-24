@@ -278,7 +278,11 @@ mod tests {
         let mut reporter = Reporter::default();
         assert_eq!(reporter.short(String::new()), Some(block("")));
         assert_eq!(reporter.short(String::new()), None, "once");
-        assert_eq!(reporter.changed(None), Some(None), "the foreground corrects it");
+        assert_eq!(
+            reporter.changed(None),
+            Some(None),
+            "the foreground corrects it"
+        );
         reporter.changed(block("osk.exe"));
         assert_eq!(
             reporter.short(String::new()),

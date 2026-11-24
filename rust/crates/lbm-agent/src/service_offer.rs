@@ -330,7 +330,7 @@ mod tests {
         };
         assert_eq!(windows_side::read_at(&place), None);
         let (changed, mut changes) = tokio::sync::mpsc::unbounded_channel();
-        let _watch = windows_side::watch_at(place.clone(), changed).unwrap();
+        let watch = windows_side::watch_at(place.clone(), changed).unwrap();
         assert!(heard(&mut changes).await, "the first word of the watch");
         // The parent did not exist: made with the offer, it is seen from above.
         write();
@@ -349,9 +349,13 @@ mod tests {
             Some(24818),
             "the offer written is heard"
         );
-        // What the writes may still have queued is not taken for the removal's.
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        while changes.try_recv().is_ok() {}
+        // A watch of its own for the removal: the first one's channel may still get word
+        // of the writes. Stopped (joined) first; the second has said it is armed, on the
+        // key as it now stands, before the removal: what it hears next is the removal.
+        drop(watch);
+        let (changed, mut changes) = tokio::sync::mpsc::unbounded_channel();
+        let _watch = windows_side::watch_at(place.clone(), changed).unwrap();
+        assert!(heard(&mut changes).await, "the second watch's first word");
         delete(&format!(r"{above}\LittleBigMouse\InputService"));
         assert!(heard(&mut changes).await, "the offer removed is heard");
         assert_eq!(windows_side::read_at(&place), None);

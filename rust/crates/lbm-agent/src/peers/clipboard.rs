@@ -436,7 +436,7 @@ impl Sharing {
                 }
             }
             drop(routes);
-            if let Some(folder) = folder.lock().unwrap().take() {
+            if let Some(folder) = folder.abandon() {
                 tokio::task::spawn_blocking(move || {
                     let _ = std::fs::remove_dir_all(folder);
                 });
@@ -687,21 +687,18 @@ impl Sharing {
             // Reserved, and said so, in one step that cannot be cut: what the abandon
             // removes is a folder this fetch made, never one it found.
             let taken = reserved.clone();
-            let result = match files::blocking(move || {
-                let folder = files::reserve(&reception, local)?;
-                *taken.lock().unwrap() = Some(folder.clone());
-                Ok(folder)
-            })
-            .await
-            {
-                Ok(folder) => {
-                    fetch.folder = folder;
-                    files::fetch(fetch).await
-                }
-                Err(error) => Err(error),
-            };
+            let result =
+                match files::blocking(move || taken.hand_over(files::reserve(&reception, local)?))
+                    .await
+                {
+                    Ok(folder) => {
+                        fetch.folder = folder;
+                        files::fetch(fetch).await
+                    }
+                    Err(error) => Err(error),
+                };
             let made = if result.is_err() {
-                reserved.lock().unwrap().take()
+                reserved.abandon()
             } else {
                 None
             };

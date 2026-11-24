@@ -398,8 +398,40 @@ pub fn reserve(reception: &Path, local: u64) -> Result<PathBuf, String> {
 }
 
 /// The folder a fetch reserved, once it has: what an abandon may remove, and nothing
-/// else.
-pub type Reserved = Arc<Mutex<Option<PathBuf>>>;
+/// else. Shared between the fetch's blocking reservation and the sharing, which may
+/// abandon the fetch before the reservation ends: whichever comes second removes the
+/// folder, so that none is ever left behind with nobody to remove it.
+#[derive(Clone, Default)]
+pub struct Reserved(Arc<Mutex<Reservation>>);
+
+#[derive(Default)]
+struct Reservation {
+    folder: Option<PathBuf>,
+    abandoned: bool,
+}
+
+impl Reserved {
+    /// The fetch made `folder`: kept for it, or removed at once — and refused — if the
+    /// fetch was abandoned meanwhile. Blocking.
+    pub fn hand_over(&self, folder: PathBuf) -> Result<PathBuf, String> {
+        let mut reservation = self.0.lock().unwrap();
+        if reservation.abandoned {
+            drop(reservation);
+            let _ = std::fs::remove_dir_all(&folder);
+            return Err("the files are no longer on the clipboard".into());
+        }
+        reservation.folder = Some(folder.clone());
+        Ok(folder)
+    }
+
+    /// The fetch is given up: the folder it made, if it made one by now, to remove; and
+    /// if it has not, it removes the one it makes.
+    pub fn abandon(&self) -> Option<PathBuf> {
+        let mut reservation = self.0.lock().unwrap();
+        reservation.abandoned = true;
+        reservation.folder.take()
+    }
+}
 
 /// What a fetch receives for one of its ranges.
 #[derive(Debug)]
@@ -765,6 +797,22 @@ mod tests {
         assert_ne!(a, b);
         assert!(b.read_dir().unwrap().next().is_none(), "new and empty");
         assert_eq!(std::fs::read(a.join("theirs")).unwrap(), b"another agent's");
+    }
+
+    #[test]
+    fn a_folder_reserved_after_its_fetch_was_abandoned_is_removed_by_the_reservation() {
+        let dir = tempfile::tempdir().unwrap();
+        let reception = dir.path().join("in");
+        // Abandoned while the reservation was still being made.
+        let reserved = Reserved::default();
+        assert_eq!(reserved.abandon(), None);
+        let folder = reserve(&reception, 1).unwrap();
+        assert!(reserved.hand_over(folder.clone()).is_err());
+        assert!(!folder.exists(), "removed by the reservation itself");
+        // Abandoned after: the abandon gets the folder to remove.
+        let reserved = Reserved::default();
+        let folder = reserved.hand_over(reserve(&reception, 2).unwrap()).unwrap();
+        assert_eq!(reserved.abandon(), Some(folder));
     }
 
     #[test]

@@ -1,12 +1,13 @@
 //! Finds the other mouse-and-keyboard sharing tools running on this machine
 //! (`lbm_ipc::sharing`): Deskflow, Synergy, Barrier, Input Leap.
 //!
-//! **Looked at, never watched.** The runtime calls [`scan`] at the moments the answer
+//! **Looked at, never polled.** The runtime calls [`scan`] at the moments the answer
 //! matters — the multi-PC mode turned on, a link with another machine made, the
 //! engine started, a frontend subscribing — and keeps what it found in its state until
-//! the next one. Nothing runs in between: a tool started or stopped afterwards is seen
-//! at the next of those moments, not before (the project's rule: events only, nothing
-//! active when the mode is off).
+//! the next one. Nothing looks in between (the project's rule: events only). What it
+//! found leaves the state as soon as it quits: each process is waited on for its end
+//! ([`crate::sharing_exits`]). A tool *started* after the last look is seen at the next
+//! of those moments, not before.
 //!
 //! The processes: `/proc` on Linux, a Toolhelp snapshot on Windows. Whether one holds
 //! a connection, from the same single look at the TCP table: on Linux `/proc/net/tcp`

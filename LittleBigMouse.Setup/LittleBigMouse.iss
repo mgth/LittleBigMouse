@@ -168,15 +168,72 @@ end;
 
 procedure StopLittleBigMouse;
 begin
-  { Hard-kill the running app (UI loader, UI, and the elevated hook) so their files
-    unlock before we copy/remove them. Kill by EXACT image name only: a wildcard like
-    "LittleBigMouse*" would also match the setup EXE itself (LittleBigMouse_<ver>.exe)
-    and the installer would terminate itself mid-install. The installer runs elevated,
-    so it can end the elevated hook. Missing processes just make taskkill a no-op. }
+  { Hard-kill the running app (UI loader, UI, agent, and the elevated hook) so their
+    files unlock before we copy/remove them. Kill by EXACT image name only: a wildcard
+    like "LittleBigMouse*" would also match the setup EXE itself
+    (LittleBigMouse_<ver>.exe) and the installer would terminate itself mid-install.
+    The installer runs elevated, so it can end the elevated hook. Missing processes just
+    make taskkill a no-op.
+    Supervisors go first: the v6 agent restarts a hook that stops answering, detached,
+    so a hook killed while the agent still runs comes straight back and keeps its exe
+    locked (seen on a test uninstall: the folder stayed behind with a hook started
+    during the uninstall). Same for the UI, which starts an agent when none answers. }
   KillImage('LittleBigMouse.Ui.Loader.exe');
   KillImage('LittleBigMouse.Ui.Avalonia.exe');
+  KillImage('lbm-app.exe');
+  KillImage('lbm-agent.exe');
   KillImage('LittleBigMouse.Hook.exe');
   KillImage('LittleBigMouse_Daemon.exe');
+end;
+
+{ Multi-PC mode (docs/multi-pc.md): the agent listens on TCP 24817 for the other
+  machine, and Windows Firewall drops that inbound connection by default. The rule
+  is scoped as tightly as the feature allows: inbound TCP only, the default port
+  only, the agent executable only, and peers on the local subnet only.
+  It is not limited to the private and domain profiles, though that was the first
+  idea: Windows 11 files a newly joined network as Public until the user says
+  otherwise, and the test machine this was tried on was on exactly such a network,
+  so the rule would have stayed silently inactive where the feature is used. The
+  local-subnet scope keeps the port shut to anything routed from further away, and
+  the link itself is mutual TLS with pinned certificates (lbm-net), so a stranger
+  on the same subnet gets a refused handshake, not the input stream.
+  netsh rather than New-NetFirewallRule: it answers the same on every supported
+  Windows, with no PowerShell execution policy in the way. The rule is named so
+  that uninstall, and a reinstall over an older version, find exactly this one. }
+const
+  FirewallRuleName = 'Little Big Mouse (multi-PC)';
+  MultiPcPort = '24817';
+
+function RunNetsh(const Params: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{sys}\netsh.exe'), Params, '', SW_HIDE,
+                 ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  if not Result then
+    Log('netsh ' + Params + ' failed, exit code ' + IntToStr(ResultCode));
+end;
+
+procedure RemoveFirewallRule;
+begin
+  { netsh exits 1 when no rule matches: a no-op, not an error worth reporting. }
+  RunNetsh('advfirewall firewall delete rule name="' + FirewallRuleName + '"');
+end;
+
+procedure AddFirewallRule;
+begin
+  { Delete first: "add rule" never replaces, so a reinstall would stack copies. }
+  RemoveFirewallRule;
+  RunNetsh('advfirewall firewall add rule name="' + FirewallRuleName + '"' +
+           ' dir=in action=allow protocol=TCP localport=' + MultiPcPort +
+           ' program="' + ExpandConstant('{app}\lbm-agent.exe') + '"' +
+           ' remoteip=localsubnet profile=any enable=yes');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    AddFirewallRule;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -200,7 +257,9 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usUninstall then
+  if CurUninstallStep = usUninstall then begin
     StopLittleBigMouse;
+    RemoveFirewallRule;
+  end;
 end;
 

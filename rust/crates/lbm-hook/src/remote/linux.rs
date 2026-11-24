@@ -58,10 +58,8 @@ pub struct UinputInjector {
     pointer_failed: Option<Instant>,
     keyboard_failed: Option<Instant>,
     no_desktop_said: bool,
-    /// Until when a device just built cannot be written to usefully.
-    settled_at: Option<Instant>,
-    /// What arrived before then.
-    backlog: Backlog,
+    /// What may be written now, what waits for a young device, and what was pressed.
+    gate: Gate,
     /// Buttons this injector pressed and has not released: the pointer device is not
     /// rebuilt for a new desktop while one is held, which would drop it mid-drag.
     buttons_held: usize,
@@ -81,8 +79,7 @@ impl UinputInjector {
             pointer_failed: None,
             keyboard_failed: None,
             no_desktop_said: false,
-            settled_at: None,
-            backlog: Backlog::default(),
+            gate: Gate::default(),
             buttons_held: 0,
             wheel_rest: (0, 0),
             pointer_frame: Vec::with_capacity(16),
@@ -147,7 +144,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.pointer = Some(Pointer { device, desktop });
                 self.pointer_failed = None;
-                self.settled_at = Some(Instant::now() + SETTLE);
+                self.gate.young_until(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual pointer: {error}");
@@ -164,7 +161,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.keyboard = Some(device);
                 self.keyboard_failed = None;
-                self.settled_at = Some(Instant::now() + SETTLE);
+                self.gate.young_until(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual keyboard: {error}");
@@ -259,6 +256,112 @@ impl Backlog {
     }
 }
 
+/// The rules between the stream and the devices, kept apart from the devices so they
+/// are tested without one: input is held back while a device is too young (see the
+/// module's note), in order, and every press handed out to be written is remembered
+/// until its release is — what the system holds pressed because of this injector.
+#[derive(Debug, Default)]
+struct Gate {
+    /// Until when the youngest device cannot be written to usefully.
+    settled_at: Option<Instant>,
+    backlog: Backlog,
+    /// Presses handed out and not released since, in pressing order.
+    down: Vec<Injection>,
+}
+
+impl Gate {
+    /// A device was just built: what arrives before `at` is held back.
+    fn young_until(&mut self, at: Instant) {
+        self.settled_at = Some(at);
+    }
+
+    /// What of `batch` is to be written now: nothing while a device is young, else
+    /// whatever was held back first, then the batch.
+    fn pass(&mut self, batch: &[Injection], now: Instant) -> Vec<Injection> {
+        if self.settled_at.is_some_and(|at| now < at) {
+            for injection in batch {
+                self.backlog.push(*injection);
+            }
+            return Vec::new();
+        }
+        let mut out = self.catch_up();
+        out.extend_from_slice(batch);
+        self.handed_out(&out);
+        out
+    }
+
+    /// When what was held back is to be written, with or without more input.
+    fn due(&self) -> Option<Instant> {
+        if self.backlog.is_empty() {
+            return None;
+        }
+        Some(self.settled_at.unwrap_or_else(Instant::now))
+    }
+
+    /// What was held back, to be written now.
+    fn catch_up(&mut self) -> Vec<Injection> {
+        self.settled_at = None;
+        let held = self.backlog.take();
+        self.handed_out(&held);
+        held
+    }
+
+    /// Injection stops: what was held back is dropped — a press there never reached
+    /// the system — and the releases of every press that did are returned, to be
+    /// written now: buttons first, then keys in the reverse of their pressing order, as
+    /// a session's end does it.
+    fn discard(&mut self) -> Vec<Injection> {
+        self.backlog.take();
+        let down = std::mem::take(&mut self.down);
+        let buttons = down.iter().filter_map(|i| match *i {
+            Injection::Button { code, .. } => Some(Injection::Button {
+                code,
+                pressed: false,
+            }),
+            _ => None,
+        });
+        let keys = down.iter().filter_map(|i| match *i {
+            Injection::Key { code, .. } => Some(Injection::Key {
+                code,
+                pressed: false,
+            }),
+            _ => None,
+        });
+        buttons.rev().chain(keys.rev()).collect()
+    }
+
+    fn handed_out(&mut self, out: &[Injection]) {
+        for injection in out {
+            match *injection {
+                Injection::Button { pressed: true, .. } | Injection::Key { pressed: true, .. } => {
+                    if !self.down.contains(injection) {
+                        self.down.push(*injection);
+                    }
+                }
+                Injection::Button {
+                    code,
+                    pressed: false,
+                } => self.down.retain(|d| {
+                    *d != Injection::Button {
+                        code,
+                        pressed: true,
+                    }
+                }),
+                Injection::Key {
+                    code,
+                    pressed: false,
+                } => self.down.retain(|d| {
+                    *d != Injection::Key {
+                        code,
+                        pressed: true,
+                    }
+                }),
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Two values for one code cannot share a frame — the second would overwrite the
 /// first — so a press and release of the same key, or two positions, are split.
 fn conflicts(frame: &[InputEvent], event: &InputEvent) -> bool {
@@ -290,36 +393,25 @@ impl Injector for UinputInjector {
         if batch.iter().any(|i| matches!(i, Injection::Key { .. })) {
             self.ensure_keyboard();
         }
-        if self.settled_at.is_some_and(|at| Instant::now() < at) {
-            for injection in batch {
-                self.backlog.push(*injection);
-            }
-            return;
-        }
-        self.catch_up();
-        self.write(batch);
+        let now = self.gate.pass(batch, Instant::now());
+        self.write(&now);
     }
 
-    /// Before the devices settle, nothing is due; after, what they held back.
     fn due(&self) -> Option<Instant> {
-        if self.backlog.is_empty() {
-            return None;
-        }
-        Some(self.settled_at.unwrap_or_else(Instant::now))
+        self.gate.due()
     }
 
-    /// Held back only while the devices settle, before anything was written to
-    /// them: a press in the backlog never reached the system, nor its release.
+    /// What was held back is dropped, and what reached the system is let go of at
+    /// once: a key pressed on a settled keyboard may have its release held back behind
+    /// a pointer rebuilt for a new desktop.
     fn discard(&mut self) {
-        self.backlog.take();
+        let releases = self.gate.discard();
+        self.write(&releases);
     }
 
     fn catch_up(&mut self) {
-        self.settled_at = None;
-        let held = self.backlog.take();
-        if !held.is_empty() {
-            self.write(&held);
-        }
+        let held = self.gate.catch_up();
+        self.write(&held);
     }
 
     /// Nothing to see: a uinput device moves the compositor's cursor but cannot hide
@@ -344,6 +436,9 @@ impl Injector for UinputInjector {
 /// The stream's injections into the devices, as they come.
 impl UinputInjector {
     fn write(&mut self, batch: &[Injection]) {
+        if batch.is_empty() {
+            return;
+        }
         for injection in batch {
             match *injection {
                 Injection::MoveTo { x, y } => {
@@ -415,6 +510,83 @@ mod tests {
             backlog.push(*injection);
         }
         backlog.take()
+    }
+
+    fn key(code: u16, pressed: bool) -> Injection {
+        Injection::Key { code, pressed }
+    }
+
+    fn button(code: u16, pressed: bool) -> Injection {
+        Injection::Button { code, pressed }
+    }
+
+    #[test]
+    fn a_young_device_holds_input_back_until_it_is_due() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        assert_eq!(gate.pass(&[key(LEFT_CTRL, true)], t0), []);
+        assert_eq!(gate.due(), Some(t0 + SETTLE));
+        assert_eq!(gate.catch_up(), [key(LEFT_CTRL, true)]);
+        assert_eq!(gate.due(), None);
+        assert_eq!(
+            gate.pass(&[key(LEFT_CTRL, false)], t0 + SETTLE),
+            [key(LEFT_CTRL, false)]
+        );
+    }
+
+    /// Ctrl went down on a settled keyboard; the pointer is then rebuilt for a new
+    /// desktop and the release of Ctrl is held back behind it. Stopping there must not
+    /// drop that release with the rest.
+    #[test]
+    fn a_stop_releases_a_key_pressed_before_a_pointer_rebuild() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        assert_eq!(
+            gate.pass(&[key(LEFT_CTRL, true)], t0 + SETTLE),
+            [key(LEFT_CTRL, true)]
+        );
+        let rebuilt = t0 + 2 * SETTLE;
+        gate.young_until(rebuilt + SETTLE);
+        assert_eq!(gate.pass(&[key(LEFT_CTRL, false)], rebuilt), []);
+        assert_eq!(gate.discard(), [key(LEFT_CTRL, false)]);
+        assert_eq!(gate.due(), None, "nothing left to put in later");
+        assert_eq!(gate.discard(), [], "released once");
+    }
+
+    #[test]
+    fn a_stop_drops_presses_that_never_reached_the_system_with_their_releases() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        gate.young_until(t0 + SETTLE);
+        gate.pass(&[button(BTN_LEFT, true), key(LEFT_CTRL, true)], t0);
+        assert_eq!(gate.discard(), []);
+        assert_eq!(gate.due(), None);
+    }
+
+    #[test]
+    fn a_stop_lets_go_of_buttons_first_then_keys_in_reverse() {
+        let t0 = Instant::now();
+        let mut gate = Gate::default();
+        const C: u16 = 46;
+        gate.pass(
+            &[
+                key(LEFT_CTRL, true),
+                key(C, true),
+                key(C, true),
+                button(BTN_LEFT, true),
+            ],
+            t0,
+        );
+        assert_eq!(
+            gate.discard(),
+            [
+                button(BTN_LEFT, false),
+                key(C, false),
+                key(LEFT_CTRL, false)
+            ]
+        );
     }
 
     #[test]

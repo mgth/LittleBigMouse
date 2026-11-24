@@ -1,6 +1,6 @@
 # Mode multi-PC : état du travail et reste à faire
 
-État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `b104396c`), après la fusion des PR #800 (le mode)
+État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `f8aea09c`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
 Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
@@ -87,14 +87,16 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 - Fonds en mode « Span » sous Linux à une échelle différente de 1 : mal positionnés, y
   compris dans l'aperçu local.
-- Un échec de commutation d'entrée, ou un lien refusé, n'est visible que dans le
-  journal de l'agent. *Corrigé par la PR #808, pas encore fusionnée* (état poussé
-  vers la page Machines et le badge de la carte).
+- Retour d'erreur vers l'interface (#808) : un esclave dont le lien tombe avant de
+  répondre à une commutation d'entrée, ou un esclave plus ancien, ne laisse aucun échec
+  chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
+  l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
+  kittest, jamais à l'écran.
 - Le premier lien avec un esclave qui apporte des écrans inconnus crée un profil
   **désactivé** : le moteur s'arrête jusqu'à ce que l'utilisateur l'active.
 - Esclave Linux : si son propre backend evdev route, une souris locale reprend d'où ce
   backend avait laissé le curseur, pas d'où le maître l'a laissé. Deux autres défauts
-  trouvés à l'essai sont *corrigés par la PR #807, pas encore fusionnée* : un esclave
+  trouvés à l'essai sont corrigés (PR #807) : un esclave
   dont le moteur local est arrêté n'injectait pas le pointeur (il ne connaissait son
   bureau que par un `Load`), et KWin 6 jette ce qu'un périphérique uinput émet dans ses
   ~300 premières millisecondes, d'où un premier `Enter` sans effet.
@@ -103,7 +105,7 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
 | | Maître | Esclave |
 |---|---|---|
-| **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, vérifié sous KWin 6 avec `peer_drive` comme maître (correctifs en PR #807) |
+| **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, vérifié sous KWin 6 avec `peer_drive` comme maître (correctifs de la PR #807) |
 | **Linux, backend portail Wayland ou X11** | Absent : les zones distantes ne sont jamais franchissables | Livré si `/dev/uinput` est accessible en écriture, jamais essayé sur matériel |
 | **Windows** | Absent | Livré, vérifié |
 | **macOS** | Absent | Absent |
@@ -142,7 +144,9 @@ ne demandent que du temps sur les machines actuelles :
   vraies machines Linux.
 - **VCP 0x60** sur un moniteur câblé sur deux entrées, dans les deux sens. Le Samsung
   G80SD n'a pas de VCP : il faut un autre écran.
-- ~~**Fonds en direct**~~ : fait sous Windows ; reste le dialogue KDE.
+- **Fonds en direct** : changements immédiats vérifiés sous Windows (vm124) ; restent
+  le dialogue KDE, et sous Windows l'avance du diaporama sur minuterie et le
+  renouvellement quotidien de Spotlight.
 
 ### 2. Maître Windows
 
@@ -181,7 +185,7 @@ Windows actuel ne connaît pas les zones distantes.
   non élevé, rien ne passe, pas même le mouvement ; depuis un agent élevé, tout passe.
   Aucun code de plus n'est nécessaire pour un administrateur, hormis un correctif :
   l'agent lisait `StartElevated` dans la configuration réelle et non dans celle de
-  `--config-dir` (PR #811). Un utilisateur standard reste sans solution hors
+  `--config-dir` (PR #811 ; la relance avec un chemin relatif à un lecteur reste à valider, voir « Travaux en cours »). Un utilisateur standard reste sans solution hors
   service Windows.
 - **Bureau sécurisé** (UAC, écran de verrouillage, Ctrl+Alt+Suppr) : hors d'atteinte
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
@@ -382,10 +386,10 @@ macOS n'a de sens qu'après.
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
 3. Maître Windows.
-4. ~~Corrélation `Loaded`~~ (#809), retour d'erreur vers l'interface (#808), règle de
-   pare-feu dans l'installeur (#811).
-5. Fenêtres élevées par `StartElevated` (à essayer), puis service Windows pour le
-   bureau sécurisé.
+4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), règle
+   de pare-feu dans l'installeur (#811).
+5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
+   Windows ») ; reste le service Windows pour le bureau sécurisé.
 6. Presse-papiers, palier 1 (texte et image), puis palier 2.
 7. Plusieurs esclaves.
 8. GNOME, X11, portail `InputCapture`.
@@ -398,10 +402,8 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| Esclave Linux : pointeur injecté moteur arrêté, premiers événements gardés | PR #807 | Ouverte ; essayé sur matériel |
-| Retour d'erreur vers l'interface (commutation d'entrée, lien refusé) | PR #808 | Ouverte ; UI vue seulement par kittest |
 | Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil côté protocole, agent et esclave | `claude/multi-pc-small-features-v6-98ec02`, pas poussée | Reprise sur v6 depuis la fusion de #810 : émission des verrous par le maître et verrouillage du pointeur en cours |
-| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | PR #811 | Ouverte, revue traitée ; vérifié sur la vm124 ; la configuration SignPath (signature de `lbm-agent.exe`) reste à mettre à jour à la main |
+| Pare-feu dans l'installeur, `lbm-agent.exe` dans le paquet, `StartElevated` lu dans `--config-dir` | PR #811 | Ouverte. Injection dans une fenêtre élevée vérifiée sur la vm124. Un cas de revue reste à valider : avec un `--config-dir` relatif à un lecteur (`C:profiles`), le processus relancé élevé pouvait lire un autre dossier que celui du lancement ; correctif poussé (4875c8db), pas encore revu ni essayé sur la VM ; la configuration SignPath (signature de `lbm-agent.exe`) reste à mettre à jour à la main |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

@@ -294,8 +294,8 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 - **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
-- **Presse-papiers** : rien n'existe ; voir la section suivante. Le glisser-déposer
-  viendrait après.
+- **Presse-papiers** : palier 1 (texte et image) codé, essayé sur la paire réelle : il
+  passe dans les deux sens ; voir la section suivante. Fichiers et glisser-déposer viennent après.
 - ~~**Pare-feu Windows**~~ : fait (PR #811). L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
   `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
@@ -317,78 +317,80 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 ## Presse-papiers partagé
 
-Rien n'existe. Objectif minimal : **texte et image** dans les deux sens ; le reste par
-paliers. Ce qui suit est une proposition, tirée de ma connaissance des API et de ce que
-font Deskflow et consorts — rien n'a été essayé.
+Palier 1 (**texte et image**, dans les deux sens) codé : PR « presse-papiers, palier 1 ».
+Le contrat est dans [`multi-pc.md`](multi-pc.md), « Shared clipboard ». Ce qui suit dit
+ce qui a été tranché, et ce qui n'a jamais tourné.
+
+### Ce que KWin offre vraiment
+
+Vérifié le 2026-11-24 sur la machine du mainteneur (KWin et Plasma 6.8.3, Wayland) avec
+`wayland-info`, en client ordinaire : **`ext_data_control_manager_v1` version 1** est
+annoncé, `zwlr_data_control_manager_v1` ne l'est pas. Le code ne parle donc que
+`ext-data-control-v1` (crate `wayland-protocols` 0.32, fonction `staging`) ; un
+compositeur qui n'aurait que `wlr-data-control` (Sway ancien, Hyprland ancien) n'est pas
+pris en charge, l'état le dit. GNOME n'a ni l'un ni l'autre.
+
+### Les deux questions, tranchées
+
+- **Annonce immédiate**, pas de synchronisation au passage du bord. Chaque copie est
+  annoncée tout de suite (quelques octets), le contenu ne traverse qu'à la lecture. Se
+  synchroniser au passage du bord obligerait le presse-papiers à écouter le flux d'entrée
+  — exactement ce que la règle du projet interdit — pour un gain nul, puisque le transfert
+  à la demande laisse déjà une copie jamais collée hors du réseau. Limite connue : un
+  lecteur qui lit tout dès l'annonce (Klipper sous KDE lit le texte de chaque sélection)
+  fait traverser le **texte** à chaque copie ; sous Windows, l'historique du
+  presse-papiers ferait de même, d'où l'exclusion de l'historique et du nuage pour une
+  offre venue d'ailleurs.
+- **Dans l'agent.** Sous Linux il ouvre sa propre connexion Wayland, sur un fil à lui,
+  seulement quand l'option est cochée et qu'une machine qui partage est liée. Le hook n'en
+  sait rien.
+
+### Essai réel, et ce qui n'a pas encore tourné
+
+- **Essayé le 2026-11-24 sur la paire du mainteneur** (maître KDE Plasma 6.8.3 Wayland,
+  esclave Windows 11 vm124, les deux agents à `f1c04196`, presse-papiers ouvert dans les
+  deux sens) : **le texte et l'image passent dans les deux sens.** Côté Linux l'agent a
+  ouvert `ext-data-control-v1` auprès de KWin sans erreur.
+- Avant cela, les essais étaient deux agents en boucle locale avec un presse-papiers en
+  mémoire (`lbm-agent/tests/clipboard.rs`), les conversions (fins de ligne, DIB ↔ PNG),
+  le classement des types MIME, et la priorité du flux d'entrée sur un transfert de
+  8 Mio au niveau du lien (`lbm-net`).
+- Pas encore observé : quelles applications ont servi de source et de cible, une image
+  volumineuse sur un réseau lent (Qt abandonne après une seconde sans données), l'effet
+  du tampon d'envoi réduit en Wi-Fi, et les points suivants :
+  le rendu différé quand une application lit `CF_DIBV5` ou `CF_BITMAP` (que Windows
+  synthétise depuis `CF_DIB`), le fil du presse-papiers bloqué pendant un rendu, et
+  Klipper qui pourrait reprendre la sélection à son compte quand la source disparaît.
+- Effet de bord non mesuré : la mémoire tampon d'envoi réduite à 64 Kio sur tous les
+  liens (voir `multi-pc.md`). Sans effet attendu sur l'entrée ; à vérifier en Wi-Fi.
 
 ### Formats, par palier
 
-| Palier | Contenu | Windows | Linux | Remarque |
+| Palier | Contenu | Windows | Linux | État |
 |---|---|---|---|---|
-| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8` | Convertir les fins de ligne |
-| 1 | Image | `CF_DIBV5`, et le format enregistré `PNG` | `image/png` | PNG sur le fil : sans perte, transparence conservée |
-| 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | L'en-tête de `HTML Format` (décalages) est à reconstruire |
-| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Ce n'est plus du presse-papiers mais un transfert de fichiers : chemins à réécrire, flux, annulation |
+| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé, passe dans les deux sens (essai réel du 2026-11-24) |
+| 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé, passe dans les deux sens (essai réel du 2026-11-24) |
+| 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | Pas commencé ; l'en-tête de `HTML Format` (décalages) est à reconstruire |
+| 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Voir la PR suivante |
 | 4 | Glisser-déposer entre machines | — | — | Dépend du palier 3 |
 
-Au palier 1, proposer aussi le texte brut quand la source n'offre que du HTML : c'est ce
-que fait toute application et cela couvre la plupart des collages.
+Le texte brut d'une source qui n'offre que du HTML n'est pas proposé : la plupart des
+applications offrent déjà `text/plain` à côté.
 
-### Transfert à la demande
+### Garde-fous en place
 
-Ne pas envoyer le contenu à chaque copie : une capture d'écran 4K copiée puis jamais
-lue ailleurs n'a pas à traverser le réseau.
-
-- À chaque changement, la machine qui possède le presse-papiers **annonce** les formats
-  disponibles (un message de contrôle, quelques octets).
-- L'autre machine se déclare propriétaire d'un presse-papiers **sans contenu** : rendu
-  différé sous Windows, source de données qui n'écrit qu'à la demande sous Wayland et
-  X11.
-- Le contenu n'est demandé qu'à la **première lecture** d'un format par une application,
-  dans ce format. Ce n'est pas forcément un collage de l'utilisateur : sous Windows, un
-  gestionnaire d'historique du presse-papiers peut lire dès l'annonce, ce qui déclenche
-  le rendu et donc le transfert. La garantie est « à la demande d'une application ».
-  S'il faut attendre un geste de l'utilisateur, il faut un déclencheur explicite
-  (raccourci, ou annonce faite seulement au passage du bord).
-
-Conséquences sur le protocole : un message d'annonce, une requête et une réponse ; la
-réponse dépasse la borne de 1 Mio des trames de contrôle, donc un nouveau type de trame
-découpée, qui ne doit jamais passer devant le flux d'entrée (même règle que les fonds
-d'écran). Une capacité `Clipboard` dans `Hello`, pour qu'un pair plus ancien l'ignore.
-
-### Écouter et écrire, par système
-
-| Système | Écouter les changements | Écrire | Où |
-|---|---|---|---|
-| Windows | `AddClipboardFormatListener` (événement, pas de scrutation) | Rendu différé (`WM_RENDERFORMAT`) | La fenêtre cachée que l'agent a déjà |
-| Wayland | Protocole `ext-data-control-v1`, ou `wlr-data-control` | Source de données du même protocole | Une connexion Wayland de l'agent ; support selon le compositeur, à vérifier pour KWin, absent de GNOME |
-| X11 | XFixes (`XFixesSelectionNotify`) | Propriétaire de la sélection `CLIPBOARD` | Agent |
-
-Conforme à la règle du projet : uniquement des événements, et rien d'installé tant
-qu'aucun pair n'est lié ou que l'option est coupée.
-
-### Garde-fous
-
-- **Option coupée par défaut**, par machine, et par sens (recevoir, envoyer).
-- **Secrets** : ne pas annoncer ce qu'un gestionnaire de mots de passe marque comme
-  sensible (`ExcludeClipboardContentFromMonitorProcessing` sous Windows,
-  `x-kde-passwordManagerHint` sous KDE).
-- **Taille** : une borne configurable ; au-delà, l'annonce n'est pas faite et l'interface
-  le dit.
-- **Sélection primaire** de Linux (clic milieu) : hors périmètre, elle n'a pas
-  d'équivalent Windows.
-- Ne jamais réannoncer ce qu'on vient de recevoir : sinon les deux machines se
-  renvoient le presse-papiers sans fin.
-- Le contenu ne circule que sur le lien TLS épinglé, entre machines appairées.
-
-### Ce qu'il faut trancher
-
-- Le presse-papiers suit-il le pointeur (comme Deskflow, synchronisé au passage du
-  bord) ou chaque copie est-elle annoncée tout de suite ? L'annonce immédiate avec
-  transfert à la demande est plus simple à expliquer et ne coûte presque rien.
-- Qui porte le code sous Linux : l'agent n'a pas de connexion Wayland aujourd'hui, le
-  hook en a une pour masquer le curseur. Le presse-papiers n'a rien à faire dans le
-  chemin de l'entrée ; je le mettrais dans l'agent.
+- Option coupée par défaut, par machine et par sens (« Envoyer », « Recevoir » dans la
+  page Machines ; `ClipboardSend`, `ClipboardReceive` dans `multi-pc.json`).
+- Rien d'ouvert sans option ni machine liée qui partage ; refermé dès que l'une manque.
+- Secrets non annoncés (`x-kde-passwordManagerHint`,
+  `ExcludeClipboardContentFromMonitorProcessing`).
+- Borne de 64 Mio par transfert (`ClipboardMaxBytes`), tenue par les deux côtés. La
+  taille n'est connue qu'à la lecture (ni Wayland ni le rendu différé ne la donnent à
+  l'annonce) : l'annonce est faite, c'est le collage qui échoue, et l'état le dit
+  (`Clipboard.Problem`).
+- Pas de réannonce de ce qu'on vient de recevoir (propriétaire sous Windows, type privé
+  sous Wayland).
+- Sélection primaire et X11 : hors périmètre.
 
 ## Fonctionnalités à envisager
 
@@ -468,7 +470,8 @@ macOS n'a de sens qu'après.
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
    Windows ») ; reste le service Windows pour le bureau sécurisé.
-6. Presse-papiers, palier 1 (texte et image), puis palier 2.
+6. Presse-papiers : essayer le palier 1 sur la paire réelle, puis les fichiers (palier 3),
+   puis le palier 2.
 7. Plusieurs esclaves.
 8. GNOME, X11, portail `InputCapture`.
 9. macOS esclave, si quelqu'un peut l'essayer.

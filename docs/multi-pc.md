@@ -46,7 +46,11 @@ screen), Windows as master, the portal and X11 backends as master.
   1 MiB for control and 64 KiB for input, and anything else closes the link):
   - kind `0`, **control**: one JSON message (PascalCase, `Type` tag, unknown types
     tolerated);
-  - kind `1`, **input**: one batch of `lbm_ipc::input` events, relayed unread.
+  - kind `1`, **input**: one batch of `lbm_ipc::input` events, relayed unread;
+  - kind `2`, **bulk**: one piece of a transfer — the transfer's number (8 bytes, little
+    endian), a flags byte (bit 0: last piece), then at most 16 KiB of data. Only sent to
+    a peer that announced the `Clipboard` capability: an older one would read an unknown
+    kind as a broken link. See "Shared clipboard" for why it never delays input.
 - Control messages:
   - `Hello { Protocol, Name, Os, Version, Role: "Master" | "Remote", Capabilities }`
   - `Paired` / `Refused { Reason }` — the answer to a first `Hello`
@@ -71,12 +75,18 @@ screen), Windows as master, the portal and X11 backends as master.
     its latest choice for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
+<<<<<<< HEAD
+  - `ClipboardOffer { Serial, Formats }`, `ClipboardRequest { Serial, Format, Transfer }`,
+    `ClipboardAbort { Transfer, Reason }` — either way, between peers that both announced
+    `Clipboard`: see "Shared clipboard"
+=======
   - `Overlay { Revision, Bands: [Band] }` — master → remote: the rulers to draw on the
     remote's screens, in place of any drawn before; empty takes them down (see "Rulers
     on a remote's screens"). Sent only to a remote whose `Hello` lists the capability
     `RemoteOverlay`; added after protocol 1 without a new version
   - `OverlayFailed { Revision, Error }` — remote → master: the rulers of `Revision`
     are not shown, refused or taken down, and why
+>>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -410,6 +420,66 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.
 
+<<<<<<< HEAD
+## Shared clipboard
+
+Off by default, on each machine and each way (`ClipboardSend`, `ClipboardReceive` in
+`multi-pc.json` and `SetMultiPc`); the state says it under `Clipboard { Send, Receive,
+MaxBytes, Active, Problem }`. The agent owns it (`lbm-agent/src/peers/clipboard.rs`,
+`lbm-agent/src/clipboard/`): it has nothing to do with the input path, and the hook never
+sees it.
+
+- **Announced at once, carried on demand.** Every copy is announced to every linked peer
+  that shares, formats only (`ClipboardOffer`, numbered by the sender; an empty list says
+  the sender holds nothing it shares any more). The receiver takes the system clipboard
+  over *without content* — delayed rendering on Windows, a data source under Wayland —
+  and asks for a format (`ClipboardRequest`, with a transfer number of its own) the first
+  time an application reads it. The answer is a bulk transfer, or `ClipboardAbort` with a
+  reason (the clipboard changed since, the bound, sending off). The clipboard does not
+  follow the pointer: syncing at the crossing would tie it to the input path, and the
+  on-demand transfer already keeps an unread copy off the network.
+- **Formats** (palier 1): `Text` (UTF-8, `\n` line ends; `CF_UNICODETEXT` with `\r\n` on
+  Windows, `text/plain;charset=utf-8` and its aliases under Wayland) and `Png` (`image/png`;
+  on Windows the registered `PNG` format when the source offers one, else `CF_DIB`
+  converted, and both offered when pasting). Unknown formats are ignored, so newer
+  formats are additive.
+- **Never ahead of input.** Bulk pieces wait in a queue of their own that the link's
+  writer serves last: after the keepalive, after control and input, after reading (two
+  peers that both wrote without reading would wait on each other for good). The kernel
+  send buffer of every link is cut to 64 KiB (`lbm_net::link::SEND_BUFFER`): what the
+  writer has handed the socket leaves in order, and a buffer of the system's usual
+  megabytes would put that much bulk ahead of the next click. On a wired network that is
+  more than is in flight; on a slow Wi-Fi it caps a transfer's pace and costs input a few
+  milliseconds at worst.
+- **Two copies at once.** Every offer says the last serial its sender heard from the
+  receiver (`Seen`) and whether it takes offers at all (`Receiving`). An offer from a
+  machine that takes them, whose `Seen` is older than the receiver's own last
+  announcement to it, crossed that announcement: the machine with the lower id keeps its
+  copy, the other takes it, the same rule on both sides, so that both paste the same
+  thing rather than each holding the other's and neither able to serve its own.
+- **Only what was announced is read.** The clipboard numbers each copy as it reports it
+  (Wayland: each selection the compositor announces; Windows: the clipboard's sequence
+  number), and a read names the copy it is for: a newer one, or the same one marked not
+  to be monitored since, is refused (`the clipboard changed since`), checked with the
+  Windows clipboard open so that nothing comes between the check and the read.
+- **No echo.** A clipboard never reports a change it made itself (Windows: it is the
+  owner; Wayland: its source offers the private `application/x-littlebigmouse-remote`
+  type), so a received copy is never announced back.
+- **Guards.** A bound per transfer, 64 MiB by default (`ClipboardMaxBytes`), held by both
+  sides; a transfer quiet for 20 s is given up; a peer's offer is let go of when its link
+  ends, so a paste finds nothing rather than waits. Not announced: what a password manager
+  marks (`x-kde-passwordManagerHint` under KDE, `ExcludeClipboardContentFromMonitorProcessing`
+  on Windows). An offer held on Windows is kept out of the clipboard history and the
+  cloud clipboard, whose readers would otherwise fetch every copy at once.
+- **Per system.** Wayland: `ext-data-control-v1` on a connection of the agent's own
+  (KWin 6 has it, GNOME has neither it nor `wlr-data-control`, and the state then says
+  so). Windows: a message-only window with `AddClipboardFormatListener`; `WM_RENDERFORMAT`
+  waits up to 25 s for the content (Windows itself gives up at 30 s), the reading
+  application waiting with it. A content handed over whole: a Qt application under
+  Wayland gives up after one second without data, so a large picture over a slow network
+  may fail to paste. X11 and the
+  primary selection are not shared.
+=======
 ## Rulers on a remote's screens
 
 "Rulers on screens" (Location mode) draws on every screen a ruler graduated in
@@ -446,6 +516,7 @@ place and its physical size.
   rulers.
 - `examples/peer_drive` asks for them (`rulers N`, `norulers`); `examples/peer_remote`
   runs a remote's multi-PC node alone, with real rulers, beside a user's running agent.
+>>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
 
 ## A panel both machines know
 

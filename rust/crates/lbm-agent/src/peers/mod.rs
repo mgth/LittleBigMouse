@@ -28,10 +28,14 @@
 //!   takes its place. A paired remote whose address is known is called back while the
 //!   mode is on, after one second, then twice as long at every failure, up to thirty.
 //!
+//! Either way, when the user lets it on both sides, the clipboard is shared
+//! ([`clipboard`]): copies are announced, their content crosses on demand.
+//!
 //! An unknown machine is shown as `Pending` and gets nothing but `Hello` until the user
 //! accepts it (stored in `peers.json`, then `Paired` on the link) or refuses it.
 
 mod actor;
+pub mod clipboard;
 pub mod hook_input;
 pub mod local;
 pub mod overlay;
@@ -243,6 +247,10 @@ pub struct PeersState {
     /// Said by the hook; absent from the state of an older agent.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The shared clipboard: what the user lets it do, and whether it works. Absent
+    /// from the state of an older agent.
+    #[serde(default)]
+    pub clipboard: clipboard::ClipboardState,
     /// The machine id of the master whose mouse and keyboard drive this machine now —
     /// its stream crossed onto this machine and has not left — or `None`. The other
     /// end of [`Self::driven`]: by the `Enter` and `Leave` of that stream as they reach
@@ -346,6 +354,8 @@ pub enum PeerRequest {
         name: Option<String>,
         /// Replaces the pointer lock's shortcut when given; empty takes it away.
         pointer_lock_shortcut: Option<String>,
+        /// Replaces what the shared clipboard may do when given.
+        clipboard: ClipboardChange,
     },
     Connect(String),
     Accept(String),
@@ -353,6 +363,14 @@ pub enum PeerRequest {
     Forget(String),
     /// What a remote of this machine's screens show (`PeerWallpapers`).
     Wallpapers(String),
+}
+
+/// What `SetMultiPc` changes of the shared clipboard; `None` leaves a field as it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ClipboardChange {
+    pub send: Option<bool>,
+    pub receive: Option<bool>,
+    pub max_bytes: Option<u64>,
 }
 
 /// An answer now, or one to await (in a task of the caller's, never its loop).
@@ -370,6 +388,8 @@ pub struct Setup {
     /// when there is no hook to inject into or capture from.
     pub input_endpoint: Option<String>,
     pub options: link::Options,
+    /// How the shared clipboard reaches this machine's: the system's, or a test's.
+    pub clipboard: crate::clipboard::Factory,
 }
 
 impl Setup {
@@ -378,6 +398,7 @@ impl Setup {
             bind: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             input_endpoint,
             options: link::Options::default(),
+            clipboard: crate::clipboard::Factory::system(),
         }
     }
 }
@@ -608,7 +629,8 @@ impl Service {
                 port,
                 name,
                 pointer_lock_shortcut,
-            } => self.set(enabled, port, name, pointer_lock_shortcut),
+                clipboard,
+            } => self.set(enabled, port, name, pointer_lock_shortcut, clipboard),
             PeerRequest::State => match &self.running {
                 Some(running) => {
                     let (reply, answer) = oneshot::channel();
@@ -674,8 +696,18 @@ impl Service {
         port: Option<u16>,
         name: Option<String>,
         pointer_lock_shortcut: Option<String>,
+        clipboard: ClipboardChange,
     ) -> Answer {
         let mut next = self.settings.clone();
+        if let Some(send) = clipboard.send {
+            next.clipboard_send = send;
+        }
+        if let Some(receive) = clipboard.receive {
+            next.clipboard_receive = receive;
+        }
+        if let Some(max_bytes) = clipboard.max_bytes {
+            next.clipboard_max_bytes = Some(max_bytes);
+        }
         if let Some(shortcut) = pointer_lock_shortcut {
             let shortcut = shortcut.trim().to_owned();
             next.pointer_lock_shortcut = (!shortcut.is_empty()).then_some(shortcut);
@@ -691,10 +723,14 @@ impl Service {
         if let Err(error) = next.save(&self.directory) {
             return Answer::Now(Err(format!("cannot save the multi-PC settings: {error}")));
         }
-        // The shortcut alone is no reason to restart the manager and drop its links.
+        // The shortcut and the clipboard are no reason to restart the manager and drop
+        // its links.
         let shortcut = next.pointer_lock_shortcut.clone();
         let same_links = Settings {
             pointer_lock_shortcut: self.settings.pointer_lock_shortcut.clone(),
+            clipboard_send: self.settings.clipboard_send,
+            clipboard_receive: self.settings.clipboard_receive,
+            clipboard_max_bytes: self.settings.clipboard_max_bytes,
             ..next.clone()
         } == self.settings;
         let unchanged = same_links && (self.running.is_some() || !enabled);
@@ -703,6 +739,9 @@ impl Service {
             let _ = running
                 .commands
                 .send(Command::PointerLockShortcut(shortcut.unwrap_or_default()));
+            let _ = running
+                .commands
+                .send(Command::Clipboard(self.settings.clipboard()));
         }
         if unchanged {
             return self.request(PeerRequest::State);
@@ -774,6 +813,8 @@ impl Service {
             displays: self.displays.clone(),
             notices: self.notices.clone(),
             painter: self.painter.clone(),
+            clipboard: self.settings.clipboard(),
+            clipboard_factory: self.setup.clipboard.clone(),
         };
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (started, started_rx) = oneshot::channel();
@@ -811,6 +852,16 @@ impl Service {
                 .clone()
                 .unwrap_or_default(),
             pointer_locked: false,
+            clipboard: {
+                let options = self.settings.clipboard();
+                clipboard::ClipboardState {
+                    send: options.send,
+                    receive: options.receive,
+                    max_bytes: options.max_bytes,
+                    active: false,
+                    problem: None,
+                }
+            },
             peers: PeerStore::load(&self.directory)
                 .peers()
                 .iter()
@@ -890,6 +941,7 @@ mod tests {
             driven_by: None,
             pointer_lock_shortcut: String::new(),
             pointer_locked: false,
+            clipboard: Default::default(),
             peers,
         }
     }

@@ -264,3 +264,82 @@ async fn an_oversized_batch_is_refused_before_it_is_queued() {
         Err(SendError::Invalid(_))
     ));
 }
+
+/// Reads `link` until the bulk transfer `transfer` ends, and returns its data with
+/// everything else that came meanwhile, in order.
+async fn bulk_until_last(link: &mut Link, transfer: u64) -> (Vec<u8>, Vec<Event>) {
+    let mut data = Vec::new();
+    let mut others = Vec::new();
+    loop {
+        match next(link).await {
+            Event::Bulk(piece) if piece.transfer == transfer => {
+                assert!(piece.data.len() <= BULK_PIECE);
+                data.extend_from_slice(&piece.data);
+                if piece.last {
+                    return (data, others);
+                }
+            }
+            other => others.push(other),
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_bulk_transfer_arrives_whole_in_pieces() {
+    let (master, mut remote) = linked().await;
+    let data: Vec<u8> = (0..BULK_PIECE * 3 + 5).map(|i| i as u8).collect();
+    master.sender().bulk(7, &data).await.unwrap();
+    master.sender().bulk(8, &[]).await.unwrap();
+    let (received, others) = bulk_until_last(&mut remote, 7).await;
+    assert_eq!(received, data);
+    assert!(others.is_empty());
+    // Empty data is one last piece, still.
+    let (received, _) = bulk_until_last(&mut remote, 8).await;
+    assert!(received.is_empty());
+}
+
+#[tokio::test]
+async fn input_overtakes_a_bulk_transfer_under_way() {
+    let (master, mut remote) = linked().await;
+    let sender = master.sender();
+    let data = vec![0x5a; 8 * 1024 * 1024];
+    let transfer = tokio::spawn({
+        let sender = sender.clone();
+        async move { sender.bulk(1, &data).await }
+    });
+    // The transfer is under way once its first piece is here.
+    match next(&mut remote).await {
+        Event::Bulk(piece) => assert_eq!(piece.transfer, 1),
+        other => panic!("expected bulk, got {other:?}"),
+    }
+    let batch = input::encode(&[InputEvent::Motion { x: 1, y: 1 }]);
+    sender.try_input(&batch).unwrap();
+    let (_, others) = bulk_until_last(&mut remote, 1).await;
+    assert_eq!(
+        others,
+        vec![Event::Input(batch)],
+        "the input arrived before the transfer's end"
+    );
+    transfer.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn two_sides_sending_bulk_at_once_both_finish() {
+    let (mut master, mut remote) = linked().await;
+    let data = vec![1u8; 2 * 1024 * 1024];
+    let (to_remote, to_master) = (master.sender(), remote.sender());
+    let sending = tokio::spawn({
+        let data = data.clone();
+        async move {
+            let (a, b) = tokio::join!(to_remote.bulk(1, &data), to_master.bulk(2, &data));
+            a.and(b)
+        }
+    });
+    let ((at_remote, _), (at_master, _)) = tokio::join!(
+        bulk_until_last(&mut remote, 1),
+        bulk_until_last(&mut master, 2)
+    );
+    assert_eq!(at_remote.len(), data.len());
+    assert_eq!(at_master.len(), data.len());
+    sending.await.unwrap().unwrap();
+}

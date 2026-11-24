@@ -98,7 +98,23 @@ pub struct State {
     pub pointer_lock_shortcut: String,
     /// The pointer is locked on the machine it is on.
     pub pointer_locked: bool,
+    /// The shared clipboard.
+    pub clipboard: Clipboard,
     pub peers: Vec<Peer>,
+}
+
+/// What the agent says of the shared clipboard.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Clipboard {
+    /// What is copied here is offered to the other machines.
+    pub send: bool,
+    /// What is copied on the other machines can be pasted here.
+    pub receive: bool,
+    /// The system's clipboard is open: the option is on and a machine that shares is
+    /// linked.
+    pub active: bool,
+    /// Why it cannot be shared here, or why the last transfer failed.
+    pub problem: Option<String>,
 }
 
 /// What the user is typing on the page, kept between frames.
@@ -122,6 +138,8 @@ pub enum Did {
     /// `SetMultiPc { Enabled, PointerLockShortcut }`, the mode left as it is; empty
     /// for none.
     LockShortcut(String),
+    /// `SetMultiPc { Enabled, ClipboardSend, ClipboardReceive }`, the mode left as it is.
+    Clipboard { send: bool, receive: bool },
     /// `PeerConnect { Address }`.
     Connect(String),
     /// `PeerAccept { MachineId }`.
@@ -428,6 +446,10 @@ pub fn panel(
             }
         });
 
+        if let Some(chosen) = clipboard(ui, &state.clipboard) {
+            did = Some(chosen);
+        }
+
         crate::options::group(ui, "Connect to a machine", |ui| {
             crate::options::note(
                 ui,
@@ -471,6 +493,56 @@ pub fn panel(
         ui.colored_label(ui.visuals().error_fg_color, why);
     }
     did
+}
+
+/// The shared clipboard: each way on its own switch, both off unless the user says.
+fn clipboard(ui: &mut egui::Ui, state: &Clipboard) -> Option<Did> {
+    let mut did = None;
+    crate::options::group(ui, "Clipboard", |ui| {
+        let mut send = state.send;
+        if crate::options::toggle(
+            ui,
+            Icon::Clipboard,
+            "Send this clipboard",
+            "What you copy here can be pasted on the other machines that receive",
+            &mut send,
+        ) {
+            did = Some(Did::Clipboard {
+                send,
+                receive: state.receive,
+            });
+        }
+        let mut receive = state.receive;
+        if crate::options::toggle(
+            ui,
+            Icon::Clipboard,
+            "Receive the others' clipboards",
+            "What you copy on another machine that sends can be pasted here",
+            &mut receive,
+        ) {
+            did = Some(Did::Clipboard {
+                send: state.send,
+                receive,
+            });
+        }
+        crate::options::note(ui, &clipboard_note(state));
+        if let Some(problem) = &state.problem {
+            ui.colored_label(ui.visuals().warn_fg_color, problem);
+        }
+    });
+    did
+}
+
+/// What the clipboard's group says under its switches.
+pub fn clipboard_note(state: &Clipboard) -> String {
+    if !state.send && !state.receive {
+        "Text and pictures. The content crosses only when it is pasted.".to_owned()
+    } else if state.active {
+        "Shared with the machines linked now. The content crosses only when it is pasted."
+            .to_owned()
+    } else {
+        "Shared once a machine that shares its clipboard is linked.".to_owned()
+    }
 }
 
 /// One machine: who it is, what it is to this one, and what can be done about it. Every

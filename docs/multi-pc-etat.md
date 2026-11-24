@@ -104,6 +104,11 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
+- Deux maîtres liés au même esclave partagent sa connexion unique au hook (une session
+  par connexion). Quand le flux de l'un se termine, la connexion est fermée pour que le
+  hook relâche ce qu'il tenait : la session de l'autre, s'il pilotait, se termine aussi.
+  Il en est averti (`InputReset`, son pointeur rentre) et `DrivenBy` s'efface (revue de
+  la #816).
 - Le premier lien avec un esclave qui apporte des écrans inconnus crée un profil
   **désactivé** : le moteur s'arrête jusqu'à ce que l'utilisateur l'active.
 - Esclave Linux : si son propre backend evdev route, une souris locale reprend d'où ce

@@ -61,9 +61,10 @@ pub struct Running {
     /// process that does. Absent from the state (false) for the others.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub window: bool,
-    /// It holds an established TCP connection: another machine is on the other end
-    /// now. `None` when the agent could not tell (Linux: a process of another user,
-    /// whose sockets it may not read, and no connection on [`DEFAULT_PORT`]).
+    /// It holds an established TCP connection to another machine (the loopback, where
+    /// the tools' services keep their control sockets, does not count). `None` when
+    /// the agent could not tell (Linux: a process of another user, whose sockets it may
+    /// not read).
     #[serde(default)]
     pub connected: Option<bool>,
 }

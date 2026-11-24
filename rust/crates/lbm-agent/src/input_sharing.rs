@@ -14,6 +14,7 @@
 //! `GetExtendedTcpTable`, which names each connection's process.
 
 use lbm_ipc::sharing::{self, Role, Running};
+use std::net::IpAddr;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 use std::path::Path;
 
@@ -51,8 +52,41 @@ pub fn moment(before: (bool, &[String]), now: (bool, &[String])) -> Option<&'sta
 struct Socket {
     local_port: u16,
     remote_port: u16,
+    /// The other end: a loopback one is the tool talking to itself (its service's
+    /// control socket), not another machine.
+    remote: IpAddr,
     established: bool,
     inode: u64,
+}
+
+/// An established connection to another machine: not one to this machine's loopback,
+/// which every tool's service keeps for its own control (Synergy's on 24801).
+fn to_another_machine(remote: IpAddr) -> bool {
+    !remote.to_canonical().is_loopback()
+}
+
+/// An address of `/proc/net/tcp` (8 hexadecimal digits) or `tcp6` (32): 32-bit words,
+/// each in the kernel's byte order, which on Linux is the machine's.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn parse_address(hex: &str) -> Option<IpAddr> {
+    let word = |i: usize| -> Option<[u8; 4]> {
+        Some(
+            u32::from_str_radix(hex.get(i * 8..i * 8 + 8)?, 16)
+                .ok()?
+                .to_ne_bytes(),
+        )
+    };
+    match hex.len() {
+        8 => Some(IpAddr::from(word(0)?)),
+        32 => {
+            let mut bytes = [0u8; 16];
+            for i in 0..4 {
+                bytes[i * 4..i * 4 + 4].copy_from_slice(&word(i)?);
+            }
+            Some(IpAddr::from(bytes))
+        }
+        _ => None,
+    }
 }
 
 /// The sockets of a `/proc/net/tcp`-shaped text (the heading line, then one per
@@ -69,9 +103,11 @@ fn parse_tcp(text: &str) -> Vec<Socket> {
         .skip(1)
         .filter_map(|line| {
             let fields: Vec<&str> = line.split_whitespace().collect();
+            let remote = fields.get(2)?;
             Some(Socket {
                 local_port: port(fields.get(1)?)?,
-                remote_port: port(fields.get(2)?)?,
+                remote_port: port(remote)?,
+                remote: parse_address(remote.split_once(':')?.0)?,
                 established: *fields.get(3)? == "01",
                 inode: fields.get(9)?.parse().ok()?,
             })
@@ -105,7 +141,10 @@ pub fn scan_proc(root: &Path) -> Vec<Running> {
             sockets.extend(parse_tcp(&text));
         }
     }
-    let established: Vec<Socket> = sockets.into_iter().filter(|s| s.established).collect();
+    let established: Vec<Socket> = sockets
+        .into_iter()
+        .filter(|s| s.established && to_another_machine(s.remote))
+        .collect();
     let mut found: Vec<Running> = entries
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -152,15 +191,10 @@ pub fn scan_proc(root: &Path) -> Vec<Running> {
                     }),
                     Some(!own.is_empty()),
                 ),
-                // Another user's: only a connection on the default port says anything,
-                // and it is not known to be this process's.
-                None => (
-                    role,
-                    established
-                        .iter()
-                        .any(|s| role_from_ports(s.local_port, s.remote_port).is_some())
-                        .then_some(true),
-                ),
+                // Another user's: its sockets cannot be told from any other process's,
+                // so whether it is connected stays unknown — a connection on the default
+                // port may as well be another tool's.
+                None => (role, None),
             };
             Some(Running {
                 tool: known.tool,
@@ -181,10 +215,11 @@ mod windows {
     use super::role_from_ports;
     use lbm_ipc::sharing::{self, Running};
     use std::collections::HashMap;
+    use std::net::IpAddr;
     use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, NO_ERROR};
     use windows::Win32::NetworkManagement::IpHelper::{
-        GetExtendedTcpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID, MIB_TCP_STATE_ESTAB,
-        TCP_TABLE_OWNER_PID_ALL,
+        GetExtendedTcpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID,
+        MIB_TCPTABLE_OWNER_PID, MIB_TCP_STATE_ESTAB, TCP_TABLE_OWNER_PID_ALL,
     };
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -240,7 +275,15 @@ mod windows {
                 let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
                 std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize)
             };
-            for row in rows.iter().filter(|r| r.dwState == estab) {
+            // The address is in network order: its bytes in memory are the dotted ones.
+            let to_another = |r: &&MIB_TCPROW_OWNER_PID| {
+                super::to_another_machine(IpAddr::from(r.dwRemoteAddr.to_ne_bytes()))
+            };
+            for row in rows
+                .iter()
+                .filter(|r| r.dwState == estab)
+                .filter(to_another)
+            {
                 by_pid
                     .entry(row.dwOwningPid)
                     .or_default()
@@ -254,7 +297,14 @@ mod windows {
                 let table = &*(buffer.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
                 std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize)
             };
-            for row in rows.iter().filter(|r| r.dwState == estab) {
+            let to_another = |r: &&MIB_TCP6ROW_OWNER_PID| {
+                super::to_another_machine(IpAddr::from(r.ucRemoteAddr))
+            };
+            for row in rows
+                .iter()
+                .filter(|r| r.dwState == estab)
+                .filter(to_another)
+            {
                 by_pid
                     .entry(row.dwOwningPid)
                     .or_default()
@@ -335,6 +385,7 @@ mod tests {
    0: 00000000:60E0 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1 0000000000000000 100 0 0 10 0
    1: 0100A8C0:60E0 0200A8C0:D431 01 00000000:00000000 02:000A7B2E 00000000  1000        0 222 2 0000000000000000 20 4 30 10 -1
    2: 0100A8C0:C350 0300A8C0:60E0 01 00000000:00000000 02:000A7B2E 00000000  1000        0 333 2 0000000000000000 20 4 30 10 -1
+   3: 0100007F:C351 0100007F:60E1 01 00000000:00000000 02:000A7B2E 00000000  1000        0 444 2 0000000000000000 20 4 30 10 -1
 ";
 
     #[test]
@@ -346,25 +397,76 @@ mod tests {
                 Socket {
                     local_port: 24800,
                     remote_port: 0,
+                    remote: IpAddr::from([0, 0, 0, 0]),
                     established: false,
                     inode: 111
                 },
                 Socket {
                     local_port: 24800,
                     remote_port: 54321,
+                    remote: IpAddr::from([192, 168, 0, 2]),
                     established: true,
                     inode: 222
                 },
                 Socket {
                     local_port: 50000,
                     remote_port: 24800,
+                    remote: IpAddr::from([192, 168, 0, 3]),
                     established: true,
                     inode: 333
+                },
+                Socket {
+                    local_port: 50001,
+                    remote_port: 24801,
+                    remote: IpAddr::from([127, 0, 0, 1]),
+                    established: true,
+                    inode: 444
                 },
             ]
         );
         assert!(parse_tcp("heading only\n").is_empty());
         assert!(parse_tcp("heading\n garbage line\n").is_empty());
+    }
+
+    #[test]
+    fn the_addresses_are_read_in_the_kernels_order() {
+        assert_eq!(
+            parse_address("0100007F"),
+            Some(IpAddr::from([127, 0, 0, 1]))
+        );
+        assert_eq!(
+            parse_address("00000000000000000000000001000000"),
+            Some("::1".parse().unwrap())
+        );
+        assert_eq!(
+            parse_address("0000000000000000FFFF00000100007F"),
+            Some("::ffff:127.0.0.1".parse().unwrap())
+        );
+        assert_eq!(parse_address("7F"), None);
+        assert_eq!(parse_address("zz00007F"), None);
+        // Loopback, v4, v6 or v4 in v6, is never another machine.
+        for local in ["127.0.0.1", "127.1.2.3", "::1", "::ffff:127.0.0.1"] {
+            assert!(!to_another_machine(local.parse().unwrap()), "{local}");
+        }
+        assert!(to_another_machine("192.168.0.2".parse().unwrap()));
+        assert!(to_another_machine("::ffff:192.168.0.2".parse().unwrap()));
+    }
+
+    /// Review of #814: a server whose only established socket is its service's control
+    /// connection on the loopback (Synergy's 24801) is linked to no machine.
+    #[test]
+    fn a_control_connection_on_the_loopback_is_not_a_link() {
+        let root = proc_root();
+        process(
+            root.path(),
+            80,
+            "synergy-core",
+            &["synergy-core", "server"],
+            Some(&[111, 444]),
+        );
+        let found = scan_proc(root.path());
+        assert_eq!(found[0].role, Some(Role::Server));
+        assert_eq!(found[0].connected, Some(false));
     }
 
     fn process(root: &Path, pid: u32, comm: &str, args: &[&str], sockets: Option<&[u64]>) {
@@ -486,19 +588,24 @@ mod tests {
         assert_eq!(found[0].connected, Some(true));
     }
 
-    /// Another user's: its sockets cannot be read. A connection on the default port
-    /// says "connected"; none says nothing, since it may use another port.
+    /// Review of #814: another user's process, whose sockets cannot be read, is not
+    /// said connected because some connection on the default port is up — it may be
+    /// another tool's (here a Deskflow of this user, linked on 24800).
     #[test]
-    fn another_users_process_is_connected_only_by_the_default_port() {
+    fn another_users_process_is_of_unknown_connection() {
         let root = proc_root();
         process(root.path(), 70, "input-leapc", &["input-leapc"], None);
+        process(
+            root.path(),
+            71,
+            "deskflow-core",
+            &["deskflow-core", "server"],
+            Some(&[222]),
+        );
         let found = scan_proc(root.path());
-        assert_eq!(found[0].role, Some(Role::Client));
-        assert_eq!(found[0].connected, Some(true));
-
-        let quiet = tempfile::tempdir().unwrap();
-        process(quiet.path(), 70, "input-leapc", &["input-leapc"], None);
-        assert_eq!(scan_proc(quiet.path())[0].connected, None);
+        assert_eq!((found[0].pid, found[0].role), (70, Some(Role::Client)));
+        assert_eq!(found[0].connected, None);
+        assert_eq!((found[1].pid, found[1].connected), (71, Some(true)));
     }
 
     #[test]

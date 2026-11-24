@@ -106,8 +106,9 @@
 //! from one to the other is treated as leaving the one being driven, and the pointer
 //! comes home.
 
-// Only the evdev backend is a master so far: on Windows nothing calls into this yet,
-// and it is compiled there all the same, so that it stays platform-neutral.
+// The masters are the evdev backend and the Windows hooks (`hook::ll_master`), which do
+// not use all of it; compiled on every system all the same, so that it stays
+// platform-neutral.
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 use std::sync::atomic::Ordering;

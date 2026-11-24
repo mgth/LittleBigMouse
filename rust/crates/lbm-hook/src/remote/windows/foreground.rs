@@ -134,6 +134,18 @@ fn say(word: Option<Option<InjectionBlock>>) {
     }
 }
 
+/// The window in the foreground, as a number: to tell whether it changed.
+pub(crate) fn foreground_id() -> isize {
+    foreground_window().0 as isize
+}
+
+/// Whether the window `id` ([`foreground_id`]) runs above this hook. A Windows master's
+/// low-level hooks then see nothing of the input it gets (UIPI), as `SendInput` here
+/// cannot reach it (`hook::windows::master`).
+pub(crate) fn above_us(id: isize) -> Option<InjectionBlock> {
+    verdict(HWND(id as *mut _))
+}
+
 /// What the window `hwnd` lets this hook inject.
 fn verdict(hwnd: HWND) -> Option<InjectionBlock> {
     static OURS: OnceLock<Option<Integrity>> = OnceLock::new();

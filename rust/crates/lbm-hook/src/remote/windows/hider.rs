@@ -1,4 +1,5 @@
-//! Hiding a Windows remote's pointer while no master drives it.
+//! Hiding a Windows remote's pointer while no master drives it, and a Windows
+//! master's while its pointer is on another machine (`hook::windows::master`).
 //!
 //! A process cannot hide the system cursor everywhere: `ShowCursor` only counts for
 //! the windows of the calling thread, and replacing the system cursors would outlive
@@ -131,6 +132,12 @@ impl Hider {
         }
     }
 
+    /// Makes the window now, so that the first [`Self::park`] does not wait for it: a
+    /// Windows master parks from its low-level hook, which must never wait that long.
+    pub fn prepare(&mut self) {
+        self.window();
+    }
+
     fn window(&mut self) -> Option<isize> {
         if self.window.is_none() && !self.failed {
             self.window = spawn_window();
@@ -155,6 +162,15 @@ impl Drop for Hider {
             }
         }
     }
+}
+
+/// Where the pointer is parked, while it is.
+pub fn parked_at() -> Option<(i32, i32)> {
+    if SHOWN.load(Ordering::Acquire) == 0 {
+        return None;
+    }
+    let spot = SPOT.load(Ordering::Acquire);
+    (spot != u64::MAX).then_some(((spot >> 32) as u32 as i32, spot as u32 as i32))
 }
 
 /// This machine's own pointer did something at `at` — an event the low-level mouse

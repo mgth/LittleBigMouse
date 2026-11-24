@@ -60,6 +60,14 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     if ms.dwExtraInfo == crate::remote::windows::INJECTED {
         return false;
     }
+    let Some(shared) = SHARED.get() else {
+        return false;
+    };
+    // This machine a multi-PC master whose pointer is on another machine: everything
+    // the mouse does is the master's (super::master).
+    if let Some(swallow) = super::master::away_event(shared, wparam.0 as u32, ms) {
+        return swallow;
+    }
     // Anything else is this machine's own mouse, or someone's here: a pointer a
     // multi-PC master parked out of sight is theirs again. One atomic load when none is.
     crate::remote::windows::local_pointer_input((ms.pt.x, ms.pt.y));
@@ -83,9 +91,11 @@ fn process(code: i32, wparam: WPARAM, lparam: LPARAM) -> bool {
     }
     count_event();
 
-    let Some(shared) = SHARED.get() else {
-        return false;
-    };
+    // With a machine to drive, the master routes, over the other machines' zones too.
+    if let Some(swallow) = super::master::local_move(shared, loc) {
+        super::touch_input::record_mouse_position(loc, swallow);
+        return swallow;
+    }
 
     // The whole non-blocking route — contended lock passes through, poisoned lock
     // is recovered, crossing counted — lives in the neutral `hot_path` core, so

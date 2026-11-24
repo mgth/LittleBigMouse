@@ -11,8 +11,8 @@
 //! when it belongs to a process of a higher integrity level, Windows drops everything
 //! injected here, and the agent is told so.
 
-mod foreground;
-mod hider;
+pub(crate) mod foreground;
+pub(crate) mod hider;
 
 pub use hider::local_pointer_input;
 

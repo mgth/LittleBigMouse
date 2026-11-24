@@ -250,9 +250,33 @@ fn lock_shortcut(
     chosen
 }
 
+/// The other sharing tools running on this machine (`InputSharing` in the agent's
+/// state), in words: they move the pointer to other machines whatever LittleBigMouse
+/// does, which looks like LittleBigMouse misbehaving unless it is said.
+pub fn other_sharing(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
+    for warning in lbm_ipc::sharing::warnings(running) {
+        ui.colored_label(ui.visuals().warn_fg_color, warning);
+    }
+}
+
+/// The bottom bar's word for the same: the tools' names, the sentences on hover.
+pub fn sharing_status(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
+    let tools = lbm_ipc::sharing::tools(running);
+    if tools.is_empty() {
+        return;
+    }
+    let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+    crate::theme::status(
+        ui,
+        &format!("{} also running", names.join(" and ")),
+        crate::theme::AMBER,
+    )
+    .on_hover_text(lbm_ipc::sharing::warnings(running).join("\n"));
+}
+
 /// The Machines page. `rescue` is the rescue shortcut, which the pointer lock's may not
 /// be; `busy` greys the controls while a request is out; `error` is the last request the
-/// agent refused.
+/// agent refused; `sharing` the other sharing tools the agent found running.
 pub fn panel(
     ui: &mut egui::Ui,
     state: Option<&State>,
@@ -260,12 +284,14 @@ pub fn panel(
     draft: &mut Panel,
     busy: bool,
     error: Option<&str>,
+    sharing: &[lbm_ipc::sharing::Running],
 ) -> Option<Did> {
     let mut did = None;
     crate::options::note(
         ui,
         "One mouse and keyboard for several computers · applied at once",
     );
+    other_sharing(ui, sharing);
     let Some(state) = state else {
         ui.label("Asking the agent…");
         return None;

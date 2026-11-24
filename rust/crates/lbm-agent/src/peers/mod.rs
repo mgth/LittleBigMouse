@@ -212,6 +212,16 @@ pub struct RemoteScreens {
 }
 
 impl PeersState {
+    /// The machine ids of the paired machines linked now, either role; none while the
+    /// mode is off.
+    pub fn linked(&self) -> Vec<String> {
+        self.peers
+            .iter()
+            .filter(|p| self.enabled && p.state == PeerState::Paired && p.peer.connected)
+            .map(|p| p.peer.machine_id.clone())
+            .collect()
+    }
+
     /// The screens the layout is to hold besides this machine's: those of the selected
     /// remote ([`PeersState::selected_remote`]), a paired machine linked as a remote of
     /// this one. One remote at a time: the input stream carries no destination, so a
@@ -788,6 +798,18 @@ mod tests {
             pointer_locked: false,
             peers,
         }
+    }
+
+    #[test]
+    fn the_linked_machines_are_the_paired_connected_ones_of_either_role() {
+        let peers = vec![
+            entry("a", Role::Master, PeerState::Paired, true),
+            entry("b", Role::Remote, PeerState::Paired, false),
+            entry("c", Role::Remote, PeerState::Pending, true),
+            entry("d", Role::Remote, PeerState::Paired, true),
+        ];
+        assert_eq!(state(true, "d", peers.clone()).linked(), ["a", "d"]);
+        assert!(state(false, "d", peers).linked().is_empty());
     }
 
     fn ids(remotes: &[RemoteScreens]) -> Vec<&str> {

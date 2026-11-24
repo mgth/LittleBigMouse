@@ -53,7 +53,8 @@ maître ramène son pointeur.
 Une seule paire complète : **maître Linux (KDE Plasma 6, Wayland, backend evdev) →
 esclave Windows 11**, avec un écran partagé par KVM. L'esclave Linux et les fonctions
 Windows annexes ont été essayés à part le 2026-11-24, avec `examples/peer_drive` dans le
-rôle du maître (lignes marquées d'une PR : correctifs encore ouverts).
+rôle du maître. Le numéro de PR d'une ligne renvoie à la PR qui a apporté les correctifs
+trouvés pendant l'essai.
 
 | Essai | Résultat |
 |---|---|
@@ -320,7 +321,8 @@ qu'aucun pair n'est lié ou que l'option est coupée.
 
 ## Fonctionnalités à envisager
 
-Des idées, pas des engagements ; aucune n'est commencée. Dans l'ordre d'utilité estimée.
+Des idées, pas des engagements. Les points 1, 3 et 4 sont codés dans la PR #813, pas
+encore fusionnée ; les autres ne sont pas commencés. Dans l'ordre d'utilité estimée.
 
 1. **Verrouiller le pointeur sur une machine** par un raccourci *(codé, PR #813, voir « Travaux en cours »)*. Pour les jeux et le
    plein écran, où l'on franchit le bord par accident. La reconnaissance d'un raccourci
@@ -404,7 +406,7 @@ les sections ci-dessus en tiennent compte.
 
 | Sujet | Branche / PR | État |
 |---|---|---|
-| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte ; tests et clippy verts. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
+| Indicateur de machine pilotée (tray, page Machines) ; verrous Maj/Num/Défil alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par un raccourci (`PointerLockShortcut` dans `multi-pc.json`, aucun par défaut ; libéré par le secours, la fin du flux, l'arrêt ou le changement de client) | PR #813 | Ouverte, revue en cours (un P1 reste : secours changé pendant une traversée alors qu'il recouvre le raccourci de verrouillage). Tests, clippy et formatage verts **en local** ; la CI n'a pas encore confirmé. Jamais essayé sur matériel : `GetKeyState` depuis le fil de l'injecteur Windows, LED d'un esclave Linux qui a capturé ses claviers, verrouillage sous un vrai compositeur ; verrouillé chez soi, le raccourci atteint aussi le bureau |
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

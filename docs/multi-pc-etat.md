@@ -3,7 +3,7 @@
 État au 2026-11-24, branche `v6` (`cf2bc5c7`, suivi jusqu’à `d7204166`), après la fusion des PR #800 (le mode)
 et #801 (fonds d'écran suivis en direct).
 
-Mis à jour au fil des travaux (dernière fois le 2026-11-24 au soir) : voir « Travaux en cours » à la fin.
+Mis à jour au fil des travaux (dernière fois le 2026-11-24, règles sur l'esclave) : voir « Travaux en cours » à la fin.
 
 Ce document dit ce qui est livré, ce qui a réellement été essayé, et ce qu'il manque
 pour que n'importe quelle paire Linux/Windows fonctionne dans les deux sens. Le
@@ -43,7 +43,8 @@ qui va le pointeur quand il y entre.
 | Confort (PR #813) | `hook::crossing`, `lbm-agent/src/peers`, tray, `lbm-app` | Indicateur de la machine qui a la souris et le clavier (tray, page Machines ; côté esclave et icône du tray : voir la ligne suivante) ; Verr. Maj/Num/Défil de l'esclave alignés sur ceux du maître à l'`Enter` ; pointeur verrouillé sur une machine par `PointerLockShortcut` (`multi-pc.json`, aucun par défaut), toujours libéré par le secours, la fin du flux, l'arrêt du maître ou le changement de client |
 | Raccourcis lus par le maître evdev (PR #PRNUM) | `hook/crossing/keys.rs` (`Letters`), `hook/linux/keymap.rs`, `hook/linux/rescue.rs`, `Shared::report_rescue_refused` | Les touches lues par evdev sont des positions : la lettre d'un raccourci (`M` de `Alt+Shift+M` ou du secours `Ctrl+Alt+Shift+M`) est cherchée sur la disposition du bureau, lue dans la keymap que `wl_keyboard` donne à tout client (xkbcommon chargé à l'exécution), suivie à chaque nouvelle keymap et à chaque changement de disposition active ; table US sans Wayland ni xkbcommon. Sur un clavier AZERTY, le verrou et le secours attendaient jusque-là la touche marquée `,`. Le secours est aussi reconnu dans les touches des claviers non capturés, tenu le même temps, tant que le bureau ne l'a pas lié lui-même ; le refus du portail ne le dit alors plus indisponible. Le hook se déclare au portail sous l'app id `io.github.mgth.LittleBigMouse` (`org.freedesktop.host.portal.Registry`) avant de demander le raccourci global |
 | Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
-| Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running » |
+| Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, `sharing_exits.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running », y compris dans la barre d'état (pastille grise « Deskflow open », l'ambre « … also running » étant réservée à un processus qui route ou peut router). Chaque processus trouvé est attendu jusqu'à sa fin, sans scrutation (Linux : pidfd ; Windows : `RegisterWaitForSingleObject` sur un handle `SYNCHRONIZE`) : quitter Deskflow éteint aussitôt l'indication |
+| Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -75,6 +76,8 @@ trouvés pendant l'essai.
 | Injection dans une fenêtre élevée (esclave Windows) | Vérifié sur la vm124 : rien ne passe depuis un agent non élevé ; tout passe (mouvement, clics, touches) depuis un agent élevé, par tâche ou par `StartElevated` |
 | Avertissement « fenêtre élevée » (PR #818) : hook esclave non élevé, clavier visuel (`osk.exe`, High + UIAccess) mis au premier plan par son icône de la barre des tâches | Vérifié sur la vm124 : blocage signalé à l'instant où `osk.exe` prend le focus (~300 ms après le survol de l'icône), redit au début de la session suivante ; curseur effectivement figé. Même chose, naturellement, avec la console `mmc.exe` élevée du mainteneur au premier plan. Hook élevé : rien de signalé, tout passe. `SendInput` renvoie le compte complet et `GetLastError` = 0 malgré le blocage. Essayé hook seul (à côté de l'agent du mainteneur, que le mutex d'instance empêche de doubler), pas la chaîne réseau jusqu'au maître, couverte par les tests sur boucle locale |
 | Règle de pare-feu 24817 posée et retirée par l'installeur | Vérifié sur la vm124 (PR #811) |
+| Règles sur l'esclave Windows (vm124, 4K à 1,5 + 1080p) : affichées à leur place sur les deux écrans, zone mesurée qui suit l'écran choisi, mise à jour, retirées sur ordre et à la chute brutale du lien (maître tué), pointeur qui les traverse (`WindowFromPoint` rend la fenêtre du dessous) | Vérifié avec `peer_drive` comme maître et `peer_remote` comme esclave (l'agent installé du mainteneur tournait à côté, intact) |
+| Règles sur un esclave Linux : surfaces layer-shell, mise à jour, bail renouvelé, hôte d'overlay disparu à la fin | Vérifié dans un KWin imbriqué sans écran (`kwin_wayland --virtual`), pas sur un vrai bureau |
 
 Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 
@@ -89,6 +92,9 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 - les quatre scénarios de panne corrigés pendant la revue (débordement de file,
   bascule d'esclave, hook redémarré, client du flux remplacé) : prouvés par tests, pas
   provoqués sur les machines ;
+- les règles sur l'esclave **depuis `lbm-app`** sur un vrai maître (seul le chemin
+  `peer_drive` → esclave a tourné ; le calcul côté `lbm-app` et le retrait à sa fermeture
+  sont couverts par des tests), et sur un vrai bureau Linux esclave ;
 - l'indicateur côté esclave et l'icône du tray marquée (estompée / pastille) : ni la
   pastille dans le tray Plasma ni l'icône redessinée dans la zone de notification
   Windows n'ont été vues à l'écran ; le calcul des pixels et le changement d'icône sont
@@ -114,6 +120,11 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   chez le maître ; l'échec d'une connexion à une adresse tapée n'apparaît que comme
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
+- Règles sur l'esclave : elles ne se tirent pas (inertes là-bas, on aligne en tirant
+  celles des écrans du maître) ; « Rulers on screens » reste grisé quand l'écran
+  sélectionné est celui de l'esclave, comme avant ; sous Linux, l'esclave renouvelle le
+  bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
+  au-delà).
 - Deux maîtres liés au même esclave partagent sa connexion unique au hook (une session
   par connexion). Quand le flux de l'un se termine, la connexion est fermée pour que le
   hook relâche ce qu'il tenait : la session de l'autre, s'il pilotait, se termine aussi.
@@ -128,17 +139,30 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   bureau que par un `Load`), et KWin 6 jette ce qu'un périphérique uinput émet dans ses
   ~300 premières millisecondes, d'où un premier `Enter` sans effet.
 
-- Autres outils de partage : regardés, jamais surveillés. Un Deskflow lancé ou arrêté
-  après le dernier de ces moments (mode activé, lien établi, Start, fenêtre ouverte)
-  n'apparaît ou ne disparaît qu'au moment suivant ; c'est la règle « événements
-  seulement ». Sous Linux, les sockets d'un processus d'un autre utilisateur sont
+- Autres outils de partage : la liste n'est relevée qu'à certains moments (mode activé,
+  lien établi, Start, fenêtre ouverte) ; un processus trouvé en sort dès qu'il se
+  termine (événement de fin), mais un Deskflow **lancé** après le dernier de ces moments,
+  ou dont la fenêtre démarre ensuite son `deskflow-core`, n'apparaît qu'au moment
+  suivant : aucun des deux systèmes n'offre à un agent non privilégié d'événement
+  « processus lancé » sans scrutation (Linux : le connecteur de processus netlink exige
+  `CAP_NET_ADMIN` ; Windows : `Win32_ProcessStartTrace` exige l'administrateur, et
+  `__InstanceCreationEvent` scrute, clause `WITHIN`). De même, une fenêtre Deskflow qui arrête
+  son serveur sans se fermer laisse « Deskflow open » à juste titre, mais un
+  `deskflow-core` resté en vie après un « Stop » reste dit « running ». Un processus
+  qu'on ne peut pas attendre (pidfd refusé, handle d'un processus élevé refusé sous
+  Windows) reste dit jusqu'au relevé suivant. Sous Linux, les sockets d'un processus d'un autre utilisateur sont
   illisibles : sa connexion reste « inconnue », même si une connexion est établie sur
   le port 24800 (elle peut être celle d'un autre outil). Les connexions vers la boucle
   locale (socket de contrôle du service, 24801 chez Synergy) ne comptent jamais. Sous Windows, la ligne de commande d'un autre processus
   n'est pas lue : `deskflow-core.exe` n'est dit serveur ou client que par une connexion
-  sur le port 24800. Rien de tout cela n'a tourné sur Windows ; sous Linux, seule une
-  fenêtre `deskflow` seule a été vue sur une vraie machine (lecture de `/proc`), jamais un
-  `deskflow-core` relié à un client.
+  sur le port 24800. Rien de tout cela n'a tourné sur Windows (ni l'attente de fin) ;
+  sous Linux, la fenêtre `deskflow` seule a été vue sur une vraie machine, mal nommée
+  « running » dans la barre jusqu'à la correction (v6 d51f72d7, signalé par le
+  mainteneur), et jamais un `deskflow-core` relié à un client. L'attente de fin a tourné
+  sur de vrais processus Linux de test (scripts shell nommés comme Deskflow), pas sur
+  Deskflow lui-même. Un outil quitté entre le relevé et la mise en attente est dit
+  terminé aussitôt (Linux : `ESRCH` ; Windows : `OpenProcess` en
+  `ERROR_INVALID_PARAMETER`, distingué d'un refus d'accès).
 
 ## Matrice de support
 
@@ -461,8 +485,10 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-- Autres outils de partage (PR #814, branche `feat/concurrent-input-sharing-v6`) : la ligne
-  « Autres outils de partage » ci-dessus et sa faiblesse.
+La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; elle est
+décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les
+écrans de l'esclave (PR #817) le sont aussi, voir « Rulers on a remote's screens » dans
+[`multi-pc.md`](multi-pc.md).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

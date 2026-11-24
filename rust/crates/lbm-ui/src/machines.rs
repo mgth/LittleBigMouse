@@ -309,19 +309,38 @@ pub fn other_sharing(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
     }
 }
 
-/// The bottom bar's word for the same: the tools' names, the sentences on hover.
+/// The bottom bar's word for the same: the tools' names, the sentences on hover. A
+/// tool whose window alone is open moves nothing: it is said "open", in the muted
+/// colour, not "running" in the warning one.
 pub fn sharing_status(ui: &mut egui::Ui, running: &[lbm_ipc::sharing::Running]) {
-    let tools = lbm_ipc::sharing::tools(running);
-    if tools.is_empty() {
-        return;
+    let (active, open) = lbm_ipc::sharing::active_and_open(running);
+    let names = |tools: &[lbm_ipc::sharing::Tool]| {
+        tools
+            .iter()
+            .map(|t| t.name())
+            .collect::<Vec<_>>()
+            .join(" and ")
+    };
+    let said = |tools: &[lbm_ipc::sharing::Tool]| {
+        let of_them: Vec<_> = running
+            .iter()
+            .filter(|r| tools.contains(&r.tool))
+            .cloned()
+            .collect();
+        lbm_ipc::sharing::warnings(&of_them).join("\n")
+    };
+    if !active.is_empty() {
+        crate::theme::status(
+            ui,
+            &format!("{} also running", names(&active)),
+            crate::theme::AMBER,
+        )
+        .on_hover_text(said(&active));
     }
-    let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
-    crate::theme::status(
-        ui,
-        &format!("{} also running", names.join(" and ")),
-        crate::theme::AMBER,
-    )
-    .on_hover_text(lbm_ipc::sharing::warnings(running).join("\n"));
+    if !open.is_empty() {
+        crate::theme::status(ui, &format!("{} open", names(&open)), crate::theme::MUTED)
+            .on_hover_text(said(&open));
+    }
 }
 
 /// The Machines page. `rescue` is the rescue shortcut, which the pointer lock's may not

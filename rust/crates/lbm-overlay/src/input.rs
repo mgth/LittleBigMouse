@@ -1,5 +1,5 @@
 //! Native input uses surface-local UI points, independent of fractional buffer scale.
-use crate::scene::{Band, Content, Pixels};
+use crate::scene::{Band, Pixels};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ impl Input {
             && self.length > 0.
             && self.thickness > 0.
             && !matches!(self.kind, Kind::Wheel(d) if !d.is_finite() || d.abs() > 100.)
-            && !matches!(self.band.content, Content::Guide { .. })
+            && self.band.interactive()
     }
 }
 /// Tells a gesture cut short from the capture ending because the button came up.
@@ -80,9 +80,10 @@ impl Capture {
 }
 
 /// The same half-open diagonals as the pixels: neighbouring edge windows never
-/// consume each other's corner. Reference lines have no input region at all.
+/// consume each other's corner. Reference lines and passive bands have no input region
+/// at all.
 pub fn regions(band: &Band) -> Vec<Pixels> {
-    if matches!(band.content, Content::Guide { .. }) {
+    if !band.interactive() {
         return vec![];
     }
     let mut regions = Vec::new();

@@ -89,6 +89,9 @@ pub struct Agent<W> {
     subscribers: Vec<api::Client>,
     /// The connection a live preview belongs to, while one is running.
     previewing_for: Option<api::Client>,
+    /// The rulers shown on remotes (`PeerOverlay`): for each remote, the frontend that
+    /// wrote its rulers last, the only one whose word or departure takes them down.
+    overlay_owners: std::collections::BTreeMap<String, api::Client>,
     /// What the subscribers last saw.
     published: Option<Snapshot>,
     hook_connected: bool,
@@ -186,6 +189,9 @@ pub struct Agent<W> {
     /// How to look for them: [`crate::input_sharing::scan`] in `main`, nothing in a test
     /// that did not ask (a test must not report the machine it runs on).
     scan_input_sharing: fn() -> Vec<lbm_ipc::sharing::Running>,
+    /// The end of each process found, as an event: `None` unless asked for (`main`),
+    /// so that a test's made-up pids are never watched.
+    sharing_exits: Option<crate::sharing_exits::Exits>,
     /// The multi-PC mode was on in the last `Peers` state: turning it on is a moment
     /// to look for the other tools.
     multi_pc_on: bool,
@@ -213,6 +219,7 @@ impl<W: AgentWorld> Agent<W> {
             calls: None,
             subscribers: Vec::new(),
             previewing_for: None,
+            overlay_owners: std::collections::BTreeMap::new(),
             published: None,
             hook_connected: false,
             quitting: false,
@@ -253,6 +260,7 @@ impl<W: AgentWorld> Agent<W> {
             told_hook_ready: None,
             input_sharing: Vec::new(),
             scan_input_sharing: Vec::new,
+            sharing_exits: None,
             multi_pc_on: false,
             linked: Vec::new(),
         }
@@ -263,6 +271,24 @@ impl<W: AgentWorld> Agent<W> {
     pub fn with_input_sharing_scan(mut self, scan: fn() -> Vec<lbm_ipc::sharing::Running>) -> Self {
         self.scan_input_sharing = scan;
         self
+    }
+
+    /// Says a process found is gone as soon as it ends ([`crate::sharing_exits`]).
+    pub fn with_input_sharing_exits(mut self) -> Self {
+        self.sharing_exits = Some(crate::sharing_exits::Exits::new());
+        self
+    }
+
+    /// A process found has ended: it is no longer said running.
+    fn input_sharing_ended(&mut self, pid: u32) {
+        if let Some(exits) = &mut self.sharing_exits {
+            exits.forget(pid);
+        }
+        let before = self.input_sharing.len();
+        self.input_sharing.retain(|running| running.pid != pid);
+        if self.input_sharing.len() != before {
+            eprintln!("[lbm-agent] sharing tool process {pid} ended");
+        }
     }
 
     /// One look for the other sharing tools, for the state. `why` is for the log, which
@@ -277,6 +303,9 @@ impl<W: AgentWorld> Agent<W> {
                 eprintln!("[lbm-agent] {warning} ({why})");
             }
             self.input_sharing = found;
+        }
+        if let Some(exits) = &mut self.sharing_exits {
+            exits.follow(&self.input_sharing);
         }
     }
 
@@ -818,6 +847,9 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerWallpapers { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
             }
+            Request::PeerOverlay { machine_id, bands } => {
+                self.peer_overlay(&client, machine_id, bands)
+            }
             Request::SetActiveSource {
                 layout_id,
                 monitor,
@@ -847,6 +879,40 @@ impl<W: AgentWorld> Agent<W> {
         if let Some(report) = report {
             self.forward("Probed", &report);
         }
+    }
+
+    /// `PeerOverlay`: the rulers a frontend wants on a remote's screens, handed to the
+    /// manager. The frontend that wrote a remote's rulers last owns them: only it takes
+    /// them down, by asking for none or by going ([`Self::left`]). Another frontend asking
+    /// for none there is answered and changes nothing — its own rulers were replaced —
+    /// so that a window closing its rulers never takes down those of a window still open.
+    fn peer_overlay(
+        &mut self,
+        client: &api::Client,
+        machine_id: String,
+        bands: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let Some(peers) = self.peers.as_mut().filter(|p| p.enabled()) else {
+            return Err("the multi-PC mode is off".into());
+        };
+        let shown = !bands.is_empty();
+        if !shown
+            && self
+                .overlay_owners
+                .get(&machine_id)
+                .is_some_and(|owner| !owner.is(client))
+        {
+            return Ok(serde_json::Value::Null);
+        }
+        if !peers.overlay(&machine_id, bands) {
+            return Err("the multi-PC mode is not running".into());
+        }
+        if shown {
+            self.overlay_owners.insert(machine_id, client.clone());
+        } else {
+            self.overlay_owners.remove(&machine_id);
+        }
+        Ok(serde_json::Value::Null)
     }
 
     /// A multi-PC request. What needs the network is answered from a task of its own,
@@ -1324,6 +1390,23 @@ impl<W: AgentWorld> Agent<W> {
     /// tray reconnecting, must not end somebody else's preview.
     fn left(&mut self, client: &api::Client) {
         self.subscribers.retain(|s| !s.is(client));
+        let machines: Vec<String> = self
+            .overlay_owners
+            .iter()
+            .filter(|(_, owner)| owner.is(client))
+            .map(|(machine_id, _)| machine_id.clone())
+            .collect();
+        if !machines.is_empty() {
+            eprintln!(
+                "[lbm-agent] the frontend showing rulers has gone: taking them down on the remotes"
+            );
+        }
+        for machine_id in machines {
+            self.overlay_owners.remove(&machine_id);
+            if let Some(peers) = &mut self.peers {
+                peers.overlay(&machine_id, Vec::new());
+            }
+        }
         if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {
             eprintln!("[lbm-agent] the frontend previewing has gone: ending the preview");
             self.previewing_for = None;
@@ -1576,6 +1659,7 @@ impl<W: AgentWorld> Agent<W> {
         let mut peer_notices = self.peers.as_mut().and_then(|p| p.take_notices());
         let mut vcp_events = self.vcp_events_rx.take();
         let mut wallpaper_changes = self.wallpaper_changes_rx.take();
+        let mut sharing_ended = self.sharing_exits.as_mut().and_then(|e| e.take_events());
         // The events of one wallpaper change, read once. No event, no deadline.
         let mut wallpaper_burst = crate::wallpaper_watch::Burst::default();
         loop {
@@ -1659,6 +1743,18 @@ impl<W: AgentWorld> Agent<W> {
                             self.selected(from, display, value, request, result)
                         }
                         None => vcp_events = None,
+                    }
+                    continue;
+                },
+                pid = async {
+                    match &mut sharing_ended {
+                        Some(ended) => ended.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match pid {
+                        Some(pid) => self.input_sharing_ended(pid),
+                        None => sharing_ended = None,
                     }
                     continue;
                 },

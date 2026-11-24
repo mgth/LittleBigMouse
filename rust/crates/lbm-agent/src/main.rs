@@ -86,6 +86,12 @@ fn options_from(args: Vec<String>) -> Option<Options> {
 }
 
 fn main() -> ExitCode {
+    // The surfaces of the rulers a master asks this machine to draw (peers/overlay.rs):
+    // the overlay library runs them in this same binary, as a child of its own.
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--screen-overlay-host") {
+        std::process::exit(lbm_overlay::linux::run_host());
+    }
     let Some(options) = options() else {
         eprintln!("{USAGE}");
         return ExitCode::from(2);
@@ -307,6 +313,8 @@ fn run(options: Options) -> ExitCode {
             .with_api(calls_rx)
             // Looked for at the moments it matters, never watched.
             .with_input_sharing_scan(lbm_agent::input_sharing::scan)
+            // And no longer said once it has quit: one wait per process, on its end.
+            .with_input_sharing_exits()
             .with_remote_config(config_dir.clone())
             // Off unless `multi-pc.json` says otherwise; then nothing listens or runs.
             .with_peers(lbm_agent::peers::Service::new(

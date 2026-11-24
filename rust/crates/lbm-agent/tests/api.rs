@@ -382,6 +382,91 @@ fn scan_sharing() -> Vec<lbm_ipc::sharing::Running> {
     }
 }
 
+/// A process of this test whose `comm` is `name`: a shell script of that name (Linux
+/// names a script's process after the script). It says when it runs, then waits on its
+/// stdin, held open by the returned child, until killed. Not a link to `sleep`: a
+/// multi-call `sleep` (uutils, the CI runner's) refuses another name and quits at once.
+#[cfg(target_os = "linux")]
+fn tool_like(dir: &std::path::Path, name: &str) -> std::process::Child {
+    use std::io::BufRead;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::{Command, Stdio};
+    let script = dir.join(name);
+    std::fs::write(&script, "#!/bin/sh\necho ready\nread line\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = Command::new(script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut said = String::new();
+    std::io::BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut said)
+        .unwrap();
+    assert_eq!(said, "ready\n");
+    child
+}
+
+/// Reported on v6 d51f72d7: Deskflow quit, the bar still said it ran. With the real
+/// scan and the real watch, a process found leaves the state as soon as it ends — no
+/// look in between. The process is this test's own, named like Deskflow's core (a
+/// script of that name, see [`tool_like`]); a real Deskflow on the machine may be found
+/// too and is left alone.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_sharing_tool_that_quits_leaves_the_state_at_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let mut child = tool_like(dir.path(), "deskflow-core");
+    let pid = child.id();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    tokio::spawn(async move {
+        let mut agent = Agent::new(Enabled(None), Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_input_sharing_scan(lbm_agent::input_sharing::scan)
+            .with_input_sharing_exits();
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let ours = move |state: &Value| {
+        state["InputSharing"]
+            .as_array()
+            .is_some_and(|list| list.iter().any(|r| r["Pid"] == pid))
+    };
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    let state = frontend.ask(json!({ "Method": "Subscribe" })).await;
+    assert!(
+        ours(&state["Result"]),
+        "found: {}",
+        state["Result"]["InputSharing"]
+    );
+    // The engine's Start is a moment to look: past it, nothing else looks, so only the
+    // watch can take the process out.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let now = frontend.ask(json!({ "Method": "Snapshot" })).await;
+            if now["Result"]["Engine"] == "Running" {
+                assert!(ours(&now["Result"]));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the engine started");
+
+    child.kill().unwrap();
+    let _ = child.wait();
+    let after = tokio::time::timeout(Duration::from_secs(5), frontend.state(|s| !ours(s)))
+        .await
+        .expect("gone from the state without a new look");
+    assert!(!ours(&after));
+}
+
 /// The other sharing tools are looked for when a window subscribes and when the engine
 /// starts, and are in the state from then on; nothing looks in between.
 #[tokio::test]
@@ -1893,6 +1978,143 @@ async fn a_wallpaper_changed_in_the_system_is_sent_once_per_burst_and_only_a_lin
     watched(&shown, 0).await;
 }
 
+/// The next `Overlay` the laptop is sent, skipping everything else.
+async fn next_overlay(
+    link: &mut lbm_net::link::Link,
+    within: Duration,
+) -> Option<(u64, Vec<Value>)> {
+    tokio::time::timeout(within, async {
+        loop {
+            match link.next().await {
+                Some(lbm_net::link::Event::Control(lbm_net::wire::Control::Overlay {
+                    revision,
+                    bands,
+                })) => return (revision, bands),
+                Some(_) => {}
+                None => panic!("the link ended"),
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+#[tokio::test]
+async fn the_rulers_a_frontend_shows_on_a_remote_go_down_when_the_frontend_goes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start_as(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        None,
+        &[lbm_net::wire::OVERLAY_CAPABILITY],
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let hello = master.frontend.ask(json!({ "Method": "Hello" })).await;
+    assert!(hello["Result"]["Capabilities"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("PeerOverlay")));
+    let mut link = master.link_the_laptop().await;
+    let band = json!({"monitor": "eDP-1@laptop", "connector": "eDP-1"});
+    let asked = master
+        .frontend
+        .ask(json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [band] }))
+        .await;
+    assert_eq!(asked["Result"], Value::Null, "{asked}");
+    let (shown, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert_eq!(bands, [band], "passed on unread: the remote checks them");
+
+    // The window closes without taking them down: the agent does.
+    drop(master.frontend);
+    let (down, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert!(down > shown && bands.is_empty(), "{down} {bands:?}");
+}
+
+#[tokio::test]
+async fn a_window_taking_its_rulers_down_leaves_those_another_window_wrote_since() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start_as(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        None,
+        &[lbm_net::wire::OVERLAY_CAPABILITY],
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let mut link = master.link_the_laptop().await;
+    let mut other = Frontend::connect(&master.api_endpoint).await;
+    let rulers = |by: &str| json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [{"monitor": by}] });
+    let none = json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [] });
+
+    // A shows its rulers, then B shows its own on the same remote.
+    master.frontend.ask(rulers("a")).await;
+    next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    other.ask(rulers("b")).await;
+    let (_, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert_eq!(bands, [json!({"monitor": "b"})]);
+    // A turns its rulers off, then goes: B's stay.
+    let answer = master.frontend.ask(none.clone()).await;
+    assert_eq!(answer["Result"], Value::Null, "{answer}");
+    drop(master.frontend);
+    assert_eq!(
+        next_overlay(&mut link, Duration::from_millis(500)).await,
+        None,
+        "B's rulers are B's to take down"
+    );
+    // B turns them off: down.
+    other.ask(none).await;
+    let (_, bands) = next_overlay(&mut link, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert!(bands.is_empty());
+}
+
+#[tokio::test]
+async fn rulers_for_a_remote_too_old_to_draw_them_are_not_sent_and_the_user_is_told() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;
+    let laptop_id = master.laptop_id();
+    let mut link = master.link_the_laptop().await;
+    let asked = master
+        .frontend
+        .ask(
+            json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [{"monitor": "x"}] }),
+        )
+        .await;
+    assert_eq!(asked["Result"], Value::Null, "{asked}");
+    let told = loop {
+        let state = master.frontend.ask(json!({ "Method": "Peers" })).await;
+        if let Some(error) = state["Result"]["Peers"][0]["OverlayError"].as_str() {
+            break error.to_owned();
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert!(told.contains("cannot show rulers"), "{told}");
+    assert_eq!(
+        next_overlay(&mut link, Duration::from_millis(300)).await,
+        None
+    );
+    // Taking them down clears what the user was told.
+    master
+        .frontend
+        .ask(json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [] }))
+        .await;
+    let state = master.frontend.ask(json!({ "Method": "Peers" })).await;
+    assert!(
+        state["Result"]["Peers"][0]["OverlayError"].is_null(),
+        "{state}"
+    );
+}
+
 #[tokio::test]
 async fn a_master_keeps_its_remotes_wallpapers_and_serves_them_apart_from_the_peers_state() {
     let tmp = tempfile::tempdir().unwrap();
@@ -2338,6 +2560,8 @@ fn last_load(fake: &FakeHook) -> (String, Option<lbm_ipc::protocol::Desktop>) {
 /// an agent: what it says on its link is the test's.
 struct Master {
     frontend: Frontend,
+    /// Where another frontend connects.
+    api_endpoint: String,
     fake: FakeHook,
     laptop: lbm_net::identity::Identity,
     listener: lbm_net::link::Listener,
@@ -2358,6 +2582,16 @@ impl Master {
         discovery: lbm_agent::discovery::Discovery,
         input_endpoint: Option<String>,
     ) -> Master {
+        Master::start_as(tmp, discovery, input_endpoint, &[]).await
+    }
+
+    /// As [`Master::start_with`], the laptop announcing `capabilities`.
+    async fn start_as(
+        tmp: &tempfile::TempDir,
+        discovery: lbm_agent::discovery::Discovery,
+        input_endpoint: Option<String>,
+        capabilities: &[&str],
+    ) -> Master {
         use lbm_net::wire::{Hello, Role};
 
         let dir = tmp.path();
@@ -2368,7 +2602,10 @@ impl Master {
         let listener = lbm_net::link::listen(
             "127.0.0.1:0",
             &laptop,
-            Hello::new("laptop", "0", Role::Remote),
+            Hello {
+                capabilities: capabilities.iter().map(|c| c.to_string()).collect(),
+                ..Hello::new("laptop", "0", Role::Remote)
+            },
             lbm_net::link::Options::default(),
         )
         .await
@@ -2411,6 +2648,7 @@ impl Master {
         let alone = frontend.state(|s| s["Engine"] == "Running").await;
         Master {
             frontend,
+            api_endpoint,
             fake,
             laptop,
             listener,

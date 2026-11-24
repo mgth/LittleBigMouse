@@ -108,6 +108,44 @@ fn the_page_says_another_sharing_tool_runs() {
     assert!(h.query_by_label(warning).is_some());
 }
 
+/// Reported on v6 d51f72d7: with Deskflow's window open and nothing started from it,
+/// the bar said "Deskflow also running". The window alone is "open"; only a process
+/// that routes, or may, is "running".
+#[test]
+fn the_bar_says_open_for_a_window_alone_and_running_for_a_core() {
+    let deskflow = |process: &str, window: bool| lbm_ipc::sharing::Running {
+        tool: lbm_ipc::sharing::Tool::Deskflow,
+        process: process.into(),
+        pid: 40,
+        role: None,
+        window,
+        connected: Some(false),
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(600.0, 80.0))
+        .build_ui_state(
+            |ui, running: &mut Vec<lbm_ipc::sharing::Running>| {
+                lbm_ui::theme::install(ui.ctx());
+                ui.horizontal(|ui| machines::sharing_status(ui, running));
+            },
+            vec![deskflow("deskflow", true)],
+        );
+    h.run();
+    assert!(h.query_by_label("Deskflow open").is_some());
+    assert!(h.query_by_label("Deskflow also running").is_none());
+
+    // Started: its core is there beside the window.
+    h.state_mut().push(deskflow("deskflow-core", false));
+    h.run();
+    assert!(h.query_by_label("Deskflow also running").is_some());
+    assert!(h.query_by_label("Deskflow open").is_none());
+
+    h.state_mut().clear();
+    h.run();
+    assert!(h.query_by_label("Deskflow also running").is_none());
+    assert!(h.query_by_label("Deskflow open").is_none());
+}
+
 #[test]
 fn the_drawer_offers_no_machines_page_to_an_agent_without_the_mode() {
     for (machines, offered) in [(false, false), (true, true)] {

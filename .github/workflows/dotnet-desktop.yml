@@ -190,6 +190,12 @@ jobs:
       # lbm-hook.exe and renamed to the contract name here.
       run: Copy-Item rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
 
+    # The UI looks for the agent beside its own exe (AgentLauncher), and the
+    # installer's firewall rule for the multi-PC port names this exact path. Without
+    # it the installed v6 has no agent to start and the rule guards nothing.
+    - name: Stage agent next to UI output
+      run: Copy-Item rust\target\release\lbm-agent.exe (Join-Path $env:UI_OUTPUT 'lbm-agent.exe')
+
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
       with:
@@ -319,14 +325,15 @@ jobs:
         output-artifact-directory: artifacts\signed-app
 
     # A signing request can come back "successful" having signed nothing that
-    # matters, so assert on the two executables Windows will actually judge.
+    # matters, so assert on the executables Windows will actually judge: the UI,
+    # the hook, and the agent the UI starts.
     - name: Verify signed binaries
       id: signed
       run: |
         $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
         if (-not $ui) { throw 'SignPath returned no signed UI executable' }
         $dir = $ui.Directory.FullName
-        foreach ($target in @($ui.FullName, (Join-Path $dir 'LittleBigMouse.Hook.exe'))) {
+        foreach ($target in @($ui.FullName, (Join-Path $dir 'LittleBigMouse.Hook.exe'), (Join-Path $dir 'lbm-agent.exe'))) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target
           if ($sig.Status -ne 'Valid') { throw "$target signature: $($sig.StatusMessage)" }

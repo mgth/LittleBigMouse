@@ -1297,7 +1297,7 @@ impl<W: AgentWorld> Agent<W> {
     /// hook connection and every input source are gone.
     pub async fn run(
         &mut self,
-        mut signals: UnboundedReceiver<HookSignal>,
+        mut signals: crate::hook::HookSignals,
         mut inputs: UnboundedReceiver<Input>,
         shutdown: impl Future<Output = ()>,
     ) {

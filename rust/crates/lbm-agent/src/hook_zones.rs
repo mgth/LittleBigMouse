@@ -5,11 +5,16 @@
 //! courtesy: believing the hook holds the zones of the selected machine while it still
 //! holds another's is a cursor sent to a machine nobody chose.
 //!
-//! Every `Load` goes out with an id of its own, and the hook names it again in the
-//! `Loaded` or `LoadFailed` that answers it. Matching answers by their rank instead does
-//! not survive a reconnection: a frame the agent had already counted lost can still be
-//! written to the new connection — it sat in the client's queue while the old one
-//! dropped — and its answer would then be taken for the next `Load`'s.
+//! Two things keep the answers honest. The hook client never writes to a new connection
+//! a frame sent before the agent read that connection's `Connected` (`hook::HookSignals`):
+//! a `Load` the agent counted lost with the old connection never reaches the new hook,
+//! so the hook's greeting and the `Load`s sent after it are the whole story — nothing
+//! the agent forgot is applied behind its back. And every `Load` goes out with an id of
+//! its own, which the hook names again in the `Loaded` or `LoadFailed` that answers it:
+//! the hook tells every listener how a `Load` went, so an answer can still be to a
+//! `Load` this agent does not count — another client's, or one written to the old
+//! connection just before it dropped and taken by the same hook — and matched by rank,
+//! it would be taken for the next `Load`'s.
 
 use std::collections::{BTreeSet, VecDeque};
 
@@ -119,12 +124,11 @@ mod tests {
         names.iter().map(|&n| n.to_owned()).collect()
     }
 
-    /// The race the ids are for. A `Load` of zones leading to the tower goes out; the
-    /// connection drops before it is written, and the agent counts it lost — but the
-    /// client still holds the frame, and writes it to the next connection. There the
-    /// agent sends its own `Load` of zones leading nowhere. The first answer is the
-    /// tower's: taken by rank it would read as "the hook holds zones fit for no remote"
-    /// while the hook holds the tower's.
+    /// The race the ids are for. A `Load` of zones leading to the tower goes out just as
+    /// the connection drops, and the agent counts it lost — but the hook took it, and its
+    /// answer comes over the next connection, where the agent has sent its own `Load` of
+    /// zones leading nowhere. The first answer is the tower's: taken by rank it would read
+    /// as "the hook holds zones fit for no remote" while the hook holds the tower's.
     #[test]
     fn an_answer_to_a_load_counted_lost_is_not_taken_for_the_next_one() {
         let mut zones = HookZones::starting_at(1);
@@ -134,6 +138,10 @@ mod tests {
         zones.unknown();
         zones.greeted(Some(hosts(&[])));
         let wanted = zones.sending(hosts(&[]));
+        // The hook's greeting is what it holds — a frame the agent counted lost is never
+        // written to the new connection — and what is on its way leads nowhere.
+        assert_eq!(zones.holds(), Some(&hosts(&[])));
+        assert!(zones.in_flight().all(|h| h.is_empty()));
 
         zones.loaded(Some(lost));
         assert_eq!(

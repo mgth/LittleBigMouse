@@ -3,9 +3,8 @@
 use std::time::Duration;
 
 use lbm_agent::fake_hook::FakeHook;
-use lbm_agent::hook::{HookClient, HookSignal};
+use lbm_agent::hook::{HookClient, HookSignal, HookSignals};
 use lbm_ipc::protocol::{self, Command, Event};
-use tokio::sync::mpsc::UnboundedReceiver;
 
 const ZONES: &str = r#"<ZonesLayout><MainZones><Zone Id="0"></Zone></MainZones></ZonesLayout>"#;
 
@@ -26,7 +25,7 @@ fn endpoint(_dir: &tempfile::TempDir) -> String {
     )
 }
 
-async fn next(signals: &mut UnboundedReceiver<HookSignal>) -> HookSignal {
+async fn next(signals: &mut HookSignals) -> HookSignal {
     tokio::time::timeout(Duration::from_secs(5), signals.recv())
         .await
         .expect("a signal within 5 s")
@@ -40,7 +39,7 @@ fn greeting_holding_nothing() -> HookSignal {
     }
 }
 
-async fn event(signals: &mut UnboundedReceiver<HookSignal>) -> Event {
+async fn event(signals: &mut HookSignals) -> Event {
     match next(signals).await {
         HookSignal::Message(message) => message,
         other => panic!("expected an event, got {other:?}"),
@@ -127,6 +126,66 @@ async fn a_hook_that_goes_away_is_signalled_and_found_again() {
             Command::Listen
         ],
         "the hook found again is asked who it is, like the first one"
+    );
+}
+
+/// A frame sent before the caller has read the new connection's `Connected` was decided
+/// for the hook it had before. The case review found on #809: a `Load` of zones leading
+/// to a remote no longer selected, queued while the connection drops, reached the new
+/// hook — which applied it while the agent, having counted it lost, already took the
+/// hook's zones for fit and let the multi-PC mode open the border.
+#[tokio::test]
+async fn a_frame_sent_before_the_new_connection_is_known_never_reaches_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = endpoint(&dir);
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    let (hook, mut signals) = HookClient::spawn(endpoint.clone());
+    assert_eq!(next(&mut signals).await, HookSignal::Connected);
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+
+    drop(fake);
+    assert_eq!(next(&mut signals).await, HookSignal::Lost);
+
+    // The hook is back and the client already connected to it — but its `Connected` is
+    // still unread: what is sent now is sent for the hook that went.
+    let fake = FakeHook::bind(&endpoint).unwrap();
+    for _ in 0..500 {
+        if fake.received().contains(&Command::Listen) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(fake.received().contains(&Command::Listen), "reconnected");
+    hook.send(protocol::frame(&[
+        Command::Load {
+            zones: ZONES.into(),
+            desktop: None,
+            id: Some(1),
+        },
+        Command::Run,
+    ]));
+
+    loop {
+        if next(&mut signals).await == HookSignal::Connected {
+            break;
+        }
+    }
+    assert_eq!(next(&mut signals).await, greeting_holding_nothing());
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+    // Sent knowing of the connection: written, and after anything queued before it.
+    hook.send(protocol::frame(&[Command::State]));
+    assert_eq!(event(&mut signals).await, Event::Stopped);
+    assert_eq!(
+        fake.received(),
+        [
+            Command::Hello {
+                protocol: protocol::PROTOCOL
+            },
+            Command::Listen,
+            Command::State,
+        ],
+        "the Load decided for the previous hook was dropped"
     );
 }
 

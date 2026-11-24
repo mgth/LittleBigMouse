@@ -26,6 +26,7 @@
 //! one. Asking is the whole point of not reading the keyboard; it also means the
 //! request can stay open for as long as the user takes to answer.
 
+use std::sync::atomic::Ordering;
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -92,9 +93,13 @@ pub fn shortcut_changed() {
 /// process lives. A portal that is not there is not an error: this desktop has no
 /// global shortcuts to offer, said once.
 async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
+    let mut registered = false;
     let mut announced_absence = false;
     let mut pause = FIRST_RETRY;
     loop {
+        if !registered {
+            registered = register().await;
+        }
         let generation = *GENERATION.borrow();
         let wanted = shared
             .rescue_shortcut
@@ -106,7 +111,7 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
         // as long as they like. Give up only if the wanted shortcut changed under us:
         // then the answer would be to the wrong question.
         let bound = tokio::select! {
-            bound = bind(shared, &wanted) => bound,
+            bound = bind(&wanted) => bound,
             () = superseded(generation) => continue,
         };
 
@@ -130,6 +135,52 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
     }
 }
 
+/// The application id the portal knows this process by.
+///
+/// The portal finds the id of a process that is not sandboxed in the name of its
+/// systemd unit, which the desktop derives from the `.desktop` entry that started it:
+/// `app-littlebigmouse\x2dagent@autostart.service` for the agent's autostart entry, and
+/// this process with it. `littlebigmouse-agent` is no valid id, so the portal sees
+/// none, and the global shortcuts refuse a process with none ("An app id is
+/// required"). Said outright instead, as the portal's host registry allows.
+const APP_ID: &str = "io.github.mgth.LittleBigMouse";
+
+/// Tells the portal who is asking, before anything is asked on the connection. One too
+/// old to know the registry, or that already found an id of its own, keeps whatever it
+/// had. Whether that is settled: `false` only while the portal is not there yet, to be
+/// asked again before the next binding.
+async fn register() -> bool {
+    let Ok(app_id) = ashpd::AppID::try_from(APP_ID) else {
+        return true;
+    };
+    match ashpd::register_host_app(app_id).await {
+        Ok(()) => {
+            eprintln!("[LittleBigMouse.Hook] rescue: known to the portal as {APP_ID}");
+            true
+        }
+        Err(error) => {
+            let absent = not_there(&error);
+            if !absent {
+                eprintln!("[LittleBigMouse.Hook] rescue: not registered with the portal ({error})");
+            }
+            !absent
+        }
+    }
+}
+
+/// Whether the portal is not on the bus (yet), rather than answering.
+fn not_there(error: &ashpd::Error) -> bool {
+    match error {
+        ashpd::Error::Zbus(zbus::Error::MethodError(name, _, _)) => matches!(
+            name.as_str(),
+            "org.freedesktop.DBus.Error.ServiceUnknown"
+                | "org.freedesktop.DBus.Error.NameHasNoOwner"
+        ),
+        ashpd::Error::Zbus(zbus::Error::InputOutput(_)) => true,
+        _ => false,
+    }
+}
+
 /// Waits for the moment to ask again after `error`, and returns the next pause.
 async fn after_failure(
     error: &ashpd::Error,
@@ -143,7 +194,7 @@ async fn after_failure(
         // would only get the same one. Said every time, not once: saving a shortcut
         // clears the warning, and without this the window would then show a rescue
         // that no key can trigger.
-        shared.report_rescue_unavailable(wanted);
+        shared.report_rescue_refused(wanted);
         superseded(generation).await;
         return pause;
     }
@@ -184,11 +235,13 @@ async fn differs_from(mut current: watch::Receiver<u64>, generation: u64) {
 struct Binding {
     shortcuts: GlobalShortcuts,
     session: ashpd::desktop::Session<GlobalShortcuts>,
+    /// What the desktop bound the rescue to, if it listed it.
+    trigger: Option<String>,
 }
 
-/// Ask the desktop for the combination `wanted` names. `shared` is only told when
-/// the answer is "registered, but bound to nothing".
-async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::Error> {
+/// Ask the desktop for the combination `wanted` names. What it answered is said once
+/// the binding is listened to: a key bound in a session nobody hears is no rescue.
+async fn bind(wanted: &str) -> Result<Binding, ashpd::Error> {
     let shortcuts = GlobalShortcuts::new().await?;
     let session = shortcuts.create_session(Default::default()).await?;
 
@@ -210,9 +263,13 @@ async fn bind(shared: &'static Shared, wanted: &str) -> Result<Binding, ashpd::E
         .response()?;
     // The whole answer: a desktop can accept the request and bind nothing, and a rescue
     // missing from it is a rescue no key will trigger.
-    note_trigger(shared, wanted, rescue_trigger(described(bound.shortcuts())));
+    let trigger = rescue_trigger(described(bound.shortcuts())).map(str::to_owned);
 
-    Ok(Binding { shortcuts, session })
+    Ok(Binding {
+        shortcuts,
+        session,
+        trigger,
+    })
 }
 
 fn described(shortcuts: &[Shortcut]) -> impl Iterator<Item = (&str, &str)> {
@@ -237,11 +294,15 @@ fn note_trigger(shared: &Shared, wanted: &str, trigger: Option<&str>) {
                 "[LittleBigMouse.Hook] rescue: no key bound — give it one in the desktop's \
                  shortcut settings, under {DESCRIPTION:?}"
             );
-            shared.report_rescue_unavailable(wanted);
+            shared
+                .rescue_bound_by_desktop
+                .store(false, Ordering::SeqCst);
+            shared.report_rescue_refused(wanted);
         }
         Some(trigger) => {
             eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
-            shared.report_rescue_available(wanted);
+            shared.rescue_bound_by_desktop.store(true, Ordering::SeqCst);
+            shared.report_rescue_bound(wanted);
         }
     }
 }
@@ -266,15 +327,19 @@ async fn listen(
     shared: &'static Shared,
     on_fire: fn(&'static Shared),
 ) {
-    let (Ok(mut activated), Ok(mut deactivated), Ok(mut rebound)) = (
+    let streams = (
         binding.shortcuts.receive_activated().await,
         binding.shortcuts.receive_deactivated().await,
         binding.shortcuts.receive_shortcuts_changed().await,
-    ) else {
-        eprintln!("[LittleBigMouse.Hook] rescue: the portal stopped answering");
+    );
+    let (Ok(mut activated), Ok(mut deactivated), Ok(mut rebound)) = streams else {
+        no_longer_heard(shared, wanted);
         let _ = binding.session.close().await;
         return;
     };
+    note_trigger(shared, wanted, binding.trigger.as_deref());
+
+    let mut lost = true;
 
     loop {
         tokio::select! {
@@ -312,11 +377,33 @@ async fn listen(
                 };
                 note_change(shared, wanted, described(changed.shortcuts()));
             }
-            () = superseded(generation) => break,
+            () = superseded(generation) => {
+                lost = false;
+                break;
+            }
         }
     }
 
+    if lost {
+        no_longer_heard(shared, wanted);
+    } else {
+        // Bound again at once, for the shortcut now wanted.
+        shared
+            .rescue_bound_by_desktop
+            .store(false, Ordering::SeqCst);
+    }
     let _ = binding.session.close().await;
+}
+
+/// The portal's signals cannot be heard, or no longer are: whatever the desktop bound,
+/// nothing here would act on it. The keys this daemon reads stop leaving the rescue to
+/// it, and the rescue is said as refused until a binding is heard again.
+fn no_longer_heard(shared: &Shared, wanted: &str) {
+    eprintln!("[LittleBigMouse.Hook] rescue: the portal stopped answering");
+    shared
+        .rescue_bound_by_desktop
+        .store(false, Ordering::SeqCst);
+    shared.report_rescue_refused(wanted);
 }
 
 #[cfg(test)]
@@ -407,6 +494,111 @@ mod tests {
         waiting.abort();
     }
 
+    /// The evdev backend reads the keyboards and watches them for the rescue: the
+    /// portal's refusal leaves it armed.
+    #[tokio::test]
+    async fn a_refusal_with_the_keyboards_read_leaves_the_rescue_armed() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        shared.set_keyboards_read(true);
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let generation = *GENERATION.borrow();
+
+        let waiting = tokio::spawn(async move {
+            let refusal = ashpd::PortalError::NotAllowed("An app id is required".into());
+            let error = ashpd::Error::Portal(refusal);
+            after_failure(&error, shared, "Ctrl+Alt+F9", generation, FIRST_RETRY).await
+        });
+
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutAvailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+        waiting.abort();
+    }
+
+    /// The portal said no first, and the keyboards are read after: the warning is
+    /// withdrawn then.
+    #[tokio::test]
+    async fn keyboards_read_after_a_refusal_withdraw_the_warning() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        shared.report_rescue_refused("Ctrl+Alt+F9");
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+        shared.set_keyboards_read(true);
+        assert_eq!(
+            agent.next("the keyboards").await,
+            Event::ShortcutAvailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+    }
+
+    /// The keyboards come and go: a rescue the desktop refused follows them, one it
+    /// bound does not.
+    #[tokio::test]
+    async fn the_last_keyboard_gone_says_a_refused_rescue_again() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let available = Event::ShortcutAvailable {
+            shortcut: "Ctrl+Alt+F9".to_string(),
+        };
+        let unavailable = Event::ShortcutUnavailable {
+            shortcut: "Ctrl+Alt+F9".to_string(),
+        };
+
+        shared.set_keyboards_read(true);
+        shared.report_rescue_refused("Ctrl+Alt+F9");
+        assert_eq!(agent.next("the refusal, read").await, available);
+        shared.set_keyboards_read(true);
+        shared.set_keyboards_read(false);
+        assert_eq!(agent.next("the keyboards gone").await, unavailable);
+        shared.set_keyboards_read(true);
+        assert_eq!(agent.next("a keyboard plugged in").await, available);
+
+        note_trigger(shared, "Ctrl+Alt+F9", Some("Ctrl+Alt+F9"));
+        assert_eq!(agent.next("the desktop's binding").await, available);
+        shared.set_keyboards_read(false);
+        shared.report_rescue_available("marker");
+        assert_eq!(
+            agent.next("nothing but the marker").await,
+            Event::ShortcutAvailable {
+                shortcut: "marker".to_string(),
+            }
+        );
+    }
+
+    /// A binding whose signals cannot be heard is none: the keys read here take the
+    /// rescue back, and it is said as refused.
+    #[tokio::test]
+    async fn a_binding_no_longer_heard_hands_the_rescue_back_to_the_keys() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        note_trigger(shared, "Ctrl+Alt+F9", Some("Ctrl+Alt+F9"));
+        agent.next("the binding").await;
+        assert!(shared.rescue_bound_by_desktop.load(Ordering::SeqCst));
+
+        no_longer_heard(shared, "Ctrl+Alt+F9");
+        assert!(!shared.rescue_bound_by_desktop.load(Ordering::SeqCst));
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn the_app_id_is_one_the_portal_accepts() {
+        assert!(ashpd::AppID::try_from(APP_ID).is_ok());
+    }
+
     /// Absent is not refused: the portal may still come, so nothing is reported yet.
     #[tokio::test]
     async fn a_portal_out_of_reach_is_not_reported_and_is_retried_later() {
@@ -494,10 +686,10 @@ mod tests {
     #[ignore = "asks the running desktop to bind a shortcut"]
     #[tokio::test]
     async fn binds_for_real_and_says_what_it_got() {
-        let shared: &'static Shared = crate::shared::SHARED.get_or_init(Shared::new);
-        let binding = bind(shared, crate::shortcut::DEFAULT)
+        let binding = bind(crate::shortcut::DEFAULT)
             .await
             .expect("the portal bound the shortcut");
+        eprintln!("bound to {:?}", binding.trigger);
 
         binding.session.close().await.expect("the session closes");
     }

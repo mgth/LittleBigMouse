@@ -137,3 +137,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+# The compositor's keymap, read for where the letters of a shortcut are on the keyboard
+# a master reads below any layout. Loaded at run time, as lbm-overlay does.
+xkbcommon-dl = "0.4"

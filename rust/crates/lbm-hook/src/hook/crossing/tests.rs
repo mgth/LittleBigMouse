@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use lbm_ipc::input::{decode, InputEvent as Wire};
 
-use super::keys::HOLD;
+use super::keys::{Letters, HOLD};
 use super::*;
 
 const START: (i32, i32) = (1900, 500);
@@ -231,9 +231,19 @@ impl Rig {
         if self.m.grabbed {
             self.crossing.grabbed_key(code, press, Instant::now());
         } else {
-            self.crossing.observed_key(code, press);
+            self.crossing.observed_key(code, press, Instant::now());
         }
         self.crossing.flush_keys(self.shared, &mut self.m);
+    }
+
+    /// The desktop's layout puts the letters where `letters` says; read at the next
+    /// cycle.
+    fn set_letters(&mut self, letters: Letters) {
+        *self.shared.letters.lock().unwrap() = letters;
+        self.shared
+            .shortcuts_revision
+            .fetch_add(1, Ordering::SeqCst);
+        self.cycle(None, &[]);
     }
 
     /// The agent sets the pointer lock's shortcut; it is read at the next cycle.
@@ -716,4 +726,136 @@ fn a_key_held_while_the_rescue_is_rebound_goes_over_as_itself() {
             key(KEY_LEFTCTRL, false),
         ]
     );
+}
+
+/// A French keyboard, as far as letters go: `A` and `Q` swapped, `Z` and `W` swapped,
+/// and `M` right of `L`, where a US keyboard has `;`.
+fn azerty() -> Letters {
+    const KEY_Q: u16 = 16;
+    const KEY_W: u16 = 17;
+    const KEY_Z: u16 = 44;
+    let mut keys: Vec<(u16, Vec<u32>)> = vec![
+        (KEY_Q, vec![u32::from(b'a'), u32::from(b'A')]),
+        (KEY_A, vec![u32::from(b'q'), u32::from(b'Q')]),
+        (KEY_W, vec![u32::from(b'z'), u32::from(b'Z')]),
+        (KEY_Z, vec![u32::from(b'w'), u32::from(b'W')]),
+        (KEY_SEMICOLON, vec![u32::from(b'm'), u32::from(b'M')]),
+        // `,` and `?` where US has `M`.
+        (KEY_M, vec![u32::from(b','), u32::from(b'?')]),
+    ];
+    keys.sort();
+    Letters::from_keysyms(keys)
+}
+
+const KEY_SEMICOLON: u16 = 39;
+
+#[test]
+fn on_a_french_keyboard_the_lock_is_the_key_marked_m() {
+    let mut rig = Rig::new(true);
+    rig.set_letters(azerty());
+    rig.set_lock_shortcut("Alt+Shift+M");
+    rig.go_over();
+    let alt_shift_and = |rig: &mut Rig, code: u16| {
+        rig.type_key(KEY_LEFTALT, Press::Down);
+        rig.type_key(KEY_LEFTSHIFT, Press::Down);
+        rig.type_key(code, Press::Down);
+        rig.type_key(code, Press::Up);
+        rig.type_key(KEY_LEFTSHIFT, Press::Up);
+        rig.type_key(KEY_LEFTALT, Press::Up);
+    };
+    alt_shift_and(&mut rig, KEY_M);
+    assert!(
+        !rig.crossing.is_locked(),
+        "the key marked `,` locks nothing"
+    );
+    alt_shift_and(&mut rig, KEY_SEMICOLON);
+    assert!(rig.crossing.is_locked(), "the key marked M locks");
+    assert!(
+        !rig.m.sent.iter().any(|e| matches!(
+            e,
+            Wire::Key {
+                code: KEY_SEMICOLON,
+                ..
+            }
+        )),
+        "the lock's key is never forwarded: {:?}",
+        rig.m.sent
+    );
+}
+
+#[test]
+fn a_layout_read_during_a_crossing_moves_the_rescue_at_once() {
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    rig.set_letters(azerty());
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_SEMICOLON, Press::Down);
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.crossing.is_remote(),
+        "the key marked M is the rescue's"
+    );
+    assert!(!rig.shared.want_hook.load(Ordering::SeqCst));
+}
+
+#[test]
+fn the_rescue_held_here_on_the_keys_read_fires_without_the_desktop() {
+    let mut rig = Rig::new(true);
+    // The shortcuts are read at the start of a cycle.
+    rig.cycle(None, &[]);
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT, KEY_M] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_M, Press::Repeat);
+    assert!(
+        rig.shared.want_hook.load(Ordering::SeqCst),
+        "not held long enough yet"
+    );
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.shared.want_hook.load(Ordering::SeqCst),
+        "the rescue's unhook was asked for"
+    );
+    assert!(
+        rig.m.sent.is_empty(),
+        "nothing goes anywhere: {:?}",
+        rig.m.sent
+    );
+}
+
+#[test]
+fn the_rescue_held_here_is_left_to_the_desktop_that_bound_it() {
+    let mut rig = Rig::new(true);
+    // The shortcuts are read at the start of a cycle.
+    rig.cycle(None, &[]);
+    rig.shared
+        .rescue_bound_by_desktop
+        .store(true, Ordering::SeqCst);
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT, KEY_M] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        rig.shared.want_hook.load(Ordering::SeqCst),
+        "the desktop's binding fires it, once"
+    );
+}
+
+#[test]
+fn the_rescue_let_go_early_here_fires_nothing() {
+    let mut rig = Rig::new(true);
+    // The shortcuts are read at the start of a cycle.
+    rig.cycle(None, &[]);
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT, KEY_M] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_M, Press::Up);
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(rig.shared.want_hook.load(Ordering::SeqCst));
 }

@@ -65,7 +65,9 @@ impl Shell for Fake {
     }
     fn set_wallpaper(&self, id: &str, path: &str) -> Result<(), String> {
         self.writes.borrow_mut().push((id.into(), path.into()));
-        if id == "R" && self.fail.replace(false) {
+        // L is the second slot written (the primary R paints L's slot first), so the
+        // failure hits a real partial update: R has already been rewritten.
+        if id == "L" && self.fail.replace(false) {
             return Err("injected failure".into());
         }
         self.outputs
@@ -181,6 +183,9 @@ fn spanning_requires_every_screen_and_failures_restore_previous_state() {
         let before = shell.outputs.borrow().clone();
         let error = windows_wallpaper::apply_with(&shell, &screens(), dir.path()).unwrap_err();
         assert!(error.contains("restored"));
+        // R was rewritten before L failed: the rollback undid a real partial update.
+        assert_eq!(shell.writes.borrow()[0].0, "R");
+        assert_eq!(shell.writes.borrow()[1].0, "L");
         assert_eq!(*shell.outputs.borrow(), before);
         assert_eq!(shell.position.get(), position);
         windows_wallpaper::apply_with(&shell, &screens(), dir.path()).unwrap();

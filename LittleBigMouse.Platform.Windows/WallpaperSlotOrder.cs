@@ -89,8 +89,17 @@ internal static class WallpaperSlotOrder
                 continue;
             }
 
+            // S_FALSE is the documented answer for a monitor that is not attached: a stale
+            // entry, read as an empty rectangle (Inactive). Only another failure may hide an
+            // active monitor.
             WinDef.Rect rect = new();
-            if (desktop.GetMonitorRECT(devicePath, ref rect) != HResult.Ok)
+            var found = desktop.GetMonitorRECT(devicePath, ref rect);
+            if (found == HResult.False)
+            {
+                reads.Add(new SlotRead(devicePath, new WinDef.Rect(), null));
+                continue;
+            }
+            if (found != HResult.Ok)
             {
                 reads.Add(new SlotRead(devicePath, null, null));
                 continue;

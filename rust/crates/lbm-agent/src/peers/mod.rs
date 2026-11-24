@@ -358,6 +358,8 @@ pub struct Service {
     displays: Vec<PeerDisplay>,
     notices: mpsc::UnboundedSender<Notice>,
     notices_rx: Option<mpsc::UnboundedReceiver<Notice>>,
+    /// What this machine's hook last said it reads ([`Service::hook_reads_locks`]).
+    hook_reads_locks: bool,
 }
 
 impl Service {
@@ -375,6 +377,7 @@ impl Service {
             displays: Vec::new(),
             notices,
             notices_rx: Some(notices_rx),
+            hook_reads_locks: false,
         };
         if service.settings.enabled {
             service.start(None);
@@ -472,6 +475,16 @@ impl Service {
     /// manager connects only while this names its current selection, or a crossing into
     /// the zone of a remote no longer selected would send its `Enter`, clicks and keys to
     /// the one that is.
+    /// Whether this machine's hook reads the lock keys' state in the input stream: until
+    /// it says it does, the manager strips it from what a master sends to be injected
+    /// here — an older hook would refuse the whole batch, the crossing with it.
+    pub fn hook_reads_locks(&mut self, reads: bool) {
+        self.hook_reads_locks = reads;
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::HookReadsLocks(reads));
+        }
+    }
+
     pub fn hook_locked(&mut self, locked: bool) {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::PointerLocked(locked));
@@ -655,6 +668,7 @@ impl Service {
             bind: self.setup.bind,
             options: self.setup.options.clone(),
             input_endpoint: self.setup.input_endpoint.clone(),
+            hook_reads_locks: self.hook_reads_locks,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut

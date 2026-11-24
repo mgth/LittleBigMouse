@@ -40,7 +40,7 @@
 //! that case yet.
 
 use std::io;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -138,6 +138,9 @@ impl Sink {
 
 /// The connection's task, and its two inputs.
 pub struct HookInput {
+    /// This machine's hook reads the lock keys' state: until it says so, the `Locks` of
+    /// a master's batches are cut out of what is written to it.
+    reads_locks: Arc<AtomicBool>,
     messages: mpsc::Sender<Message>,
     numbered: Arc<AtomicU64>,
     lost: watch::Sender<u64>,
@@ -175,8 +178,17 @@ impl HookInput {
         let (target, targets) = watch::channel(None);
         let (lost, _) = watch::channel(0);
         let (driving_tx, driving) = watch::channel(Driving::default());
-        tokio::spawn(run(endpoint, inbox, targets, lost.clone(), driving_tx));
+        let reads_locks = Arc::new(AtomicBool::new(false));
+        tokio::spawn(run(
+            endpoint,
+            inbox,
+            targets,
+            lost.clone(),
+            driving_tx,
+            reads_locks.clone(),
+        ));
         HookInput {
+            reads_locks,
             messages,
             numbered: Arc::default(),
             lost,
@@ -206,6 +218,12 @@ impl HookInput {
     }
 
     /// The link the hook's own batches go to (this machine is its master), or none.
+    /// Whether this machine's hook reads the lock keys' state, as it said when it
+    /// greeted its agent.
+    pub fn set_reads_locks(&self, reads: bool) {
+        self.reads_locks.store(reads, Ordering::Relaxed);
+    }
+
     pub fn set_target(&self, target: Option<Target>) {
         self.target.send_replace(target);
     }
@@ -243,6 +261,7 @@ async fn run(
     mut targets: watch::Receiver<Option<Target>>,
     lost: watch::Sender<u64>,
     driving: watch::Sender<Driving>,
+    reads_locks: Arc<AtomicBool>,
 ) {
     let driving: DrivingSender = std::sync::Arc::new(driving);
     // Batches up to `number` did not reach the hook, or not for good: the links' tasks
@@ -295,6 +314,13 @@ async fn run(
                         connection = open(endpoint.as_deref(), target, &mut retry_at, &driving).await;
                     }
                     if let Some(open) = &mut connection {
+                        // An older hook refuses a whole batch on an event it does not
+                        // know, and the lock keys' state is one.
+                        let bytes = if reads_locks.load(Ordering::Relaxed) {
+                            std::borrow::Cow::Borrowed(&bytes[..])
+                        } else {
+                            without_locks(&bytes)
+                        };
                         let written =
                             tokio::time::timeout(WRITE_TIMEOUT, write_batch(&mut open.writer, &bytes)).await;
                         if matches!(written, Ok(Ok(()))) {

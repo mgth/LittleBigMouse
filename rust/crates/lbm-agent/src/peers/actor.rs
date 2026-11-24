@@ -72,6 +72,8 @@ pub(super) enum Command {
     PointerLockShortcut(String),
     /// The hook locked the pointer, or let it go (`Service::hook_locked`).
     PointerLocked(bool),
+    /// Whether this machine's hook reads the lock keys' state (`Service::hook_reads_locks`).
+    HookReadsLocks(bool),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -131,6 +133,7 @@ pub(super) struct Start {
     pub bind: IpAddr,
     pub options: link::Options,
     pub input_endpoint: Option<String>,
+    pub hook_reads_locks: bool,
     pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
@@ -275,7 +278,11 @@ pub(super) async fn run(
         wallpapers: Vec::new(),
         wallpaper_revision: 0,
         wallpaper_stamp: 0,
-        hook: HookInput::spawn(start.input_endpoint),
+        hook: {
+            let hook = HookInput::spawn(start.input_endpoint);
+            hook.set_reads_locks(start.hook_reads_locks);
+            hook
+        },
         selected: None,
         selection: SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1,
         hook_ready: None,
@@ -458,6 +465,7 @@ impl Actor {
             }
             Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
             Command::PointerLocked(locked) => self.pointer_locked = locked,
+            Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
                 self.retarget();

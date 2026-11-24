@@ -1644,7 +1644,14 @@ impl<W: AgentWorld> Agent<W> {
                         }
                         Input::Hook(HookEvent::Connected)
                     }
-                    Some(HookSignal::Greeted { layout }) => {
+                    Some(HookSignal::Greeted {
+                        layout,
+                        reads_locks,
+                    }) => {
+                        // What a master's input relayed to it may carry.
+                        if let Some(peers) = &mut self.peers {
+                            peers.hook_reads_locks(reads_locks);
+                        }
                         eprintln!(
                             "[lbm-agent] hook greeting: layout {}",
                             if layout.is_empty() { "none" } else { &layout }
@@ -1703,6 +1710,10 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.pointer_lock_sent = None;
                         self.hook_locked(false);
+                        // The next hook says again what it reads.
+                        if let Some(peers) = &mut self.peers {
+                            peers.hook_reads_locks(false);
+                        }
                         self.hook_zones_unknown();
                         Input::Hook(HookEvent::Dead)
                     }

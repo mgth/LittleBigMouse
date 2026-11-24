@@ -142,13 +142,21 @@ pub fn input_goes_to(state: &State) -> Option<String> {
         } else {
             peer.name.as_str()
         };
-        return Some(locked(state, format!("The mouse and keyboard are on {name}")));
+        return Some(locked(
+            state,
+            format!("The mouse and keyboard are on {name}"),
+        ));
     }
     state
         .peers
         .iter()
         .any(|peer| peer.role == Role::Remote && peer.connected && !peer.pending)
-        .then(|| locked(state, "The mouse and keyboard are on this machine".to_owned()))
+        .then(|| {
+            locked(
+                state,
+                "The mouse and keyboard are on this machine".to_owned(),
+            )
+        })
 }
 
 /// `words`, and that the pointer stays there when it is locked.
@@ -162,7 +170,15 @@ fn locked(state: &State, words: String) -> String {
 
 /// The pointer lock's shortcut: shown, recorded, taken away. Returns what the user
 /// chose, empty for none.
-fn lock_shortcut(ui: &mut egui::Ui, shortcut: &str, recording: &mut bool) -> Option<String> {
+fn lock_shortcut(
+    ui: &mut egui::Ui,
+    shortcut: &str,
+    rescue: &str,
+    recording: &mut bool,
+) -> Option<String> {
+    use lbm_ipc::shortcut::Shortcut;
+    let is_rescue =
+        |text: &str| Shortcut::parse(text).is_some_and(|s| Some(s) == Shortcut::parse(rescue));
     let mut chosen = None;
     ui.horizontal_wrapped(|ui| {
         let label = if *recording {
@@ -209,12 +225,22 @@ fn lock_shortcut(ui: &mut egui::Ui, shortcut: &str, recording: &mut bool) -> Opt
             } else {
                 // A bare key on the way to the combination is not the answer.
                 let spelled = crate::shortcut::spell(modifiers, key);
-                if lbm_ipc::shortcut::Shortcut::parse(&spelled).is_some() {
+                if Shortcut::parse(&spelled).is_some() && !is_rescue(&spelled) {
                     *recording = false;
                     chosen = Some(spelled);
                 }
             }
         }
+    }
+    if *recording {
+        crate::options::note(ui, &format!("Any combination but {rescue}, the rescue's."));
+    }
+    if is_rescue(shortcut) {
+        // A configuration saved before: the hook does not watch for it either.
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            "This is the rescue shortcut: it stays the rescue's, and locks nothing.",
+        );
     }
     crate::options::note(
         ui,
@@ -224,11 +250,13 @@ fn lock_shortcut(ui: &mut egui::Ui, shortcut: &str, recording: &mut bool) -> Opt
     chosen
 }
 
-/// The Machines page. `busy` greys the controls while a request is out; `error` is the
-/// last request the agent refused.
+/// The Machines page. `rescue` is the rescue shortcut, which the pointer lock's may not
+/// be; `busy` greys the controls while a request is out; `error` is the last request the
+/// agent refused.
 pub fn panel(
     ui: &mut egui::Ui,
     state: Option<&State>,
+    rescue: &str,
     draft: &mut Panel,
     busy: bool,
     error: Option<&str>,
@@ -295,9 +323,12 @@ pub fn panel(
                 ui.label(whereabouts);
             }
             ui.separator();
-            if let Some(shortcut) =
-                lock_shortcut(ui, &state.pointer_lock_shortcut, &mut draft.recording_lock)
-            {
+            if let Some(shortcut) = lock_shortcut(
+                ui,
+                &state.pointer_lock_shortcut,
+                rescue,
+                &mut draft.recording_lock,
+            ) {
                 did = Some(Did::LockShortcut(shortcut));
             }
         });

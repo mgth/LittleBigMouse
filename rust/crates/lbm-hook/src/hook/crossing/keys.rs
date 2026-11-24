@@ -219,25 +219,60 @@ pub(crate) enum Toggle {
 /// The pointer lock's shortcut, watched for in every key a master reads, grabbed or
 /// not: it locks the pointer where it is and unlocks it, wherever it is. A toggle
 /// fires on the press, with no hold: it is undone by the same keys.
+///
+/// The rescue's combination is never one: firing on the press, the toggle would take
+/// the final key before the rescue's hold could start, and over there, with the
+/// keyboards grabbed, nothing else would see it.
 #[derive(Debug, Default)]
 pub(crate) struct ToggleKeys {
     wanted: Option<Combination>,
     /// The text `wanted` was parsed from (see [`RescueKeys::set`]).
     text: String,
+    /// The rescue's shortcut, as last read: `wanted` is never it.
+    rescue: String,
     modifiers: Modifiers,
     /// The key that fired is still down.
     kept: bool,
 }
 
 impl ToggleKeys {
-    /// Adopts the shortcut as the agent spells it; an empty text is none.
-    pub(crate) fn set(&mut self, text: &str) {
+    /// Adopts the shortcut as the agent spells it; an empty text is none. Whether the
+    /// shortcut in force changed.
+    pub(crate) fn set(&mut self, text: &str) -> bool {
         if text == self.text {
-            return;
+            return false;
         }
         self.text = text.to_owned();
-        self.wanted = Combination::parse(text);
+        self.adopt()
+    }
+
+    /// The rescue's shortcut, as the layout spells it. Whether the pointer lock's in
+    /// force changed: it is none while it is the rescue's.
+    pub(crate) fn avoid(&mut self, rescue: &str) -> bool {
+        if rescue == self.rescue {
+            return false;
+        }
+        self.rescue = rescue.to_owned();
+        self.adopt()
+    }
+
+    fn adopt(&mut self) -> bool {
+        let rescue = Combination::parse(&self.rescue);
+        let wanted = Combination::parse(&self.text).filter(|&w| Some(w) != rescue);
+        if wanted == self.wanted {
+            return false;
+        }
+        if self.text.trim().is_empty() || wanted.is_some() {
+            self.wanted = wanted;
+        } else {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the pointer lock's shortcut {} is the rescue's or none, it is not watched for",
+                self.text
+            );
+            self.wanted = None;
+        }
         self.kept = false;
+        true
     }
 
     /// Reads one key event.
@@ -480,6 +515,32 @@ mod tests {
 
         keys.set("");
         assert_eq!(keys.wanted, None);
+        assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass);
+    }
+
+    #[test]
+    fn the_rescue_combination_is_never_the_lock() {
+        let mut keys = ToggleKeys::default();
+        keys.avoid(lbm_ipc::shortcut::DEFAULT);
+        assert!(!keys.set(lbm_ipc::shortcut::DEFAULT), "nothing in force");
+        press_modifiers_toggle(&mut keys);
+        assert_eq!(keys.filter(KEY_M, Press::Down), Toggle::Pass);
+        keys.filter(KEY_M, Press::Up);
+        // The rescue moves elsewhere: the combination is the lock's again.
+        assert!(keys.avoid("Ctrl+Alt+F9"));
+        assert_eq!(keys.filter(KEY_M, Press::Down), Toggle::Fired);
+    }
+
+    fn press_modifiers_toggle(keys: &mut ToggleKeys) {
+        for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+            assert_eq!(keys.filter(code, Press::Down), Toggle::Pass);
+        }
+    }
+
+    #[test]
+    fn no_shortcut_toggles_nothing() {
+        let mut keys = ToggleKeys::default();
+        const KEY_L: u16 = 38;
         assert_eq!(keys.filter(KEY_L, Press::Down), Toggle::Pass);
     }
 }

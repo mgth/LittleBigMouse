@@ -41,6 +41,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
                             .clone(),
+                        capabilities: vec![lbm_ipc::input::LOCKS_CAPABILITY.to_owned()],
                     },
                 );
             }

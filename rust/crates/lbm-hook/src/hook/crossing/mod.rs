@@ -413,9 +413,16 @@ impl Crossing {
         let revision = shared.pointer_lock_revision.load(Ordering::SeqCst);
         if self.toggle_revision != Some(revision) {
             // Never waited for: a contended read is tried again next cycle.
-            if let Ok(text) = shared.pointer_lock_shortcut.try_lock() {
-                self.toggle.set(&text);
+            if let (Ok(text), Ok(rescue)) = (
+                shared.pointer_lock_shortcut.try_lock(),
+                shared.rescue_shortcut.try_lock(),
+            ) {
+                let rescue_changed = self.toggle.avoid(&rescue);
+                let changed = self.toggle.set(&text) || rescue_changed;
                 self.toggle_revision = Some(revision);
+                if changed {
+                    self.shortcut_changed();
+                }
             }
         }
         self.check_rescue(shared, Instant::now(), m);
@@ -578,6 +585,17 @@ impl Crossing {
         self.check_rescue(shared, Instant::now(), m);
     }
 
+    /// The pointer lock's shortcut is another, or none: a lock it took can no longer be
+    /// let go by it, so it goes now.
+    fn shortcut_changed(&mut self) {
+        if self.locked {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the pointer lock's shortcut changed, the lock is let go"
+            );
+            self.locked = false;
+        }
+    }
+
     /// The pointer lock's shortcut was pressed: locks the pointer where it is, or lets
     /// it go. Here, only with a machine to lock it away from.
     fn toggle_lock(&mut self, m: &mut impl Platform) {
@@ -648,6 +666,9 @@ impl Crossing {
         // leaves the shortcut that was last read.
         if let Ok(text) = shared.rescue_shortcut.try_lock() {
             self.rescue.set(&text);
+            // Not locked: the pointer is only now crossing out of here, where a lock
+            // would have walled it in.
+            self.toggle.avoid(&text);
         }
         self.rescue.reset();
         self.side = Side::Remote;

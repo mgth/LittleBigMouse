@@ -162,6 +162,16 @@ pub enum Event {
         /// to, for as long as the session lasts, with nothing to say so.
         #[serde(rename = "Layout", default)]
         layout: String,
+        /// What this hook reads beyond its protocol, by name: `InputLocks`
+        /// (`crate::input::LOCKS_CAPABILITY`) when it reads the lock keys' state in the
+        /// input stream. Absent from an older hook, which reads none of it: an agent
+        /// that relays a remote's input to it strips what it would refuse.
+        #[serde(
+            rename = "Capabilities",
+            default,
+            skip_serializing_if = "Vec::is_empty"
+        )]
+        capabilities: Vec<String>,
     },
     /// The input hook is installed.
     Running,
@@ -556,6 +566,7 @@ mod tests {
                 protocol: PROTOCOL,
                 version: "0.1.0".to_owned(),
                 layout: fingerprint("<ZonesLayout/>"),
+                capabilities: vec![crate::input::LOCKS_CAPABILITY.to_owned()],
             },
             Event::Running,
             Event::Stopped,
@@ -625,6 +636,7 @@ mod tests {
                 protocol: 1,
                 version: "0.1.0".to_owned(),
                 layout: String::new(),
+                capabilities: Vec::new(),
             })
         );
     }

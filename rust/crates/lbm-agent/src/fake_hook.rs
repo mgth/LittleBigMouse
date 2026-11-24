@@ -318,6 +318,7 @@ async fn connection<S>(
                             protocol: protocol::PROTOCOL,
                             version: "fake".to_owned(),
                             layout: s.applied.clone(),
+                            capabilities: Vec::new(),
                         }));
                     }
                     // Held, not dropped. The daemon adopts it and re-registers; what

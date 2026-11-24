@@ -487,10 +487,7 @@ fn the_lock_keys_of_here_follow_the_enter_and_nothing_is_said_of_those_unknown()
     rig.go_over();
     assert_eq!(
         rig.m.sent,
-        [
-            Wire::Enter { x: 0, y: 500 },
-            Wire::Locks(rig.m.locks),
-        ]
+        [Wire::Enter { x: 0, y: 500 }, Wire::Locks(rig.m.locks),]
     );
 
     // A platform that reads none says nothing: the other machine keeps its own.
@@ -521,10 +518,7 @@ fn locked_over_there_the_pointer_stays_there_until_unlocked() {
     // click of that report goes over there.
     rig.m.here = Point::new(1910, 500);
     rig.m.sent.clear();
-    rig.cycle(
-        Some(Place::Local),
-        &[Input::Button(BTN_LEFT, Press::Down)],
-    );
+    rig.cycle(Some(Place::Local), &[Input::Button(BTN_LEFT, Press::Down)]);
     assert!(rig.crossing.is_remote(), "the pointer did not come back");
     assert_eq!(rig.m.returned.last(), Some(&(1950, 500)));
     assert_eq!(rig.crossing.resume_at(), Point::new(1950, 500));
@@ -614,4 +608,44 @@ fn the_rescue_the_end_of_the_stream_and_going_away_let_the_lock_go() {
     rig.crossing.shut_down(&mut rig.m);
     assert!(!rig.crossing.is_remote() && !rig.crossing.is_locked());
     assert_eq!(rig.m.sent.last(), Some(&Wire::Leave));
+}
+
+#[test]
+fn a_lock_shortcut_that_is_the_rescues_leaves_the_rescue_working_over_there() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut(lbm_ipc::shortcut::DEFAULT);
+    rig.go_over();
+    for code in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_LEFTSHIFT] {
+        rig.type_key(code, Press::Down);
+    }
+    rig.type_key(KEY_M, Press::Down);
+    assert!(!rig.crossing.is_locked(), "the rescue's keys lock nothing");
+    rig.crossing
+        .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
+    assert!(
+        !rig.crossing.is_remote(),
+        "the rescue brought the pointer home"
+    );
+}
+
+#[test]
+fn taking_the_shortcut_away_lets_a_lock_go() {
+    let mut rig = Rig::new(true);
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(rig.crossing.walled_in());
+    rig.set_lock_shortcut("");
+    assert!(
+        !rig.crossing.walled_in(),
+        "nothing could let it go any more"
+    );
+    rig.go_over();
+
+    // Over there too, and for another shortcut.
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.press_lock();
+    assert!(rig.crossing.is_locked());
+    rig.set_lock_shortcut("Ctrl+Alt+K");
+    assert!(!rig.crossing.is_locked());
+    rig.come_back((1910, 500));
 }

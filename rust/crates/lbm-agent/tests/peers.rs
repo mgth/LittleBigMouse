@@ -1053,6 +1053,7 @@ async fn a_remote(
 }
 
 /// [`a_remote`], saying it can do `capabilities`.
+#[cfg(unix)]
 async fn a_remote_able(
     name: &str,
     options: link::Options,
@@ -1942,8 +1943,7 @@ async fn a_crossing_the_remotes_hook_is_not_there_for_makes_the_remote_say_input
 
 #[cfg(unix)]
 #[tokio::test]
-async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_is_in_the_state()
-{
+async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_is_in_the_state() {
     let (_laptop_dir, laptop, mut listener) = a_remote("laptop", link::Options::default()).await;
     let desk_dir = tempfile::tempdir().unwrap();
     pair(
@@ -1992,4 +1992,50 @@ async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_
     let state: PeersState = serde_json::from_value(desk.ask(set("")).await.unwrap()).unwrap();
     assert_eq!(state.pointer_lock_shortcut, "");
     assert_eq!(Settings::load(desk_dir.path()).pointer_lock_shortcut, None);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_remote_strips_the_lock_keys_for_a_hook_that_has_not_said_it_reads_them() {
+    use lbm_ipc::input::{encode, read_batch, InputEvent, Locks};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), master.fingerprint(), "", Role::Master);
+    let hook_path = tower_dir.path().join("input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+    let sender = link.sender();
+    let enter = InputEvent::Enter { x: 0, y: 0 };
+    let locks = InputEvent::Locks(Locks {
+        caps: Some(true),
+        num: None,
+        scroll: None,
+    });
+
+    // An older hook, or one that has not greeted yet: the Enter alone.
+    sender.input(&encode(&[enter, locks])).await.unwrap();
+    let mut hook = hook_client(&hook_listener).await;
+    assert_eq!(read_batch(&mut hook).await.unwrap(), encode(&[enter]));
+
+    // A hook that said it reads them gets them.
+    tower.service.hook_reads_locks(true);
+    sender
+        .input(&encode(&[InputEvent::Leave, enter, locks]))
+        .await
+        .unwrap();
+    assert_eq!(
+        read_batch(&mut hook).await.unwrap(),
+        encode(&[InputEvent::Leave, enter, locks])
+    );
 }

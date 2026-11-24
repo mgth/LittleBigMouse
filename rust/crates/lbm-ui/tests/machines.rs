@@ -57,9 +57,14 @@ fn page(state: Option<State>) -> Harness<'static, Shown> {
         .build_ui_state(
             |ui, page| {
                 lbm_ui::theme::install(ui.ctx());
-                if let Some(did) =
-                    machines::panel(ui, page.state.as_ref(), &mut page.draft, false, None)
-                {
+                if let Some(did) = machines::panel(
+                    ui,
+                    page.state.as_ref(),
+                    lbm_ipc::shortcut::DEFAULT,
+                    &mut page.draft,
+                    false,
+                    None,
+                ) {
                     page.did = Some(did);
                 }
             },
@@ -465,8 +470,34 @@ fn the_pointer_lock_shortcut_is_recorded_and_taken_away_by_asking_the_agent() {
     set.pointer_lock_shortcut = "Ctrl+Alt+L".into();
     let mut h = page(Some(set));
     h.run();
-    assert!(h.query_by_label("Pointer lock shortcut: Ctrl+Alt+L").is_some());
+    assert!(h
+        .query_by_label("Pointer lock shortcut: Ctrl+Alt+L")
+        .is_some());
     h.get_by_label("No shortcut").click();
     h.run();
     assert_eq!(h.state().did, Some(Did::LockShortcut(String::new())));
+}
+
+#[test]
+fn the_rescue_combination_is_not_taken_for_the_pointer_lock() {
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    h.get_by_label("Pointer lock shortcut: None").click();
+    h.run();
+    // The default rescue, Ctrl+Alt+Shift+M: still waiting.
+    h.key_press_modifiers(
+        egui::Modifiers::CTRL | egui::Modifiers::ALT | egui::Modifiers::SHIFT,
+        egui::Key::M,
+    );
+    h.run();
+    assert_eq!(h.state().did, None);
+
+    // Saved before: said so.
+    let mut saved = state(Vec::new());
+    saved.pointer_lock_shortcut = lbm_ipc::shortcut::DEFAULT.into();
+    let mut h = page(Some(saved));
+    h.run();
+    assert!(h
+        .query_by_label("This is the rescue shortcut: it stays the rescue's, and locks nothing.")
+        .is_some());
 }

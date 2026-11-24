@@ -3324,7 +3324,9 @@ async fn the_hook_watches_for_the_pointer_lock_only_while_the_mode_is_on() {
                 }
             })
             .await
-            .unwrap_or_else(|_| panic!("the hook was told {want:?}, not {:?}", fake.pointer_lock()));
+            .unwrap_or_else(|_| {
+                panic!("the hook was told {want:?}, not {:?}", fake.pointer_lock())
+            });
         }
     };
 

@@ -452,6 +452,9 @@ pub struct Service {
     hook_reads_locks: bool,
     /// What draws the rulers a master of this machine asks for.
     painter: overlay::Painter,
+    /// Where this machine's Windows service takes the input stream
+    /// ([`Service::set_secure_input`]).
+    secure_input: Option<lbm_net::wire::SecureInput>,
 }
 
 impl Service {
@@ -471,6 +474,7 @@ impl Service {
             notices_rx: Some(notices_rx),
             hook_reads_locks: false,
             painter: overlay::Painter::default(),
+            secure_input: None,
         };
         if service.settings.enabled {
             service.start(None);
@@ -571,6 +575,20 @@ impl Service {
     /// Whether this machine's hook reads the lock keys' state in the input stream: until
     /// it says it does, the manager strips it from what a master sends to be injected
     /// here — an older hook would refuse the whole batch, the crossing with it.
+    /// Where this machine's Windows service takes the input stream itself
+    /// (docs/multi-pc-service-windows.md), told to masters in `Hello`; `None` where there
+    /// is no service. The masters learn a change at their next link: a running manager is
+    /// restarted, which drops the links and makes them anew.
+    pub fn set_secure_input(&mut self, offer: Option<lbm_net::wire::SecureInput>) {
+        if offer == self.secure_input {
+            return;
+        }
+        self.secure_input = offer;
+        if let Some(running) = self.running.take() {
+            self.start(Some(running));
+        }
+    }
+
     pub fn hook_reads_locks(&mut self, reads: bool) {
         self.hook_reads_locks = reads;
         if let Some(running) = &self.running {
@@ -830,6 +848,7 @@ impl Service {
             painter: self.painter.clone(),
             clipboard: self.settings.clipboard(),
             clipboard_factory: self.setup.clipboard.clone(),
+            secure_input: self.secure_input.clone(),
         };
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (started, started_rx) = oneshot::channel();

@@ -83,6 +83,22 @@ pub struct Hello {
     /// ignored, which is how the protocol grows without a new version.
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// A remote's Windows service, which takes the input stream itself where its
+    /// agent cannot inject (docs/multi-pc-service-windows.md). Absent everywhere else;
+    /// a node that does not know the field ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secure_input: Option<SecureInput>,
+}
+
+/// Where a remote's service listens for the input stream, and the fingerprint of the
+/// certificate it answers with — not the agent's: the service has an identity of its
+/// own, which the master checks when it connects. Told on the authenticated link with
+/// the remote's agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SecureInput {
+    pub port: u16,
+    pub machine_id: String,
 }
 
 impl Hello {
@@ -95,6 +111,7 @@ impl Hello {
             version: version.into(),
             role,
             capabilities: Vec::new(),
+            secure_input: None,
         }
     }
 }
@@ -415,6 +432,32 @@ mod tests {
 
     async fn round_trip(frame: &[u8]) -> io::Result<Frame> {
         read_frame(&mut &frame[..]).await
+    }
+
+    #[test]
+    fn a_remotes_service_is_told_in_its_hello_and_absent_otherwise() {
+        let plain = Hello::new("tower", "6.0.0", Role::Remote);
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("SecureInput").is_none(), "{json}");
+
+        let offered = Hello {
+            secure_input: Some(SecureInput {
+                port: 24818,
+                machine_id: "ab".repeat(32),
+            }),
+            ..plain.clone()
+        };
+        let json = serde_json::to_value(&offered).unwrap();
+        assert_eq!(json["SecureInput"]["Port"], 24818);
+        assert_eq!(json["SecureInput"]["MachineId"], "ab".repeat(32));
+        assert_eq!(serde_json::from_value::<Hello>(json).unwrap(), offered);
+
+        // From a node that does not know the field.
+        let older: Hello = serde_json::from_value(serde_json::json!({
+            "Protocol": PROTOCOL, "Role": "Remote"
+        }))
+        .unwrap();
+        assert_eq!(older.secure_input, None);
     }
 
     #[tokio::test]

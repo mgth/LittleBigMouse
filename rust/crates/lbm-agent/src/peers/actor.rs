@@ -17,7 +17,9 @@ use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
 };
 use lbm_net::peers::{PairedPeer, PeerStore};
-use lbm_net::wire::{Bulk, Control, Hello, Role, CLIPBOARD_CAPABILITY, OVERLAY_CAPABILITY};
+use lbm_net::wire::{
+    Bulk, Control, Hello, Role, SecureInput, CLIPBOARD_CAPABILITY, OVERLAY_CAPABILITY,
+};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
@@ -149,6 +151,24 @@ enum Internal {
         serial: u64,
     },
     Redial(String),
+    /// A link with a remote's Windows service was attempted, for the link `link_id`
+    /// with its agent ([`Actor::dial_service`]).
+    ServiceDialed {
+        machine_id: String,
+        link_id: u64,
+        result: Result<Link, String>,
+    },
+    /// The service of `machine_id` said its session ended (`InputReset`) on the link `id`.
+    ServiceReset {
+        machine_id: String,
+        id: u64,
+    },
+    /// The link `id` with the service of `machine_id` ended.
+    ServiceClosed {
+        machine_id: String,
+        id: u64,
+    },
+    RedialService(String),
     /// The overlays a master asked for, shown under `generation`, are down: they could
     /// not be shown, or a screen changed under them.
     OverlayFailed {
@@ -174,6 +194,19 @@ pub(super) struct Start {
     pub painter: Painter,
     pub clipboard: clipboard::Options,
     pub clipboard_factory: crate::clipboard::Factory,
+    /// Where this machine's Windows service takes the input stream, told to its masters
+    /// in `Hello` ([`Service::set_secure_input`](super::Service::set_secure_input)).
+    pub secure_input: Option<SecureInput>,
+}
+
+/// A link with a remote's Windows service (docs/multi-pc-service-windows.md): the input
+/// stream goes there instead of to its agent, for the life of the link with the agent it
+/// was announced on.
+struct ServiceLive {
+    id: u64,
+    /// The id of the link with the remote's agent that announced it.
+    link_id: u64,
+    sender: LinkSender,
 }
 
 /// An unknown machine, waiting for the user to say whether it is trusted.
@@ -245,6 +278,11 @@ struct Actor {
     /// it restarts, and a frontend comparing it would keep pictures that changed.
     wallpaper_stamp: u64,
     hook: HookInput,
+    /// The links with the remotes' Windows services, by the remote's machine id.
+    services: HashMap<String, ServiceLive>,
+    /// Remotes whose service is being dialled, and the delay before the next attempt.
+    service_dialing: HashSet<String>,
+    service_backoff: HashMap<String, Duration>,
     /// The remote the hook's stream goes to and whose screens are in the layout (this
     /// machine is its master), with the id of its link: one at a time (see
     /// [`Actor::select`]).
@@ -256,6 +294,8 @@ struct Actor {
     /// The remote the hook's stream is relayed to now: the selected one, once the hook's
     /// zones lead nowhere else (see [`Actor::retarget`]).
     relaying: Option<(String, u64)>,
+    /// The service link the stream is relayed through, when it is not the agent's.
+    relaying_via: Option<u64>,
     /// What the state says of the pointer lock ([`PeersState::pointer_lock_shortcut`],
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
@@ -335,11 +375,12 @@ pub(super) async fn run(
     started: oneshot::Sender<()>,
 ) {
     let (internal, mut internal_rx) = mpsc::unbounded_channel();
-    let hello = with_capabilities(Hello::new(
+    let mut hello = with_capabilities(Hello::new(
         start.name.clone(),
         env!("CARGO_PKG_VERSION"),
         Role::Remote,
     ));
+    hello.secure_input = start.secure_input.clone();
     // Every node with the mode on listens; whoever connects is a master, so this side
     // of those links says it is the remote.
     let mut listener = match link::listen(
@@ -390,10 +431,14 @@ pub(super) async fn run(
             hook.set_reads_locks(start.hook_reads_locks);
             hook
         },
+        services: HashMap::new(),
+        service_dialing: HashSet::new(),
+        service_backoff: HashMap::new(),
         selected: None,
         selection: SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1,
         hook_ready: None,
         relaying: None,
+        relaying_via: None,
         pointer_lock_shortcut: start.pointer_lock_shortcut,
         pointer_locked: false,
         block_sent: None,
@@ -508,8 +553,17 @@ impl Actor {
                     state: PeerState::Paired,
                     problem: self.problems.get(&paired.machine_id).cloned(),
                     overlay_error: self.overlay_errors.get(&paired.machine_id).cloned(),
+                    // What the agent last said is kept for when the stream goes back to
+                    // it, and not shown while the remote's service carries the stream:
+                    // that one injects above every window.
                     injection_blocked: live
                         .filter(|live| live.info.hello.role == Role::Remote)
+                        .filter(|live| {
+                            !self
+                                .services
+                                .get(&paired.machine_id)
+                                .is_some_and(|service| service.link_id == live.id)
+                        })
                         .and_then(|live| live.blocked.clone()),
                 }
             })
@@ -676,6 +730,22 @@ impl Actor {
                     self.pending.remove(&machine_id);
                 }
             }
+            Internal::ServiceDialed {
+                machine_id,
+                link_id,
+                result,
+            } => self.service_dialed(machine_id, link_id, result),
+            Internal::ServiceReset { machine_id, id } => {
+                if self.relaying_via == Some(id) {
+                    eprintln!(
+                        "[lbm-agent] multi-PC: the service of {machine_id} ended the session: \
+                         the pointer comes home for a fresh crossing"
+                    );
+                    self.hook.restart();
+                }
+            }
+            Internal::ServiceClosed { machine_id, id } => self.service_closed(&machine_id, id),
+            Internal::RedialService(machine_id) => self.dial_service(&machine_id),
             Internal::Redial(machine_id) => {
                 self.redial_scheduled.remove(&machine_id);
                 self.call_back(&machine_id);
@@ -1004,6 +1074,12 @@ impl Actor {
                 self.sharing.linked(peer, &peers);
             }
         }
+        // A service of the older link's goes with it; the new link's is dialled anew.
+        if let Some(stale) = self.services.remove(&machine_id) {
+            tokio::spawn(async move { stale.sender.close("its remote linked again").await });
+        }
+        self.service_backoff.remove(&machine_id);
+        self.dial_service(&machine_id);
         self.select();
     }
 
@@ -1141,8 +1217,11 @@ impl Actor {
             // The remote ended the session of the stream it was being sent: what goes on
             // being sent is ignored there until an `Enter`. The hop ends here too, so that
             // the pointer comes home and the next crossing starts a session afresh.
+            // Only from the path the stream takes now: while it goes through the
+            // remote's service, its agent's word on a session is about none of ours.
             Control::InputReset
                 if live.info.hello.role == Role::Remote
+                    && self.relaying_via.is_none()
                     && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id)) =>
             {
                 eprintln!(
@@ -1175,6 +1254,7 @@ impl Actor {
                 live.blocked = block;
                 if blocked
                     && self.hook.driven()
+                    && self.relaying_via.is_none()
                     && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
                 {
                     eprintln!("[lbm-agent] multi-PC: the pointer comes home");
@@ -1260,6 +1340,161 @@ impl Actor {
         }
     }
 
+    //==================//
+    // Remotes' services //
+    //==================//
+
+    /// Links with the Windows service a remote announced in its `Hello`, if it did and
+    /// none is up or under way. The service is at the remote's address, on its own
+    /// port, and must answer with the certificate the remote's agent announced on the
+    /// authenticated link: anything else is refused, and the stream stays with the agent.
+    fn dial_service(&mut self, machine_id: &str) {
+        let Some(live) = self.links.get(machine_id) else {
+            return;
+        };
+        let Some(offer) = live.info.hello.secure_input.clone() else {
+            return;
+        };
+        if live.info.hello.role != Role::Remote
+            || self.services.contains_key(machine_id)
+            || !self.service_dialing.insert(machine_id.to_owned())
+        {
+            return;
+        }
+        let address = SocketAddr::new(live.info.address.ip(), offer.port);
+        let link_id = live.id;
+        let identity = self.identity.clone();
+        let hello = self.hello();
+        let options = self.options.clone();
+        let internal = self.internal.clone();
+        let machine_id = machine_id.to_owned();
+        self.spawn(async move {
+            let result = async {
+                let pending = link::connect(address, &identity, hello, options)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if pending.peer().fingerprint != offer.machine_id {
+                    let found = pending.peer().fingerprint.clone();
+                    pending.refuse("not the service the remote announced").await;
+                    return Err(format!(
+                        "{address} answered as {found}, not the service announced ({})",
+                        offer.machine_id
+                    ));
+                }
+                pending.accept().await.map_err(|e| e.to_string())
+            }
+            .await;
+            let _ = internal.send(Internal::ServiceDialed {
+                machine_id,
+                link_id,
+                result,
+            });
+        });
+    }
+
+    fn service_dialed(&mut self, machine_id: String, link_id: u64, result: Result<Link, String>) {
+        self.service_dialing.remove(&machine_id);
+        let link = match result {
+            Ok(link) => link,
+            Err(error) => {
+                eprintln!(
+                    "[lbm-agent] multi-PC: no link with the service of {machine_id}: {error}"
+                );
+                self.schedule_service_redial(&machine_id);
+                return;
+            }
+        };
+        let (_, sender, mut events) = link.into_parts();
+        if !self
+            .links
+            .get(&machine_id)
+            .is_some_and(|live| live.id == link_id)
+        {
+            // The remote's link it was announced on is gone or was replaced; a newer one
+            // was not dialled for while this attempt was under way: it is now.
+            tokio::spawn(async move { sender.close("its remote's link ended").await });
+            self.dial_service(&machine_id);
+            return;
+        }
+        self.service_backoff.remove(&machine_id);
+        self.next_id += 1;
+        let id = self.next_id;
+        eprintln!("[lbm-agent] multi-PC: linked with the service of {machine_id}");
+        let internal = self.internal.clone();
+        let watched = machine_id.clone();
+        tokio::spawn(async move {
+            // The service says nothing but `InputReset`; the rest is ignored.
+            while let Some(event) = events.recv().await {
+                match event {
+                    Event::Control(Control::InputReset) => {
+                        let _ = internal.send(Internal::ServiceReset {
+                            machine_id: watched.clone(),
+                            id,
+                        });
+                    }
+                    Event::Closed(_) => break,
+                    _ => {}
+                }
+            }
+            let _ = internal.send(Internal::ServiceClosed {
+                machine_id: watched,
+                id,
+            });
+        });
+        self.services.insert(
+            machine_id,
+            ServiceLive {
+                id,
+                link_id,
+                sender,
+            },
+        );
+        self.retarget();
+    }
+
+    fn service_closed(&mut self, machine_id: &str, id: u64) {
+        if !self
+            .services
+            .get(machine_id)
+            .is_some_and(|service| service.id == id)
+        {
+            return;
+        }
+        self.services.remove(machine_id);
+        eprintln!("[lbm-agent] multi-PC: the link with the service of {machine_id} ended");
+        // Back to the agent's link: the hop under way ends, the pointer comes home.
+        self.retarget();
+        self.schedule_service_redial(machine_id);
+    }
+
+    /// Closes the link with the service of `machine_id`, if there is one, and forgets
+    /// its backoff: its remote's link ended, or the remote was forgotten.
+    fn drop_service(&mut self, machine_id: &str, reason: &'static str) {
+        self.service_backoff.remove(machine_id);
+        if let Some(service) = self.services.remove(machine_id) {
+            tokio::spawn(async move { service.sender.close(reason).await });
+        }
+    }
+
+    fn schedule_service_redial(&mut self, machine_id: &str) {
+        if !self.links.contains_key(machine_id) {
+            return;
+        }
+        let delay = self
+            .service_backoff
+            .get(machine_id)
+            .copied()
+            .unwrap_or(REDIAL_FIRST);
+        self.service_backoff
+            .insert(machine_id.to_owned(), (delay * 2).min(REDIAL_MAX));
+        let internal = self.internal.clone();
+        let machine_id = machine_id.to_owned();
+        self.spawn(async move {
+            tokio::time::sleep(delay).await;
+            let _ = internal.send(Internal::RedialService(machine_id));
+        });
+    }
+
     fn closed(&mut self, id: u64, machine_id: &str, reason: CloseReason) {
         // The end of the stream is its `Leave`, whatever came before it.
         self.driving(id, machine_id.to_owned(), false);
@@ -1267,6 +1502,7 @@ impl Actor {
             return;
         }
         let live = self.links.remove(machine_id).expect("checked above");
+        self.drop_service(machine_id, "its remote's link ended");
         let peers = sharing_peers(&self.links);
         self.sharing.unlinked(machine_id, id, &peers);
         eprintln!(
@@ -1339,22 +1575,43 @@ impl Actor {
     fn retarget(&mut self) {
         let ready = self.hook_ready == Some(self.selection);
         let next = self.selected.clone().filter(|_| ready);
-        if next == self.relaying {
+        // The remote's service takes the stream when there is a link with it, made for
+        // this very link with its agent.
+        let service = next.as_ref().and_then(|(machine_id, link_id)| {
+            self.services
+                .get(machine_id)
+                .filter(|service| service.link_id == *link_id)
+        });
+        let via = service.map(|service| service.id);
+        if next == self.relaying && via == self.relaying_via {
             return;
         }
-        let sender = next
-            .as_ref()
-            .and_then(|(machine_id, _)| self.links.get(machine_id))
-            .map(|live| Target {
-                link: live.sender.clone(),
-                reads_locks: live
-                    .info
-                    .hello
-                    .capabilities
-                    .iter()
-                    .any(|c| c == LOCKS_CAPABILITY),
-            });
+        let sender = match service {
+            // It injects with the same rules as a hook, the lock keys included.
+            Some(service) => Some(Target {
+                link: service.sender.clone(),
+                reads_locks: true,
+            }),
+            None => next
+                .as_ref()
+                .and_then(|(machine_id, _)| self.links.get(machine_id))
+                .map(|live| Target {
+                    link: live.sender.clone(),
+                    reads_locks: live
+                        .info
+                        .hello
+                        .capabilities
+                        .iter()
+                        .any(|c| c == LOCKS_CAPABILITY),
+                }),
+        };
+        if let (Some((machine_id, _)), Some(_)) = (&next, via) {
+            eprintln!(
+                "[lbm-agent] multi-PC: the input stream to {machine_id} goes through its service"
+            );
+        }
         self.relaying = next;
+        self.relaying_via = via;
         self.hook.set_target(sender);
     }
 
@@ -1370,6 +1627,7 @@ impl Actor {
             let peers = sharing_peers(&self.links);
             self.sharing.unlinked(machine_id, live.id, &peers);
             tokio::spawn(async move { live.sender.close("forgotten").await });
+            self.drop_service(machine_id, "forgotten");
             self.select();
         }
         if stored || waiting {
@@ -1725,7 +1983,11 @@ impl Actor {
         self.selected = None;
         self.driven_by = None;
         self.relaying = None;
+        self.relaying_via = None;
         self.hook.set_target(None);
+        for (_, service) in self.services.drain() {
+            tokio::spawn(async move { service.sender.close("the mode is off").await });
+        }
         self.pending.clear();
         // Half-made connections are dropped, which closes them; timers simply stop.
         self.tasks.abort_all();

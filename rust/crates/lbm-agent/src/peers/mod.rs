@@ -34,6 +34,7 @@
 mod actor;
 pub mod hook_input;
 pub mod local;
+pub mod overlay;
 pub mod settings;
 pub mod wallpapers;
 
@@ -43,7 +44,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
+use lbm_ipc::peer::{InjectionBlock, Peer, PeerDisplay, PeerWallpaper};
 use lbm_net::identity::{Identity, IDENTITY_FILE};
 use lbm_net::link;
 use lbm_net::peers::PeerStore;
@@ -81,6 +82,51 @@ pub struct PeerEntry {
     /// Additive: absent from an older agent's state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<LinkProblem>,
+    /// Why this remote does not show the rulers this machine's editor asked it to show
+    /// (`PeerOverlay`); absent while it shows them, or when none were asked for.
+    /// Additive: absent from an older agent's state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay_error: Option<String>,
+    /// A remote linked to this machine says Windows drops the input this machine sends
+    /// it, and why (`Control::InjectionBlocked`). Kept
+    /// until it says otherwise or the link ends. Additive: absent when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub injection_blocked: Option<InjectionBlock>,
+}
+
+/// A remote where Windows drops the input this machine sends (the agent's state, for the
+/// tray): its name here, the process whose window has the focus there, and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct BlockedRemote {
+    pub name: String,
+    #[serde(default)]
+    pub process: String,
+    #[serde(default)]
+    pub cause: lbm_ipc::peer::BlockCause,
+}
+
+/// The linked remotes of `state` that say their injection is blocked.
+pub fn blocked_remotes(state: &PeersState) -> Vec<BlockedRemote> {
+    if !state.enabled {
+        return Vec::new();
+    }
+    state
+        .peers
+        .iter()
+        .filter(|p| p.peer.connected)
+        .filter_map(|p| {
+            p.injection_blocked.as_ref().map(|block| BlockedRemote {
+                name: if p.peer.name.is_empty() {
+                    p.peer.machine_id.clone()
+                } else {
+                    p.peer.name.clone()
+                },
+                process: block.process.clone(),
+                cause: block.cause,
+            })
+        })
+        .collect()
 }
 
 /// What went wrong between this machine and another, for the user to read: the kind,
@@ -197,6 +243,13 @@ pub struct PeersState {
     /// Said by the hook; absent from the state of an older agent.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The machine id of the master whose mouse and keyboard drive this machine now —
+    /// its stream crossed onto this machine and has not left — or `None`. The other
+    /// end of [`Self::driven`]: by the `Enter` and `Leave` of that stream as they reach
+    /// the hook, the end of the stream (its link, or its session here) counting as a
+    /// `Leave`. Absent from the state of an older agent, which means "nobody".
+    #[serde(default)]
+    pub driven_by: Option<String>,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -370,6 +423,8 @@ pub struct Service {
     notices_rx: Option<mpsc::UnboundedReceiver<Notice>>,
     /// What this machine's hook last said it reads ([`Service::hook_reads_locks`]).
     hook_reads_locks: bool,
+    /// What draws the rulers a master of this machine asks for.
+    painter: overlay::Painter,
 }
 
 impl Service {
@@ -388,6 +443,7 @@ impl Service {
             notices,
             notices_rx: Some(notices_rx),
             hook_reads_locks: false,
+            painter: overlay::Painter::default(),
         };
         if service.settings.enabled {
             service.start(None);
@@ -495,6 +551,14 @@ impl Service {
         }
     }
 
+    /// This machine's hook says Windows drops what it injects for a master, or no longer
+    /// does: every master linked that hears of it is told.
+    pub fn injection_blocked(&mut self, block: Option<InjectionBlock>) {
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::InjectionBlocked(block));
+        }
+    }
+
     pub fn hook_locked(&mut self, locked: bool) {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::PointerLocked(locked));
@@ -505,6 +569,29 @@ impl Service {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::HookReady(selection));
         }
+    }
+
+    /// What draws the rulers a master of this machine asks for, from the next start of
+    /// the manager on: for tests, which must not draw on the screens of the machine
+    /// running them.
+    pub fn set_overlay_painter(&mut self, painter: overlay::Painter) {
+        self.painter = painter;
+    }
+
+    /// The rulers this machine's editor wants on the screens of its remote `machine_id`
+    /// (`PeerOverlay`): `lbm_overlay::scene::Band`s in that remote's desktop pixels;
+    /// none takes them down. Whether the manager runs to be told.
+    pub fn overlay(&mut self, machine_id: &str, bands: Vec<Value>) -> bool {
+        let Some(running) = &self.running else {
+            return false;
+        };
+        running
+            .commands
+            .send(Command::Overlay {
+                machine_id: machine_id.to_owned(),
+                bands,
+            })
+            .is_ok()
     }
 
     /// Turns the mode off for the agent's way out: the peers get `Bye`.
@@ -686,6 +773,7 @@ impl Service {
                 .unwrap_or_default(),
             displays: self.displays.clone(),
             notices: self.notices.clone(),
+            painter: self.painter.clone(),
         };
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (started, started_rx) = oneshot::channel();
@@ -716,6 +804,7 @@ impl Service {
             selected_remote: None,
             selection: 0,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut
@@ -737,6 +826,8 @@ impl Service {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: None,
+                    overlay_error: None,
+                    injection_blocked: None,
                 })
                 .collect(),
         }
@@ -780,6 +871,8 @@ mod tests {
             role,
             state,
             problem: None,
+            overlay_error: None,
+            injection_blocked: None,
         }
     }
 
@@ -794,6 +887,7 @@ mod tests {
             selected_remote: Some(selected.to_owned()),
             selection: 1,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: String::new(),
             pointer_locked: false,
             peers,

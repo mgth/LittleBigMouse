@@ -45,7 +45,7 @@ fn hook_event(message: Event) -> HookEvent {
         Event::ShortcutUnavailable { .. } => HookEvent::ShortcutUnavailable,
         Event::ShortcutAvailable { .. } => HookEvent::ShortcutAvailable,
         // The peers' state carries it; the reconciler has nothing to do about it.
-        Event::PointerLocked { .. } => HookEvent::Unknown,
+        Event::PointerLocked { .. } | Event::InjectionBlocked { .. } => HookEvent::Unknown,
         // The handshake never comes through here: the connection answers it and
         // reports what it learned as `HookSignal::Greeted`. An event this version does
         // not know is one it has nothing to do about.
@@ -89,6 +89,9 @@ pub struct Agent<W> {
     subscribers: Vec<api::Client>,
     /// The connection a live preview belongs to, while one is running.
     previewing_for: Option<api::Client>,
+    /// The rulers shown on remotes (`PeerOverlay`): for each remote, the frontend that
+    /// wrote its rulers last, the only one whose word or departure takes them down.
+    overlay_owners: std::collections::BTreeMap<String, api::Client>,
     /// What the subscribers last saw.
     published: Option<Snapshot>,
     hook_connected: bool,
@@ -158,8 +161,14 @@ pub struct Agent<W> {
     /// The name of the remote that receives the input now (`PeersState::driven`), for
     /// the state; `None` when this machine does.
     driven_machine: Option<String>,
+    /// The remotes that say Windows drops what this machine sends them
+    /// (`PeerEntry::injection_blocked`), for the state.
+    injection_blocked: Vec<crate::peers::BlockedRemote>,
     /// The pointer is locked on the machine it is on (`PeersState::pointer_locked`).
     pointer_locked: bool,
+    /// The name of the master that drives this machine now (`PeersState::driven_by`),
+    /// for the state; `None` when none does.
+    driven_by: Option<String>,
     /// The pointer lock's shortcut the hook is to watch for: the one of the settings
     /// while the mode is on, none otherwise.
     pointer_lock: String,
@@ -207,6 +216,7 @@ impl<W: AgentWorld> Agent<W> {
             calls: None,
             subscribers: Vec::new(),
             previewing_for: None,
+            overlay_owners: std::collections::BTreeMap::new(),
             published: None,
             hook_connected: false,
             quitting: false,
@@ -237,6 +247,8 @@ impl<W: AgentWorld> Agent<W> {
             input_failures: Default::default(),
             has_master: false,
             driven_machine: None,
+            injection_blocked: Vec::new(),
+            driven_by: None,
             pointer_locked: false,
             pointer_lock: String::new(),
             pointer_lock_sent: None,
@@ -356,6 +368,8 @@ impl<W: AgentWorld> Agent<W> {
             ),
             input_switch_failures: self.input_failures.current(),
             driven_machine: self.driven_machine.clone(),
+            injection_blocked: self.injection_blocked.clone(),
+            driven_by: self.driven_by.clone(),
             pointer_locked: self.pointer_locked,
             input_sharing: self.input_sharing.clone(),
         }
@@ -808,6 +822,9 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerWallpapers { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
             }
+            Request::PeerOverlay { machine_id, bands } => {
+                self.peer_overlay(&client, machine_id, bands)
+            }
             Request::SetActiveSource {
                 layout_id,
                 monitor,
@@ -837,6 +854,40 @@ impl<W: AgentWorld> Agent<W> {
         if let Some(report) = report {
             self.forward("Probed", &report);
         }
+    }
+
+    /// `PeerOverlay`: the rulers a frontend wants on a remote's screens, handed to the
+    /// manager. The frontend that wrote a remote's rulers last owns them: only it takes
+    /// them down, by asking for none or by going ([`Self::left`]). Another frontend asking
+    /// for none there is answered and changes nothing — its own rulers were replaced —
+    /// so that a window closing its rulers never takes down those of a window still open.
+    fn peer_overlay(
+        &mut self,
+        client: &api::Client,
+        machine_id: String,
+        bands: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let Some(peers) = self.peers.as_mut().filter(|p| p.enabled()) else {
+            return Err("the multi-PC mode is off".into());
+        };
+        let shown = !bands.is_empty();
+        if !shown
+            && self
+                .overlay_owners
+                .get(&machine_id)
+                .is_some_and(|owner| !owner.is(client))
+        {
+            return Ok(serde_json::Value::Null);
+        }
+        if !peers.overlay(&machine_id, bands) {
+            return Err("the multi-PC mode is not running".into());
+        }
+        if shown {
+            self.overlay_owners.insert(machine_id, client.clone());
+        } else {
+            self.overlay_owners.remove(&machine_id);
+        }
+        Ok(serde_json::Value::Null)
     }
 
     /// A multi-PC request. What needs the network is answered from a task of its own,
@@ -1153,17 +1204,21 @@ impl<W: AgentWorld> Agent<W> {
             self.look_for_input_sharing(why);
         }
         self.has_master = has_master;
-        self.driven_machine = state
-            .driven
-            .as_ref()
-            .filter(|_| state.enabled)
-            .map(|driven| {
-                state
-                    .peers
-                    .iter()
-                    .find(|p| &p.peer.machine_id == driven)
-                    .map_or_else(|| driven.clone(), |p| p.peer.name.clone())
-            });
+        let named = |machine_id: &Option<String>| {
+            machine_id
+                .as_ref()
+                .filter(|_| state.enabled)
+                .map(|machine_id| {
+                    state
+                        .peers
+                        .iter()
+                        .find(|p| &p.peer.machine_id == machine_id)
+                        .map_or_else(|| machine_id.clone(), |p| p.peer.name.clone())
+                })
+        };
+        self.driven_machine = named(&state.driven);
+        self.driven_by = named(&state.driven_by);
+        self.injection_blocked = crate::peers::blocked_remotes(&state);
         self.pointer_locked = state.enabled && state.pointer_locked;
         self.pointer_lock = if state.enabled {
             state.pointer_lock_shortcut.clone()
@@ -1310,6 +1365,23 @@ impl<W: AgentWorld> Agent<W> {
     /// tray reconnecting, must not end somebody else's preview.
     fn left(&mut self, client: &api::Client) {
         self.subscribers.retain(|s| !s.is(client));
+        let machines: Vec<String> = self
+            .overlay_owners
+            .iter()
+            .filter(|(_, owner)| owner.is(client))
+            .map(|(machine_id, _)| machine_id.clone())
+            .collect();
+        if !machines.is_empty() {
+            eprintln!(
+                "[lbm-agent] the frontend showing rulers has gone: taking them down on the remotes"
+            );
+        }
+        for machine_id in machines {
+            self.overlay_owners.remove(&machine_id);
+            if let Some(peers) = &mut self.peers {
+                peers.overlay(&machine_id, Vec::new());
+            }
+        }
         if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {
             eprintln!("[lbm-agent] the frontend previewing has gone: ending the preview");
             self.previewing_for = None;
@@ -1740,6 +1812,11 @@ impl<W: AgentWorld> Agent<W> {
                                 self.tell_peers_the_hook_zones();
                             }
                             Event::PointerLocked { locked } => self.hook_locked(*locked),
+                            Event::InjectionBlocked { block } => {
+                                if let Some(peers) = &mut self.peers {
+                                    peers.injection_blocked(block.clone());
+                                }
+                            }
                             // The hook's routing went down, and its lock with it.
                             Event::Stopped | Event::Paused | Event::Suspended => {
                                 self.hook_locked(false);
@@ -1759,9 +1836,11 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.pointer_lock_sent = None;
                         self.hook_locked(false);
-                        // The next hook says again what it reads.
+                        // The next hook says again what it reads, and what it cannot
+                        // inject: this one's word died with it.
                         if let Some(peers) = &mut self.peers {
                             peers.hook_reads_locks(false);
+                            peers.injection_blocked(None);
                         }
                         self.hook_zones_unknown();
                         Input::Hook(HookEvent::Dead)

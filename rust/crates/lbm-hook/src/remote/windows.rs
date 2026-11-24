@@ -6,12 +6,15 @@
 //! and routing it a second time here would put back the walls the master took away.
 //!
 //! Between sessions the pointer is parked out of sight ([`hider`]).
+//!
+//! While a session lasts, the window in the foreground is watched ([`foreground`]):
+//! when it belongs to a process of a higher integrity level, Windows drops everything
+//! injected here, and the agent is told so.
 
+mod foreground;
 mod hider;
 
 pub use hider::local_pointer_input;
-
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
@@ -46,13 +49,16 @@ const BTN_BACK: u16 = 0x116;
 pub struct SendInputInjector {
     inputs: Vec<INPUT>,
     hider: hider::Hider,
+    /// Where the agent is told that injection is blocked.
+    shared: &'static crate::shared::Shared,
 }
 
 impl SendInputInjector {
-    pub fn new() -> Self {
+    pub fn new(shared: &'static crate::shared::Shared) -> Self {
         Self {
             inputs: Vec::with_capacity(16),
             hider: hider::Hider::default(),
+            shared,
         }
     }
 
@@ -85,12 +91,6 @@ impl SendInputInjector {
                 },
             },
         });
-    }
-}
-
-impl Default for SendInputInjector {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -208,22 +208,23 @@ impl Injector for SendInputInjector {
         if self.inputs.is_empty() {
             return;
         }
+        foreground::input();
         let sent = unsafe { SendInput(&self.inputs, std::mem::size_of::<INPUT>() as i32) };
-        // Fewer than asked is UIPI: the foreground window belongs to a process of a
-        // higher integrity level (an elevated program, Task Manager), and Windows
-        // drops what a lower one injects into it. Said once, not a thousand times a
-        // second while the pointer stays over that window.
-        static SAID: AtomicBool = AtomicBool::new(false);
-        if (sent as usize) < self.inputs.len() && !SAID.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "[LittleBigMouse.Hook] SendInput injected {sent} of {} events: \
-                 the window under the remote pointer is probably elevated",
-                self.inputs.len()
-            );
+        // A UIPI block is silent: `SendInput` counts what it dropped as sent, which is
+        // why the foreground is watched. Fewer than asked is a desktop this process
+        // cannot reach (a secure desktop): as final, said the same way, once.
+        if (sent as usize) < self.inputs.len() {
+            foreground::short();
         }
     }
 
+    fn begin(&mut self) {
+        foreground::begin(self.shared);
+        self.unpark();
+    }
+
     fn park(&mut self) {
+        foreground::end();
         self.hider.park();
     }
 

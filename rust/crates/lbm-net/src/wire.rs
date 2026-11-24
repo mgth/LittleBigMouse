@@ -27,6 +27,12 @@ pub const MAX_CONTROL_SIZE: usize = lbm_ipc::framing::MAX_FRAME_SIZE;
 /// An input frame carries exactly what the hook's input endpoint does.
 pub const MAX_INPUT_SIZE: usize = lbm_ipc::input::MAX_BATCH_SIZE;
 
+/// The capability, in `Hello`, of a node that draws on its screens the overlays its
+/// master asks for ([`Control::Overlay`]). A master sends them only to a remote that
+/// announces it: an older one would merely ignore the unknown type, but its user would
+/// then see rulers on some screens and not others with nothing to say why.
+pub const OVERLAY_CAPABILITY: &str = "RemoteOverlay";
+
 /// Which end of the input stream a node is on this link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Role {
@@ -132,6 +138,36 @@ pub enum Control {
         request: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// Master → remote: draw these overlays on the remote's screens, in place of any
+    /// drawn before; an empty list takes them all down. `bands` are
+    /// `lbm_overlay::scene::Band`s in the remote's own desktop pixels, read from the
+    /// screens it reported (`Displays`): the remote checks each against its screens as
+    /// they are now and refuses the whole list otherwise. A higher revision replaces a
+    /// lower one. The remote takes them down by itself when the link ends. Sent only to a
+    /// remote announcing [`OVERLAY_CAPABILITY`]. Added after protocol 1 without a new
+    /// version.
+    Overlay {
+        revision: u64,
+        #[serde(default)]
+        bands: Vec<serde_json::Value>,
+    },
+    /// Remote → master: the overlays of `revision` are not shown, and why — refused, or
+    /// taken down because a screen changed under them. Added with [`Control::Overlay`].
+    OverlayFailed {
+        revision: u64,
+        #[serde(default)]
+        error: String,
+    },
+    /// Remote → master: Windows drops what the remote injects from now on (`block`
+    /// set), or no longer does (`None`) — see [`lbm_ipc::peer::InjectionBlock`]. Sent
+    /// only to a master that announced [`lbm_ipc::peer::INJECTION_BLOCKED_CAPABILITY`].
+    /// A block said while that master drives the remote ends its crossing: the pointer
+    /// comes home rather than stay frozen there. Added after protocol 1 without a new
+    /// version.
+    InjectionBlocked {
+        #[serde(default)]
+        block: Option<lbm_ipc::peer::InjectionBlock>,
     },
     Ping,
     Pong,
@@ -374,6 +410,78 @@ mod tests {
                 request: None
             }
         );
+    }
+
+    #[test]
+    fn an_injection_block_names_the_process_and_its_end_is_a_null() {
+        let blocked = Control::InjectionBlocked {
+            block: Some(lbm_ipc::peer::InjectionBlock::elevated("osk.exe")),
+        };
+        let bytes = encode_control(&blocked).unwrap();
+        let text = std::str::from_utf8(&bytes[5..]).unwrap();
+        assert_eq!(
+            text,
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe","Cause":"Integrity"}}"#
+        );
+        assert_eq!(serde_json::from_str::<Control>(text).unwrap(), blocked);
+        // Without a cause, the first one; one this version does not know, unknown.
+        let causeless: Control =
+            serde_json::from_str(r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe"}}"#)
+                .unwrap();
+        assert_eq!(causeless, blocked);
+        let unknown: Control = serde_json::from_str(
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"","Cause":"Hypervisor"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            unknown,
+            Control::InjectionBlocked {
+                block: Some(lbm_ipc::peer::InjectionBlock::unknown())
+            }
+        );
+        let unblocked: Control =
+            serde_json::from_str(r#"{"Type":"InjectionBlocked","Block":null}"#).unwrap();
+        assert_eq!(unblocked, Control::InjectionBlocked { block: None });
+        // A newer remote may say more about the block.
+        let newer: Control = serde_json::from_str(
+            r#"{"Type":"InjectionBlocked","Block":{"Process":"osk.exe","Level":12288}}"#,
+        )
+        .unwrap();
+        assert_eq!(newer, blocked);
+    }
+
+    #[tokio::test]
+    async fn overlays_cross_as_a_revision_and_their_bands_unread() {
+        let band = serde_json::json!({"Monitor": "B", "Side": "Top"});
+        let show = Control::Overlay {
+            revision: 2,
+            bands: vec![band.clone()],
+        };
+        let frame = encode_control(&show).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&frame[5..]).unwrap(),
+            r#"{"Type":"Overlay","Revision":2,"Bands":[{"Monitor":"B","Side":"Top"}]}"#
+        );
+        assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(show));
+        // Taking them down is the same message with no bands, which may be left out.
+        let hide: Control = serde_json::from_str(r#"{"Type":"Overlay","Revision":3}"#).unwrap();
+        assert_eq!(
+            hide,
+            Control::Overlay {
+                revision: 3,
+                bands: vec![]
+            }
+        );
+        let failed = Control::OverlayFailed {
+            revision: 2,
+            error: "Screen bounds changed.".into(),
+        };
+        let frame = encode_control(&failed).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&frame[5..]).unwrap(),
+            r#"{"Type":"OverlayFailed","Revision":2,"Error":"Screen bounds changed."}"#
+        );
+        assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(failed));
     }
 
     #[tokio::test]

@@ -65,7 +65,13 @@
 //! <- {"Id": 14, "Result": {"MachineId": "…", "Revision": 3,     // its WallpaperRevision
 //!                          "Wallpapers": [{"Display": "eDP-1", "Image": "<base64 JPEG>"},
 //!                                         {"Display": "HDMI-1", "Color": "#203040"}]}}
+//! -> {"Id": 15, "Method": "PeerOverlay", "MachineId": "…",     // capability PeerOverlay
+//!     "Bands": [{… lbm_overlay::scene::Band, in that remote's desktop pixels …}]}
+//! <- {"Id": 15, "Result": null}                                // "Bands": [] takes them down
 //! ```
+//!
+//! The rulers on a remote are the frontend's that wrote them last: only its empty
+//! `Bands` or the end of its connection takes them down.
 
 use std::io;
 
@@ -95,7 +101,9 @@ pub const PROTOCOL: u32 = 3;
 ///   monitor, theirs included.
 /// - `PeerWallpapers`: the request of that name, and `WallpaperRevision` on every machine
 ///   of the `Peers` state: what a remote's screens show, for the master's map.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers"];
+/// - `PeerOverlay`: the request of that name — the rulers the editor shows, drawn on a
+///   remote's screens too — and `OverlayError` on a machine of the `Peers` state.
+pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers", "PeerOverlay"];
 
 //==================//
 // The contract     //
@@ -331,6 +339,16 @@ pub enum Request {
         #[serde(rename = "MachineId")]
         machine_id: String,
     },
+    /// The rulers to draw on the screens of a remote of this machine (`PeerOverlay`):
+    /// `lbm_overlay::scene::Band`s in that remote's own desktop pixels, which the remote
+    /// checks against its screens; none takes them down. Owned by the frontend that asked:
+    /// taken down when it goes.
+    PeerOverlay {
+        #[serde(rename = "MachineId")]
+        machine_id: String,
+        #[serde(rename = "Bands", default)]
+        bands: Vec<Value>,
+    },
 }
 
 /// A request with the id its answer carries back.
@@ -392,6 +410,17 @@ pub struct Snapshot {
     /// this one — by the multi-PC pointer lock's shortcut. Additive.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The linked remotes where Windows drops the input this machine sends (multi-PC
+    /// mode, this machine their master): an elevated window has the focus there and
+    /// their agent is not elevated. By the name each goes by here. Additive; absent
+    /// when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub injection_blocked: Vec<crate::peers::BlockedRemote>,
+    /// The master whose mouse and keyboard drive this machine now, by the name it goes
+    /// by here (multi-PC mode, this machine its remote); `None` when no master's pointer
+    /// is on this machine. The other end of [`Self::driven_machine`]. Additive.
+    #[serde(default)]
+    pub driven_by: Option<String>,
     /// The other mouse-and-keyboard sharing tools running on this machine (Deskflow,
     /// Synergy, Barrier, Input Leap), as found at the last of the moments the agent looks
     /// (`crate::input_sharing`): never watched in between. Additive; absent when none.

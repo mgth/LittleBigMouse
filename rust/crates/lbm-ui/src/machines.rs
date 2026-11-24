@@ -40,6 +40,45 @@ pub struct Peer {
     pub problem: Option<String>,
     /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
     pub driven: bool,
+    /// Windows drops the input this machine sends it, and why. `None` when it is not
+    /// blocked, or does not say.
+    pub injection_blocked: Option<Blocked>,
+    /// Its mouse and keyboard drive this machine now: its pointer crossed onto it (it
+    /// is this machine's master).
+    pub drives: bool,
+}
+
+/// Why Windows drops the input this machine sends a remote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Blocked {
+    /// A window of a higher integrity level has the focus there: the name of its process
+    /// (empty when unknown).
+    Elevated(String),
+    /// Something the remote could not see: a secure desktop, most likely.
+    Unknown,
+}
+
+/// What the page says of a remote where Windows drops the input this machine sends. Only
+/// an integrity difference the remote saw advises running it elevated.
+pub fn injection_blocked(name: &str, blocked: &Blocked) -> String {
+    let process = match blocked {
+        Blocked::Elevated(process) => process,
+        Blocked::Unknown => {
+            return format!(
+                "Windows blocks the mouse and keyboard on {name} for now: a secure desktop, \
+                 such as a UAC prompt or the lock screen, may be showing there."
+            )
+        }
+    };
+    let window = if process.is_empty() {
+        "an elevated window".to_owned()
+    } else {
+        format!("an elevated window ({process})")
+    };
+    format!(
+        "Windows blocks the mouse and keyboard on {name}: {window} has the focus. \
+         Turn on \"Start with elevated privileges\" on {name}."
+    )
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -131,20 +170,22 @@ fn printed_fingerprint(ui: &mut egui::Ui, whose: &str, machine_id: &str) {
 }
 
 /// Which machine the mouse and keyboard go to, in words: said once a remote is linked,
-/// the only time it can be anything but this machine.
+/// the only time it can be anything but this machine — or, on a machine a master
+/// drives, while that master's pointer is on it.
 pub fn input_goes_to(state: &State) -> Option<String> {
     if !state.enabled {
         return None;
     }
+    if let Some(master) = state.peers.iter().find(|peer| peer.drives) {
+        return Some(format!(
+            "Driven by {}: its mouse and keyboard are on this machine",
+            named(master)
+        ));
+    }
     if let Some(peer) = state.peers.iter().find(|peer| peer.driven) {
-        let name = if peer.name.is_empty() {
-            "an unnamed machine"
-        } else {
-            peer.name.as_str()
-        };
         return Some(locked(
             state,
-            format!("The mouse and keyboard are on {name}"),
+            format!("The mouse and keyboard are on {}", named(peer)),
         ));
     }
     state
@@ -157,6 +198,15 @@ pub fn input_goes_to(state: &State) -> Option<String> {
                 "The mouse and keyboard are on this machine".to_owned(),
             )
         })
+}
+
+/// What `peer` is called in a sentence.
+fn named(peer: &Peer) -> &str {
+    if peer.name.is_empty() {
+        "an unnamed machine"
+    } else {
+        peer.name.as_str()
+    }
 }
 
 /// `words`, and that the pointer stays there when it is locked.
@@ -424,6 +474,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
         if peer.driven {
             crate::theme::status(ui, "Has the mouse and keyboard", crate::theme::ACCENT);
         }
+        if peer.drives {
+            crate::theme::status(ui, "Drives this machine", crate::theme::ACCENT);
+        }
     });
     let role = match (peer.role, peer.pending) {
         (_, true) => "Waiting for you to accept it",
@@ -446,6 +499,12 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
     }
     if let Some(problem) = &peer.problem {
         ui.colored_label(ui.visuals().error_fg_color, problem);
+    }
+    if let Some(blocked) = peer.injection_blocked.as_ref().filter(|_| peer.connected) {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            injection_blocked(name, blocked),
+        );
     }
     if peer.pending {
         ui.label("Check that the other machine shows this fingerprint:");
@@ -554,6 +613,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_blocked_remote_is_named_with_the_window_and_the_way_out() {
+        assert_eq!(
+            injection_blocked("vm124", &Blocked::Elevated("osk.exe".into())),
+            "Windows blocks the mouse and keyboard on vm124: an elevated window (osk.exe) \
+             has the focus. Turn on \"Start with elevated privileges\" on vm124."
+        );
+        assert!(
+            injection_blocked("vm124", &Blocked::Elevated(String::new()))
+                .contains(": an elevated window has the focus.")
+        );
+        // A short send with no foreground (a secure desktop): neither an elevated window
+        // nor the advice to elevate.
+        let unknown = injection_blocked("vm124", &Blocked::Unknown);
+        assert!(!unknown.contains("elevated"), "{unknown}");
+        assert!(unknown.contains("secure desktop"));
+    }
+
+    #[test]
     fn the_page_says_where_the_mouse_and_keyboard_are() {
         let laptop = Peer {
             machine_id: "aa".into(),
@@ -564,7 +641,9 @@ mod tests {
             pending: false,
             displays: 1,
             driven: false,
+            drives: false,
             problem: None,
+            injection_blocked: None,
         };
         let mut state = State {
             enabled: true,
@@ -599,6 +678,42 @@ mod tests {
         assert_eq!(input_goes_to(&state), None);
         state.enabled = false;
         state.peers.clear();
+        assert_eq!(input_goes_to(&state), None);
+    }
+
+    #[test]
+    fn a_driven_machine_says_which_master_drives_it() {
+        let desk = Peer {
+            machine_id: "dd".into(),
+            name: "desk".into(),
+            address: String::new(),
+            connected: true,
+            role: Role::Master,
+            pending: false,
+            displays: 0,
+            driven: false,
+            drives: false,
+            problem: None,
+            injection_blocked: None,
+        };
+        let mut state = State {
+            enabled: true,
+            peers: vec![desk],
+            ..State::default()
+        };
+        // A master linked, its pointer at home: nothing to say, as before.
+        assert_eq!(input_goes_to(&state), None);
+        state.peers[0].drives = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by desk: its mouse and keyboard are on this machine")
+        );
+        state.peers[0].name.clear();
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by an unnamed machine: its mouse and keyboard are on this machine")
+        );
+        state.enabled = false;
         assert_eq!(input_goes_to(&state), None);
     }
 

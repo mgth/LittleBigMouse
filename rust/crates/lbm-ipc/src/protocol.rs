@@ -240,6 +240,15 @@ pub enum Event {
         #[serde(rename = "Locked")]
         locked: bool,
     },
+    /// Multi-PC remote, Windows: what this hook injects for a master is blocked by the
+    /// system from now on (`block` set: the window in the foreground is of a higher
+    /// integrity level), or no longer is (`None`). Said on every change while a master
+    /// drives this machine, and again at the start of every session that begins
+    /// blocked. Never from a hook that injects nothing, nor on Linux.
+    InjectionBlocked {
+        #[serde(rename = "Block", default)]
+        block: Option<crate::peer::InjectionBlock>,
+    },
     /// An event this version does not know. A newer hook must leave a client's idea
     /// of the state unchanged rather than move it to the wrong one, which is what
     /// mapping an unknown name onto a known event would do.
@@ -269,6 +278,7 @@ impl Event {
             Event::ShortcutUnavailable { .. } => "ShortcutUnavailable",
             Event::ShortcutAvailable { .. } => "ShortcutAvailable",
             Event::PointerLocked { .. } => "PointerLocked",
+            Event::InjectionBlocked { .. } => "InjectionBlocked",
             Event::Unknown => "Unknown",
         }
     }
@@ -294,6 +304,10 @@ impl Event {
             Event::PointerLocked { locked } => {
                 if *locked { "locked" } else { "unlocked" }.to_owned()
             }
+            Event::InjectionBlocked { block: Some(block) } => {
+                format!("blocked by {}", block.process)
+            }
+            Event::InjectionBlocked { block: None } => "unblocked".to_owned(),
             _ => String::new(),
         }
     }
@@ -602,6 +616,10 @@ mod tests {
             },
             Event::PointerLocked { locked: true },
             Event::PointerLocked { locked: false },
+            Event::InjectionBlocked {
+                block: Some(crate::peer::InjectionBlock::elevated("osk.exe")),
+            },
+            Event::InjectionBlocked { block: None },
         ] {
             assert_eq!(parse_event(&event(&original)), Some(original.clone()));
         }

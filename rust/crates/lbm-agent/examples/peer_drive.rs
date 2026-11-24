@@ -15,6 +15,15 @@
 //! Script, positions in the remote's desktop pixels and codes as Linux input codes:
 //! `enter X Y`, `move X Y`, `leave`, `click|press|release left|right|middle|CODE`,
 //! `key|keydown|keyup CODE`, `wheel H V` (1/120ths of a notch), `sleep MS`.
+//! `rulers N` asks the remote to draw "Rulers on screens" on all its screens, measuring
+//! its `N`th screen (0 first), as a master's editor computes them from the `Displays` it
+//! was sent; `norulers` takes them down. What the remote says of them (`OverlayFailed`)
+//! is printed as it comes.
+//!
+//! It hears of blocks as a master does (`InjectionBlocked`, a Windows remote whose
+//! foreground window is elevated): each one is printed, and one said while the pointer
+//! is over there brings it home as the agent would — a `Leave` — the script's steps
+//! being skipped until its next `enter`.
 //!
 //! It opens no input device and drives nothing on this machine: everything it sends is
 //! typed on the command line.
@@ -38,6 +47,8 @@ const DISPLAYS_PATIENCE: Duration = Duration::from_secs(10);
 enum Step {
     Send(Vec<InputEvent>),
     Sleep(Duration),
+    /// Rulers measuring the remote's screen of that index; `None` takes them down.
+    Rulers(Option<usize>),
 }
 
 fn number<T: std::str::FromStr>(
@@ -113,6 +124,14 @@ fn script(words: Vec<String>) -> Result<Vec<Step>, String> {
                 horizontal: number(&mut words, "wheel")?,
                 vertical: number(&mut words, "wheel")?,
             }],
+            "rulers" => {
+                steps.push(Step::Rulers(Some(number(&mut words, "rulers")?)));
+                continue;
+            }
+            "norulers" => {
+                steps.push(Step::Rulers(None));
+                continue;
+            }
             "sleep" => {
                 steps.push(Step::Sleep(Duration::from_millis(number(
                     &mut words, "sleep",
@@ -160,7 +179,8 @@ async fn main() -> ExitCode {
 async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<(), String> {
     let identity = Identity::load_or_create(&directory).map_err(|e| e.to_string())?;
     println!("this machine: {}", identity.fingerprint());
-    let hello = Hello::new("peer_drive", env!("CARGO_PKG_VERSION"), Role::Master);
+    let mut hello = Hello::new("peer_drive", env!("CARGO_PKG_VERSION"), Role::Master);
+    hello.capabilities = vec![lbm_ipc::peer::INJECTION_BLOCKED_CAPABILITY.to_owned()];
     let options = link::Options::default();
     let pending = link::connect(address.as_str(), &identity, hello, options)
         .await
@@ -191,6 +211,7 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
         }
     })
     .await;
+    let mut screens = Vec::new();
     match displays {
         Ok(Ok((revision, displays))) => {
             let json = serde_json::json!({ "Revision": revision, "Displays": displays });
@@ -198,33 +219,135 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                 "{}",
                 serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?
             );
+            screens = displays;
         }
         Ok(Err(error)) => return Err(error),
         Err(_) => println!("no Displays within {DISPLAYS_PATIENCE:?}; playing the script anyway"),
     }
 
+    // What the remote says from now on, read beside the script.
+    let started = std::time::Instant::now();
+    let (blocks, mut blocked) = tokio::sync::mpsc::unbounded_channel();
+    let reader = tokio::spawn(async move {
+        while let Some(event) = link.next().await {
+            match event {
+                Event::Control(Control::InjectionBlocked { block }) => {
+                    println!(
+                        "<- {:>6} ms InjectionBlocked {block:?}",
+                        started.elapsed().as_millis()
+                    );
+                    let _ = blocks.send(block.is_some());
+                }
+                Event::Control(Control::InputReset) => {
+                    println!("<- {:>6} ms InputReset", started.elapsed().as_millis());
+                }
+                Event::Control(Control::OverlayFailed { revision, error }) => {
+                    println!(
+                        "<- {:>6} ms rulers {revision} not shown: {error}",
+                        started.elapsed().as_millis()
+                    );
+                }
+                Event::Closed(_) => break,
+                _ => {}
+            }
+        }
+    });
+    // The pointer is over there: an `Enter` sent and no `Leave` since.
+    let mut over_there = false;
+    // The last `Overlay` sent.
+    let mut revision = 0;
+    let come_home = |block: bool, over_there: &mut bool| -> bool {
+        let home = block && *over_there;
+        if home {
+            println!("   blocked over there: the pointer comes home");
+            *over_there = false;
+        }
+        home
+    };
     for step in steps {
+        while let Ok(block) = blocked.try_recv() {
+            if come_home(block, &mut over_there) {
+                send(&sender, vec![InputEvent::Leave], started).await?;
+            }
+        }
         match step {
             Step::Send(events) => {
-                println!("-> {events:?}");
+                let enters = matches!(events.first(), Some(InputEvent::Enter { .. }));
+                if !over_there && !enters && events != [InputEvent::Leave] {
+                    println!("   skipped (the pointer is home): {events:?}");
+                    continue;
+                }
+                over_there = enters || (over_there && events != [InputEvent::Leave]);
+                send(&sender, events, started).await?;
+            }
+            Step::Sleep(duration) => {
+                let deadline = tokio::time::Instant::now() + duration;
+                while let Ok(Some(block)) = tokio::time::timeout_at(deadline, blocked.recv()).await
+                {
+                    if come_home(block, &mut over_there) {
+                        send(&sender, vec![InputEvent::Leave], started).await?;
+                    }
+                }
+            }
+            Step::Rulers(measured) => {
+                let bands = match measured {
+                    Some(index) => rulers(&peer.fingerprint, &peer.hello.name, &screens, index)?,
+                    None => Vec::new(),
+                };
+                revision += 1;
+                println!(
+                    "-> {:>6} ms Overlay {revision}: {} band(s)",
+                    started.elapsed().as_millis(),
+                    bands.len()
+                );
                 sender
-                    .input(&encode(&events))
+                    .control(&Control::Overlay { revision, bands })
                     .await
                     .map_err(|e| format!("cannot send: {e}"))?;
             }
-            Step::Sleep(duration) => tokio::time::sleep(duration).await,
         }
     }
     sender.close("the script is over").await;
     // The Bye leaves before the link reports itself closed.
-    let _ = tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(event) = link.next().await {
-            if let Event::Closed(_) = event {
-                break;
-            }
-        }
-    })
-    .await;
+    let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
     println!("bye");
     Ok(())
+}
+
+async fn send(
+    sender: &link::LinkSender,
+    events: Vec<InputEvent>,
+    started: std::time::Instant,
+) -> Result<(), String> {
+    println!("-> {:>6} ms {events:?}", started.elapsed().as_millis());
+    sender
+        .input(&encode(&events))
+        .await
+        .map_err(|e| format!("cannot send: {e}"))
+}
+
+/// "Rulers on screens" for the remote's screens, measuring the `index`th, as a master's
+/// editor computes them: its screens merged into a layout of their own, placed as the
+/// remote places them, and `lbm_overlay::scene::from_layout`.
+fn rulers(
+    machine_id: &str,
+    name: &str,
+    screens: &[lbm_ipc::peer::PeerDisplay],
+    index: usize,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut layout = lbm_layout::model::Layout::new(Default::default());
+    lbm_display::peer::merge_peer(&mut layout, machine_id, name, screens);
+    layout.set_locations_from_system_configuration(false);
+    layout.anchor_on_primary();
+    let measured = layout
+        .monitors()
+        .get(index)
+        .map(|m| m.id.clone())
+        .ok_or_else(|| format!("the remote has no screen {index}"))?;
+    let bands =
+        lbm_overlay::scene::from_layout(&layout, lbm_overlay::Mode::Rulers, Some(&measured))?;
+    bands
+        .iter()
+        .map(|band| serde_json::to_value(band).map_err(|e| e.to_string()))
+        .collect()
 }

@@ -10,6 +10,12 @@
 //! like everything else, and the platforms take the icon down and put it back rather than
 //! grey it out — that is what the option meant in C#, where it set `Visible`.
 //!
+//! Multi-PC: the icon also says where the pointer is ([`Badge`]) — faded on a master
+//! whose mouse and keyboard went to another machine, dotted on the machine they drive.
+//! The tooltip says it too, but reading it takes the pointer onto the icon, which is
+//! where it is not while the other machine has it. The badge changes with the state the
+//! crossing publishes: nothing is polled.
+//!
 //! [`TrayModel`] is all of that; `linux` and `windows` only draw it.
 
 use std::sync::Arc;
@@ -18,7 +24,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request};
-use crate::icons::TrayIcon;
+use crate::icons::{Badge, TrayIcon};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -77,6 +83,8 @@ impl Action {
 /// What the tray shows and where its clicks go.
 pub struct TrayModel {
     icon: TrayIcon,
+    /// Where the multi-PC pointer is, over the engine's state.
+    badge: Badge,
     /// The engine's state in words, for the tooltip.
     state: String,
     /// The user asked for no icon at all.
@@ -99,6 +107,7 @@ impl TrayModel {
     ) -> Self {
         TrayModel {
             icon: TrayIcon::Dead,
+            badge: Badge::None,
             state: "Starting".to_owned(),
             hidden: false,
             calls,
@@ -143,11 +152,31 @@ impl TrayModel {
         .to_owned();
         // Multi-PC: the cursor alone says where the keyboard goes, and it may be on a
         // screen nobody is looking at.
-        if let Some(machine) = state["DrivenMachine"].as_str() {
+        let away = state["DrivenMachine"].as_str();
+        let driven_by = state["DrivenBy"].as_str();
+        if let Some(machine) = away {
             self.state = format!("{} · mouse and keyboard on {machine}", self.state);
         }
+        if let Some(master) = driven_by {
+            self.state = format!("{} · driven by {master}", self.state);
+        }
+        // Gone from here wins: a machine both driven and driving another has handed
+        // the pointer it was given on.
+        self.badge = match (away, driven_by) {
+            (Some(_), _) => Badge::Away,
+            (None, Some(_)) => Badge::Driven,
+            (None, None) => Badge::None,
+        };
         if state["PointerLocked"] == true {
             self.state = format!("{} · pointer locked", self.state);
+        }
+        // Multi-PC: a remote where Windows drops what this machine sends. Its pointer
+        // stood still and this one came back: the user deserves to know why.
+        for remote in state["InjectionBlocked"].as_array().into_iter().flatten() {
+            let name = remote["Name"].as_str().unwrap_or("a remote");
+            // Elevation is advised only for an integrity difference the remote saw.
+            let elevated = remote.get("Cause").is_none_or(|cause| cause == "Integrity");
+            self.state = format!("{}\n{}", self.state, injection_blocked(name, elevated));
         }
         // Another sharing tool moves the pointer whatever this engine does: said here,
         // where a user looks when the mouse leaves the screen with LittleBigMouse stopped.
@@ -160,6 +189,11 @@ impl TrayModel {
 
     pub fn icon(&self) -> TrayIcon {
         self.icon
+    }
+
+    /// Where the multi-PC pointer is, drawn over [`Self::icon`].
+    pub fn badge(&self) -> Badge {
+        self.badge
     }
 
     /// The engine's state in words.
@@ -203,6 +237,23 @@ pub async fn follow(
         if !show(state) {
             return;
         }
+    }
+}
+
+/// What the user is told about a remote where Windows drops the input this machine sends:
+/// `elevated` when the remote saw a window of a higher integrity level in front, the only
+/// case where running it elevated is the way out.
+pub fn injection_blocked(name: &str, elevated: bool) -> String {
+    if elevated {
+        format!(
+            "Windows blocks the mouse and keyboard on {name}: an elevated window has the \
+             focus (turn on \"Start with elevated privileges\" there)"
+        )
+    } else {
+        format!(
+            "Windows blocks the mouse and keyboard on {name} for now (a secure desktop, such \
+             as a UAC prompt or the lock screen, may be showing there)"
+        )
     }
 }
 
@@ -294,6 +345,31 @@ mod tests {
     }
 
     #[test]
+    fn the_badge_follows_the_pointer_across_machines() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running" }));
+        assert_eq!((tray.icon(), tray.badge()), (TrayIcon::On, Badge::None));
+        // The master, its pointer gone to the laptop, and back.
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": "laptop" }));
+        assert_eq!((tray.icon(), tray.badge()), (TrayIcon::On, Badge::Away));
+        tray.show(&json!({ "Engine": "Running", "DrivenMachine": null }));
+        assert_eq!(tray.badge(), Badge::None);
+        // The laptop, driven by the desk, then left.
+        tray.show(&json!({ "Engine": "Running", "DrivenBy": "desk" }));
+        assert_eq!((tray.icon(), tray.badge()), (TrayIcon::On, Badge::Driven));
+        assert_eq!(tray.state(), "Running · driven by desk");
+        tray.show(&json!({ "Engine": "Running", "DrivenBy": null }));
+        assert_eq!((tray.badge(), tray.state()), (Badge::None, "Running"));
+        // A badge over any state of the engine: the laptop's hook may be stopped.
+        tray.show(&json!({ "Engine": "Stopped", "DrivenBy": "desk" }));
+        assert_eq!((tray.icon(), tray.badge()), (TrayIcon::Off, Badge::Driven));
+        // Driven and driving on: the pointer is not here.
+        tray.show(&json!({ "Engine": "Running", "DrivenBy": "desk",
+                           "DrivenMachine": "tablet" }));
+        assert_eq!(tray.badge(), Badge::Away);
+    }
+
+    #[test]
     fn the_words_say_the_pointer_is_locked() {
         let (mut tray, _calls, _) = model();
         tray.show(&json!({ "Engine": "Running", "DrivenMachine": "laptop",
@@ -305,6 +381,32 @@ mod tests {
         tray.show(&json!({ "Engine": "Running", "PointerLocked": true }));
         assert_eq!(tray.state(), "Running · pointer locked");
         tray.show(&json!({ "Engine": "Running", "PointerLocked": false }));
+        assert_eq!(tray.state(), "Running");
+    }
+
+    #[test]
+    fn the_words_say_where_windows_blocks_the_input() {
+        let (mut tray, _calls, _) = model();
+        tray.show(&json!({ "Engine": "Running",
+            "InjectionBlocked": [{ "Name": "vm124", "Process": "osk.exe", "Cause": "Integrity" }] }));
+        assert_eq!(
+            tray.state(),
+            "Running\nWindows blocks the mouse and keyboard on vm124: an elevated window \
+             has the focus (turn on \"Start with elevated privileges\" there)"
+        );
+        // A cause the remote did not see (a secure desktop): no advice to elevate.
+        tray.show(&json!({ "Engine": "Running",
+            "InjectionBlocked": [{ "Name": "vm124", "Process": "", "Cause": "Unknown" }] }));
+        assert_eq!(
+            tray.state(),
+            "Running\nWindows blocks the mouse and keyboard on vm124 for now (a secure \
+             desktop, such as a UAC prompt or the lock screen, may be showing there)"
+        );
+        assert!(!tray.state().contains("elevated"));
+        // No longer blocked, and an older agent's state, say nothing about it.
+        tray.show(&json!({ "Engine": "Running", "InjectionBlocked": [] }));
+        assert_eq!(tray.state(), "Running");
+        tray.show(&json!({ "Engine": "Running" }));
         assert_eq!(tray.state(), "Running");
     }
 

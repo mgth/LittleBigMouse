@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use lbm_ipc::peer::PeerDisplay;
 use lbm_layout::model::Layout;
-use lbm_ui::machines::{Did, Peer, Role, State};
+use lbm_ui::machines::{Blocked, Did, Peer, Role, State};
 use serde_json::{json, Value};
 
 /// The agent's capability for everything here.
@@ -45,6 +45,8 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
         .map(|selected| selected.as_str().unwrap_or_default());
     // The remote the pointer is on; an agent older than the indicator says nothing.
     let driven = value["Driven"].as_str();
+    // The master whose pointer is on this machine; an agent older than that says nothing.
+    let driven_by = value["DrivenBy"].as_str();
     for entry in value["Peers"].as_array().into_iter().flatten() {
         let machine_id = text(entry, "MachineId");
         if machine_id.is_empty() {
@@ -73,6 +75,7 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             });
         }
         let driven = driven == Some(machine_id.as_str()) && !pending;
+        let drives = driven_by == Some(machine_id.as_str()) && !pending;
         peers.push(Peer {
             machine_id,
             name: text(entry, "Name"),
@@ -81,8 +84,18 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             role,
             pending,
             driven,
+            drives,
             displays: displays.len(),
             problem: link_problem(&entry["Problem"]),
+            // Said by the remote while linked; absent from an older agent's state.
+            injection_blocked: entry
+                .get("InjectionBlocked")
+                .filter(|block| block.is_object())
+                .map(|block| match block["Cause"].as_str() {
+                    // Absent: the first cause, the only one there was.
+                    None | Some("Integrity") => Blocked::Elevated(text(block, "Process")),
+                    Some(_) => Blocked::Unknown,
+                }),
         });
     }
     // Byte order of the fingerprints, as `Layout::hosts` sorts them: the order the agent
@@ -577,6 +590,47 @@ mod tests {
     }
 
     #[test]
+    fn a_blocked_remote_says_so_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut blocked = state(
+            json!([{"MachineId": "0a", "Name": "vm124", "Connected": true,
+            "Role": "Remote", "State": "Paired", "Displays": [display("eDP-1")]}]),
+        );
+        assert!(machines.heard(&blocked));
+        assert_eq!(
+            read(&blocked).unwrap().0.peers[0].injection_blocked,
+            None,
+            "an older agent says nothing"
+        );
+        let read_block = |state: &Value| read(state).unwrap().0.peers[0].injection_blocked.clone();
+        blocked["Peers"][0]["InjectionBlocked"] =
+            json!({"Process": "osk.exe", "Cause": "Integrity"});
+        assert_eq!(
+            read_block(&blocked),
+            Some(Blocked::Elevated("osk.exe".into()))
+        );
+        assert!(
+            !machines.heard(&blocked),
+            "a block is no reason to rebuild the map"
+        );
+        blocked["Peers"][0]["InjectionBlocked"] = json!({});
+        assert_eq!(
+            read_block(&blocked),
+            Some(Blocked::Elevated(String::new())),
+            "a process that could not be read is still a block, of the first cause"
+        );
+        // A short send with no foreground: a block whose cause the remote did not see,
+        // and a cause from a newer remote reads the same.
+        blocked["Peers"][0]["InjectionBlocked"] = json!({"Process": "", "Cause": "Unknown"});
+        assert_eq!(read_block(&blocked), Some(Blocked::Unknown));
+        blocked["Peers"][0]["InjectionBlocked"] = json!({"Cause": "Hypervisor"});
+        assert_eq!(read_block(&blocked), Some(Blocked::Unknown));
+        blocked["Peers"][0]["InjectionBlocked"] = Value::Null;
+        assert_eq!(read(&blocked).unwrap().0.peers[0].injection_blocked, None);
+    }
+
+    #[test]
     fn the_driven_remote_is_marked_and_moves_no_screen() {
         let mut machines = Controller::default();
         machines.connected(&["MultiPc".into()]);
@@ -601,6 +655,42 @@ mod tests {
         assert_eq!(read.pointer_lock_shortcut, "Ctrl+Alt+L");
         assert!(read.pointer_locked);
         assert!(!machines.heard(&driven), "nor is the lock");
+    }
+
+    #[test]
+    fn the_master_driving_this_machine_is_marked_and_moves_no_screen() {
+        let mut machines = Controller::default();
+        machines.connected(&["MultiPc".into()]);
+        let mut driven = state(json!([
+            {"MachineId": "dd", "Name": "desk", "Connected": true,
+             "Role": "Master", "State": "Paired"},
+            {"MachineId": "ee", "Name": "other", "Connected": true,
+             "Role": "Master", "State": "Paired"},
+        ]));
+        machines.heard(&driven);
+        let drives = |value: &Value| -> Vec<bool> {
+            read(value)
+                .unwrap()
+                .0
+                .peers
+                .iter()
+                .map(|p| p.drives)
+                .collect()
+        };
+        assert_eq!(
+            drives(&driven),
+            [false, false],
+            "an older agent says nothing"
+        );
+        driven["DrivenBy"] = json!("dd");
+        assert_eq!(drives(&driven), [true, false]);
+        assert!(
+            !read(&driven).unwrap().0.peers[0].driven,
+            "it drives, not driven"
+        );
+        assert!(!machines.heard(&driven), "being driven rebuilds no map");
+        driven["DrivenBy"] = Value::Null;
+        assert_eq!(drives(&driven), [false, false]);
     }
 
     #[test]

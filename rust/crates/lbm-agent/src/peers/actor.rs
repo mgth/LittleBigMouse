@@ -9,18 +9,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use lbm_ipc::input::{InputEvent, LOCKS_CAPABILITY};
-use lbm_ipc::peer::{Peer, PeerDisplay, PeerWallpaper};
+use lbm_ipc::peer::{
+    InjectionBlock, Peer, PeerDisplay, PeerWallpaper, INJECTION_BLOCKED_CAPABILITY,
+};
 use lbm_net::identity::Identity;
 use lbm_net::link::{
     self, CloseReason, Event, Link, LinkError, LinkSender, Listener, PeerInfo, Pending,
 };
 use lbm_net::peers::{PairedPeer, PeerStore};
-use lbm_net::wire::{Control, Hello, Role};
+use lbm_net::wire::{Control, Hello, Role, OVERLAY_CAPABILITY};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use super::hook_input::{HookInput, Sink, Target};
+use super::overlay::{self, Painter, Shown};
 use super::{LinkProblem, Notice, PeerEntry, PeerState, PeersState, ProblemKind};
 
 /// The first wait before calling a remote back, doubled at every failure up to
@@ -74,6 +77,8 @@ pub(super) enum Command {
     PointerLocked(bool),
     /// Whether this machine's hook reads the lock keys' state (`Service::hook_reads_locks`).
     HookReadsLocks(bool),
+    /// This machine's hook says Windows drops what it injects, or no longer does.
+    InjectionBlocked(Option<InjectionBlock>),
     /// `SelectInput` to a remote of this machine.
     SelectInput {
         machine_id: String,
@@ -88,6 +93,12 @@ pub(super) enum Command {
         value: u16,
         request: Option<u64>,
         error: Option<String>,
+    },
+    /// The overlays this machine's editor wants on the screens of its remote
+    /// `machine_id` (`Control::Overlay`); empty takes them down.
+    Overlay {
+        machine_id: String,
+        bands: Vec<Value>,
     },
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
@@ -117,11 +128,24 @@ enum Internal {
         machine_id: String,
         reason: CloseReason,
     },
+    /// A master's stream crossed onto this machine (`driving`) or left it: its `Enter`
+    /// and `Leave` as they reach the hook, a session ended here, the end of the link.
+    Driving {
+        id: u64,
+        machine_id: String,
+        driving: bool,
+    },
     Expired {
         machine_id: String,
         serial: u64,
     },
     Redial(String),
+    /// The overlays a master asked for, shown under `generation`, are down: they could
+    /// not be shown, or a screen changed under them.
+    OverlayFailed {
+        generation: u64,
+        error: String,
+    },
 }
 
 /// What the manager starts with.
@@ -137,6 +161,8 @@ pub(super) struct Start {
     pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
+    /// What draws the overlays a master of this machine asks for.
+    pub painter: Painter,
 }
 
 /// An unknown machine, waiting for the user to say whether it is trusted.
@@ -157,6 +183,25 @@ struct Live {
     /// The wallpapers it last sent (a remote's only): their revision on that link, the
     /// stamp the frontends know them by, and the pictures.
     wallpapers: Option<(u64, u64, Vec<PeerWallpaper>)>,
+    /// What it last said of the input this machine sends it (a remote's only):
+    /// `Control::InjectionBlocked`.
+    blocked: Option<InjectionBlock>,
+    /// The highest revision of `Overlay` it sent (a master's only): an older one that
+    /// overtook it on its way is stale.
+    overlay_revision: u64,
+}
+
+/// The overlays a master of this machine asked for, while they are shown.
+struct Overlaid {
+    /// The master's machine id and the id of the link it asked on: they go with it.
+    master: (String, u64),
+    /// The revision of what is shown, and the bands as sent, checked again when this
+    /// machine's screens change.
+    revision: u64,
+    bands: Vec<Value>,
+    /// What the surfaces' failures are told by.
+    generation: u64,
+    shown: Box<dyn Shown>,
 }
 
 struct Actor {
@@ -204,9 +249,28 @@ struct Actor {
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
     pointer_locked: bool,
+    /// The last thing sent to the masters about this machine's injection being blocked,
+    /// still on its way: the next waits for it, so that a block and its end arrive in
+    /// the order they happened.
+    block_sent: Option<tokio::task::JoinHandle<()>>,
+    /// The master whose stream drives this machine now, with the id of its link
+    /// ([`PeersState::driven_by`]).
+    driven_by: Option<(String, u64)>,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
+    /// As a master: the overlays this machine's editor wants on each remote's screens,
+    /// sent again to a remote that links anew; the last revision given, and the last
+    /// sent to each remote (a failure of an earlier one is old news); and why a remote
+    /// said it could not show them.
+    overlays: HashMap<String, Vec<Value>>,
+    overlay_revision: u64,
+    overlay_sent: HashMap<String, u64>,
+    overlay_errors: HashMap<String, String>,
+    /// As a remote: the overlays a master asked for, while shown.
+    overlaid: Option<Overlaid>,
+    overlay_generation: u64,
+    painter: Painter,
     next_id: u64,
     next_serial: u64,
     /// Connections being made or accepted, and timers (see [`Actor::spawn`]).
@@ -214,9 +278,15 @@ struct Actor {
 }
 
 /// What this node can do beyond the protocol's baseline: its hook reads the master's
-/// lock keys (the hook ships with this agent, which retires one of another protocol).
+/// lock keys (the hook ships with this agent, which retires one of another protocol),
+/// and it tells and hears when a remote's injection is blocked.
 fn with_capabilities(mut hello: Hello) -> Hello {
     hello.capabilities.push(LOCKS_CAPABILITY.to_owned());
+    // It draws the rulers its master asks for (`Control::Overlay`).
+    hello.capabilities.push(OVERLAY_CAPABILITY.to_owned());
+    hello
+        .capabilities
+        .push(INJECTION_BLOCKED_CAPABILITY.to_owned());
     hello
 }
 
@@ -289,9 +359,18 @@ pub(super) async fn run(
         relaying: None,
         pointer_lock_shortcut: start.pointer_lock_shortcut,
         pointer_locked: false,
+        block_sent: None,
+        driven_by: None,
         internal,
         notices: start.notices,
         published: None,
+        overlays: HashMap::new(),
+        overlay_revision: 0,
+        overlay_sent: HashMap::new(),
+        overlay_errors: HashMap::new(),
+        overlaid: None,
+        overlay_generation: 0,
+        painter: start.painter,
         next_id: 0,
         next_serial: 0,
         tasks: JoinSet::new(),
@@ -385,6 +464,10 @@ impl Actor {
                     role: paired.role,
                     state: PeerState::Paired,
                     problem: self.problems.get(&paired.machine_id).cloned(),
+                    overlay_error: self.overlay_errors.get(&paired.machine_id).cloned(),
+                    injection_blocked: live
+                        .filter(|live| live.info.hello.role == Role::Remote)
+                        .and_then(|live| live.blocked.clone()),
                 }
             })
             .collect();
@@ -408,6 +491,8 @@ impl Actor {
                 role: info.hello.role,
                 state: PeerState::Pending,
                 problem: None,
+                overlay_error: None,
+                injection_blocked: None,
             }
         }));
         PeersState {
@@ -429,6 +514,10 @@ impl Actor {
                 .map(|(machine_id, _)| machine_id.clone()),
             pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
             pointer_locked: self.pointer_locked,
+            driven_by: self
+                .driven_by
+                .as_ref()
+                .map(|(machine_id, _)| machine_id.clone()),
             peers,
         }
     }
@@ -466,6 +555,7 @@ impl Actor {
             Command::PointerLockShortcut(shortcut) => self.pointer_lock_shortcut = shortcut,
             Command::PointerLocked(locked) => self.pointer_locked = locked,
             Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
+            Command::InjectionBlocked(block) => self.tell_masters_blocked(block),
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
                 self.retarget();
@@ -483,6 +573,7 @@ impl Actor {
                 request,
                 error,
             } => self.input_switched(&machine_id, display, value, request, error),
+            Command::Overlay { machine_id, bands } => self.overlay(machine_id, bands),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -509,6 +600,11 @@ impl Actor {
                 machine_id,
                 reason,
             } => self.closed(id, &machine_id, reason),
+            Internal::Driving {
+                id,
+                machine_id,
+                driving,
+            } => self.driving(id, machine_id, driving),
             Internal::Expired { machine_id, serial } => {
                 if self
                     .pending
@@ -522,6 +618,16 @@ impl Actor {
             Internal::Redial(machine_id) => {
                 self.redial_scheduled.remove(&machine_id);
                 self.call_back(&machine_id);
+            }
+            Internal::OverlayFailed { generation, error } => {
+                if self
+                    .overlaid
+                    .as_ref()
+                    .is_some_and(|o| o.generation == generation)
+                {
+                    let overlaid = self.overlaid.take().expect("checked above");
+                    self.overlay_failed(&overlaid.master, overlaid.revision, error);
+                }
             }
         }
     }
@@ -641,6 +747,8 @@ impl Actor {
                 PeerState::Pending
             },
             problem: None,
+            overlay_error: None,
+            injection_blocked: None,
         }
     }
 
@@ -801,17 +909,30 @@ impl Actor {
                 self.send_wallpapers(&sender);
             }
         }
+        // This machine is the master: the rulers its editor shows, if it shows any.
+        if info.hello.role == Role::Remote {
+            if let Some(bands) = self.overlays.get(&machine_id).cloned() {
+                self.overlay_errors.remove(&machine_id);
+                if let Err(error) = self.send_overlay(&machine_id, &info.hello, &sender, bands) {
+                    self.overlay_errors.insert(machine_id.clone(), error);
+                }
+            }
+        }
         let live = Live {
             id,
             sender,
             info,
             displays: None,
             wallpapers: None,
+            overlay_revision: 0,
+            blocked: None,
         };
-        if let Some(older) = self.links.insert(machine_id, live) {
+        if let Some(older) = self.links.insert(machine_id.clone(), live) {
             tokio::spawn(async move {
                 older.sender.close("replaced by a newer connection").await;
             });
+            // What the older link asked to be shown goes with it.
+            self.overlay_link_gone(&machine_id, older.id);
         }
         self.select();
     }
@@ -932,6 +1053,36 @@ impl Actor {
                 );
                 self.hook.restart();
             }
+            // The remote's injection is blocked: Windows drops what this machine sends
+            // there, pointer motion included. Shown until it says otherwise; and if the
+            // pointer is over there now, it is brought home rather than left frozen on
+            // a screen nobody can act on — the same end of the hop as `InputReset`.
+            Control::InjectionBlocked { block } if live.info.hello.role == Role::Remote => {
+                match &block {
+                    Some(block) if block.cause == lbm_ipc::peer::BlockCause::Integrity => eprintln!(
+                        "[lbm-agent] multi-PC: Windows blocks the input sent to {}: {} has the focus there",
+                        live.info.hello.name,
+                        if block.process.is_empty() { "an elevated window" } else { &block.process }
+                    ),
+                    Some(_) => eprintln!(
+                        "[lbm-agent] multi-PC: Windows blocks the input sent to {}, cause unknown there",
+                        live.info.hello.name
+                    ),
+                    None => eprintln!(
+                        "[lbm-agent] multi-PC: the input sent to {} is no longer blocked",
+                        live.info.hello.name
+                    ),
+                }
+                let blocked = block.is_some();
+                live.blocked = block;
+                if blocked
+                    && self.hook.driven()
+                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
+                {
+                    eprintln!("[lbm-agent] multi-PC: the pointer comes home");
+                    self.hook.restart();
+                }
+            }
             // Only this machine's master may switch its monitors: a remote of this
             // machine has no say over them, and an unpaired machine never gets a link.
             Control::SelectInput {
@@ -971,11 +1122,49 @@ impl Actor {
                     live.info.hello.name
                 );
             }
+            Control::Overlay { revision, bands } if live.info.hello.role == Role::Master => {
+                if revision <= live.overlay_revision {
+                    return;
+                }
+                live.overlay_revision = revision;
+                self.show_overlay((machine_id.to_owned(), id), revision, bands);
+            }
+            Control::OverlayFailed { revision, error } if live.info.hello.role == Role::Remote => {
+                eprintln!(
+                    "[lbm-agent] multi-PC: {} cannot show the rulers: {error}",
+                    live.info.hello.name
+                );
+                if self.overlays.contains_key(machine_id)
+                    && self.overlay_sent.get(machine_id) == Some(&revision)
+                {
+                    self.overlay_errors.insert(machine_id.to_owned(), error);
+                }
+            }
             _ => {}
         }
     }
 
+    /// A master's stream crossed onto this machine, or left it. Only the link of the
+    /// master that drives says it left: a second master's `Leave` (or the end of its
+    /// link) says nothing of the first one's pointer.
+    fn driving(&mut self, id: u64, machine_id: String, driving: bool) {
+        let link = (machine_id, id);
+        if driving {
+            if self.links.get(&link.0).is_some_and(|l| l.id == id) {
+                if self.driven_by.as_ref() != Some(&link) {
+                    eprintln!("[lbm-agent] multi-PC: driven by {}", link.0);
+                }
+                self.driven_by = Some(link);
+            }
+        } else if self.driven_by.as_ref() == Some(&link) {
+            eprintln!("[lbm-agent] multi-PC: no longer driven by {}", link.0);
+            self.driven_by = None;
+        }
+    }
+
     fn closed(&mut self, id: u64, machine_id: &str, reason: CloseReason) {
+        // The end of the stream is its `Leave`, whatever came before it.
+        self.driving(id, machine_id.to_owned(), false);
         if !self.links.get(machine_id).is_some_and(|l| l.id == id) {
             return;
         }
@@ -987,6 +1176,7 @@ impl Actor {
         if let Some(problem) = LinkProblem::of_close(&reason) {
             self.problem(machine_id, problem);
         }
+        self.overlay_link_gone(machine_id, id);
         self.select();
         self.schedule_redial(machine_id);
     }
@@ -1146,6 +1336,40 @@ impl Actor {
         });
     }
 
+    /// Tells every master linked to this machine that heard of it
+    /// ([`INJECTION_BLOCKED_CAPABILITY`]) what this machine's hook said of its injection.
+    /// In a task of its own, as `Displays` is, but after the previous word: two of them
+    /// overtaking each other would leave the master showing the wrong one.
+    fn tell_masters_blocked(&mut self, block: Option<InjectionBlock>) {
+        let masters: Vec<LinkSender> = self
+            .links
+            .values()
+            .filter(|live| {
+                live.info.hello.role == Role::Master
+                    && live
+                        .info
+                        .hello
+                        .capabilities
+                        .iter()
+                        .any(|c| c == INJECTION_BLOCKED_CAPABILITY)
+            })
+            .map(|live| live.sender.clone())
+            .collect();
+        if masters.is_empty() {
+            return;
+        }
+        let message = Control::InjectionBlocked { block };
+        let previous = self.block_sent.take();
+        self.block_sent = Some(tokio::spawn(async move {
+            if let Some(previous) = previous {
+                let _ = previous.await;
+            }
+            for sender in masters {
+                let _ = sender.control(&message).await;
+            }
+        }));
+    }
+
     /// Records why linking with a paired machine went wrong, for the state to show. A
     /// machine this one does not keep has no row to show it on.
     fn problem(&mut self, machine_id: &str, problem: LinkProblem) {
@@ -1162,6 +1386,15 @@ impl Actor {
         }
         self.displays = displays;
         self.revision += 1;
+        // Rulers drawn for the screens as they were may no longer fall where they should:
+        // checked again, and taken down if not. The master hears of the change through
+        // `Displays` below and sends rulers for the screens as they are.
+        if let Some(overlaid) = &self.overlaid {
+            if let Err(error) = overlay::check(&overlaid.bands, &self.displays) {
+                let overlaid = self.overlaid.take().expect("checked above");
+                self.overlay_failed(&overlaid.master, overlaid.revision, error);
+            }
+        }
         let masters: Vec<LinkSender> = self
             .links
             .values()
@@ -1241,9 +1474,154 @@ impl Actor {
         });
     }
 
+    //==================//
+    // Overlays         //
+    //==================//
+
+    /// As a master: the editor wants `bands` on the screens of its remote `machine_id`
+    /// (none: taken down). Kept, so that a remote linking anew gets them again, and sent
+    /// now if the remote is linked and draws overlays at all.
+    fn overlay(&mut self, machine_id: String, bands: Vec<Value>) {
+        self.overlay_errors.remove(&machine_id);
+        let known = self.overlays.contains_key(&machine_id);
+        if bands.is_empty() {
+            self.overlays.remove(&machine_id);
+            if !known {
+                return;
+            }
+        } else {
+            self.overlays.insert(machine_id.clone(), bands.clone());
+        }
+        let Some(live) = self
+            .links
+            .get(&machine_id)
+            .filter(|live| live.info.hello.role == Role::Remote)
+        else {
+            return;
+        };
+        let (hello, sender) = (live.info.hello.clone(), live.sender.clone());
+        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands) {
+            self.overlay_errors.insert(machine_id, error);
+        }
+    }
+
+    /// Sends `Overlay` to a remote under a new revision, in a task of its own as
+    /// `Displays` is — if it announced it draws them. An older remote would ignore the
+    /// message; its user is told why nothing shows instead.
+    fn send_overlay(
+        &mut self,
+        machine_id: &str,
+        hello: &Hello,
+        sender: &LinkSender,
+        bands: Vec<Value>,
+    ) -> Result<(), String> {
+        if !hello.capabilities.iter().any(|c| c == OVERLAY_CAPABILITY) {
+            return if bands.is_empty() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{} runs a LittleBigMouse that cannot show rulers",
+                    hello.name
+                ))
+            };
+        }
+        self.overlay_revision += 1;
+        self.overlay_sent
+            .insert(machine_id.to_owned(), self.overlay_revision);
+        let message = Control::Overlay {
+            revision: self.overlay_revision,
+            bands,
+        };
+        let sender = sender.clone();
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+        Ok(())
+    }
+
+    /// As a remote: what the master on link `master` asked to be shown, under `revision`.
+    /// Nothing from one master is shown on top of another's: the latest asked wins.
+    fn show_overlay(&mut self, master: (String, u64), revision: u64, bands: Vec<Value>) {
+        if bands.is_empty() {
+            if self.overlaid.as_ref().is_some_and(|o| o.master == master) {
+                self.overlaid = None;
+                eprintln!("[lbm-agent] multi-PC: the master's rulers are taken down");
+            }
+            return;
+        }
+        let checked = match overlay::check(&bands, &self.displays) {
+            Ok(checked) => checked,
+            Err(error) => {
+                if self.overlaid.as_ref().is_some_and(|o| o.master == master) {
+                    self.overlaid = None;
+                }
+                return self.overlay_failed(&master, revision, error);
+            }
+        };
+        if let Some(overlaid) = self.overlaid.as_mut().filter(|o| o.master == master) {
+            overlaid.shown.update(checked);
+            overlaid.revision = revision;
+            overlaid.bands = bands;
+            return;
+        }
+        // Another master's, if any, goes first.
+        self.overlaid = None;
+        self.overlay_generation += 1;
+        let generation = self.overlay_generation;
+        let internal = self.internal.clone();
+        let on_error = Box::new(move |error| {
+            let _ = internal.send(Internal::OverlayFailed { generation, error });
+        });
+        let count = checked.len();
+        match self.painter.paint(checked, on_error) {
+            Ok(shown) => {
+                eprintln!("[lbm-agent] multi-PC: showing {count} ruler(s) for the master");
+                self.overlaid = Some(Overlaid {
+                    master,
+                    revision,
+                    bands,
+                    generation,
+                    shown,
+                });
+            }
+            Err(error) => self.overlay_failed(&master, revision, error),
+        }
+    }
+
+    /// As a remote: tells the master why the overlays of `revision` are not shown.
+    fn overlay_failed(&self, master: &(String, u64), revision: u64, error: String) {
+        eprintln!("[lbm-agent] multi-PC: the master's rulers are not shown: {error}");
+        let Some(live) = self.links.get(&master.0).filter(|l| l.id == master.1) else {
+            return;
+        };
+        let sender = live.sender.clone();
+        let message = Control::OverlayFailed { revision, error };
+        tokio::spawn(async move {
+            let _ = sender.control(&message).await;
+        });
+    }
+
+    /// Link `id` with `machine_id` is gone: what it asked this machine to show goes too.
+    fn overlay_link_gone(&mut self, machine_id: &str, id: u64) {
+        if self
+            .overlaid
+            .as_ref()
+            .is_some_and(|o| o.master.0 == machine_id && o.master.1 == id)
+        {
+            self.overlaid = None;
+            eprintln!("[lbm-agent] multi-PC: the master's link ended: its rulers are taken down");
+        }
+    }
+
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
+        if self.overlaid.take().is_some() {
+            eprintln!("[lbm-agent] multi-PC: the rulers of the master are taken down");
+        }
+        self.overlays.clear();
+        self.overlay_sent.clear();
         self.selected = None;
+        self.driven_by = None;
         self.relaying = None;
         self.hook.set_target(None);
         self.pending.clear();
@@ -1285,12 +1663,26 @@ async fn forward(
     // here: the end of the link ends it, whether a session is under way or the master
     // left cleanly, so the hook does not go on holding a client for a master gone.
     let mut used = false;
+    // This master's pointer is on this machine: its `Enter` reached the hook, and
+    // neither its `Leave` nor the end of its session here has since. Told to the
+    // manager as it changes, for the state.
+    let mut driving = false;
+    let drive = |driving: &mut bool, now: bool| {
+        if std::mem::replace(driving, now) != now {
+            let _ = internal.send(Internal::Driving {
+                id,
+                machine_id: machine_id.clone(),
+                driving: now,
+            });
+        }
+    };
     let reason = loop {
         let event = tokio::select! {
             lost = hook.lost() => {
                 // A batch of the session never reached the hook, or reached it on a
                 // connection that ended since by no doing of this link's (the hook
-                // went, a write failed or took too long): the session is over there,
+                // went, a write failed or took too long, another master's stream ended
+                // and closed the connection they share): the session is over there,
                 // and what follows is ignored until an `Enter`. The master is told, as
                 // after a full queue below. Batches lost before the session began say
                 // nothing of it.
@@ -1301,6 +1693,7 @@ async fn forward(
                         "[lbm-agent] multi-PC: the hook lost input of the session: \
                          the master is told"
                     );
+                    drive(&mut driving, false);
                     reset(&link);
                 }
                 continue;
@@ -1315,7 +1708,11 @@ async fn forward(
                     if leaves {
                         session = None;
                         reset_said = false;
+                        drive(&mut driving, false);
                     } else if crosses || !reset_said {
+                        if crosses {
+                            drive(&mut driving, true);
+                        }
                         reset_said = false;
                         session.get_or_insert(number);
                     }
@@ -1331,6 +1728,7 @@ async fn forward(
                     }
                     session = None;
                     reset_said = true;
+                    drive(&mut driving, false);
                     reset(&link);
                 }
             }

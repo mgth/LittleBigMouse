@@ -15,6 +15,7 @@
 //! moment this one returns.
 
 use std::ffi::OsStr;
+use std::path::Path;
 
 /// C#'s `TOKEN_ELEVATION_TYPE`: no split token (a standard user, or UAC off), an elevated
 /// token, or the filtered token of an administrator — the only one UAC can elevate.
@@ -50,6 +51,34 @@ pub fn relaunch_arguments(
     variables.sort();
     forwarded.extend(variables);
     forwarded
+}
+
+/// The options whose value is a path.
+const PATH_OPTIONS: &[&str] = &["--config-dir", "--data-dir", "--hook", "--ui"];
+
+/// `args` with every relative path option resolved against `launch_dir`.
+///
+/// The relaunch does not start where this agent was started: `relaunch` gives
+/// `ShellExecuteW` the executable's own directory, so a relative `--config-dir profiles`
+/// forwarded as typed would name another directory in the elevated agent — another
+/// profile, read and written under the installation directory. Resolving here keeps
+/// the meaning the user gave it; absolute paths and every other argument pass unchanged.
+pub fn anchor_path_arguments(
+    args: impl IntoIterator<Item = String>,
+    launch_dir: &Path,
+) -> Vec<String> {
+    let mut anchored = Vec::new();
+    let mut takes_path = false;
+    for arg in args {
+        let arg = if takes_path && Path::new(&arg).is_relative() {
+            launch_dir.join(&arg).to_string_lossy().into_owned()
+        } else {
+            arg
+        };
+        takes_path = PATH_OPTIONS.contains(&arg.as_str());
+        anchored.push(arg);
+    }
+    anchored
 }
 
 /// The `--env:NAME=value` arguments applied to this environment, and the rest given back
@@ -246,6 +275,55 @@ mod tests {
                 r"--env:LBM_HOOK_ENDPOINT=\\.\pipe\x",
                 "--env:lbm_trace=1",
             ]
+        );
+    }
+
+    #[test]
+    fn a_relative_path_option_keeps_its_meaning_across_the_relaunch() {
+        // Distinct launch and executable directories: the relaunch starts in the
+        // executable's, so a path left relative would move.
+        let launch = std::env::temp_dir().join("launch");
+        let absolute = std::env::temp_dir().join("elsewhere").join("data");
+        let args = [
+            "--config-dir",
+            "profiles",
+            "--data-dir",
+            absolute.to_str().unwrap(),
+            "--hook",
+            "bin/hook.exe",
+            "--ui",
+            "app.exe",
+            "--fake-hook",
+            "--no-tray",
+        ]
+        .map(str::to_owned);
+        let at = |relative: &str| launch.join(relative).to_string_lossy().into_owned();
+        assert_eq!(
+            anchor_path_arguments(args, &launch),
+            [
+                "--config-dir".to_owned(),
+                at("profiles"),
+                "--data-dir".to_owned(),
+                absolute.to_string_lossy().into_owned(),
+                "--hook".to_owned(),
+                at("bin/hook.exe"),
+                "--ui".to_owned(),
+                at("app.exe"),
+                "--fake-hook".to_owned(),
+                "--no-tray".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn only_the_value_of_a_path_option_is_resolved() {
+        let launch = std::env::temp_dir();
+        let args = ["--no-tray", "profiles", "--config-dir"].map(str::to_owned);
+        // A bare word is no path option's value, and an option missing its value is
+        // left for the argument parser to refuse.
+        assert_eq!(
+            anchor_path_arguments(args, &launch),
+            ["--no-tray", "profiles", "--config-dir"]
         );
     }
 

@@ -44,6 +44,13 @@ pub enum Command {
         #[serde(rename = "Desktop", default, skip_serializing_if = "Option::is_none")]
         desktop: Option<Desktop>,
     },
+    /// The desktop this machine's screens make, in pixels, without a layout: what a
+    /// hook that is not routing needs to inject a remote stream's positions (the
+    /// multi-PC mode), when no [`Command::Load`] carried it. Arms nothing.
+    Desktop {
+        #[serde(rename = "Desktop")]
+        desktop: Desktop,
+    },
     /// Install the hook and route.
     Run,
     /// Unhook.
@@ -418,6 +425,20 @@ mod tests {
                 width: 5760,
                 height: 1200
             })
+        );
+    }
+
+    #[test]
+    fn a_desktop_alone_goes_through_the_wire() {
+        let desktop = Desktop {
+            left: 0,
+            top: 0,
+            width: 5388,
+            height: 1728,
+        };
+        assert_eq!(
+            parse(&frame(&[Command::Desktop { desktop }])),
+            [Command::Desktop { desktop }]
         );
     }
 

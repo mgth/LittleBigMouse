@@ -382,23 +382,43 @@ fn scan_sharing() -> Vec<lbm_ipc::sharing::Running> {
     }
 }
 
+/// A process of this test whose `comm` is `name`: a shell script of that name (Linux
+/// names a script's process after the script). It says when it runs, then waits on its
+/// stdin, held open by the returned child, until killed. Not a link to `sleep`: a
+/// multi-call `sleep` (uutils, the CI runner's) refuses another name and quits at once.
+#[cfg(target_os = "linux")]
+fn tool_like(dir: &std::path::Path, name: &str) -> std::process::Child {
+    use std::io::BufRead;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::{Command, Stdio};
+    let script = dir.join(name);
+    std::fs::write(&script, "#!/bin/sh\necho ready\nread line\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = Command::new(script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut said = String::new();
+    std::io::BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut said)
+        .unwrap();
+    assert_eq!(said, "ready\n");
+    child
+}
+
 /// Reported on v6 d51f72d7: Deskflow quit, the bar still said it ran. With the real
 /// scan and the real watch, a process found leaves the state as soon as it ends — no
-/// look in between. The process is this test's own, named like Deskflow's core (a link
-/// to `sleep`); a real Deskflow on the machine may be found too and is left alone.
+/// look in between. The process is this test's own, named like Deskflow's core (a
+/// script of that name, see [`tool_like`]); a real Deskflow on the machine may be found
+/// too and is left alone.
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn a_sharing_tool_that_quits_leaves_the_state_at_once() {
     let dir = tempfile::tempdir().unwrap();
     let (hook_endpoint, api_endpoint) = endpoints(&dir);
     let _fake = FakeHook::bind(&hook_endpoint).unwrap();
-    let sleep = ["/usr/bin/sleep", "/bin/sleep"]
-        .into_iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .expect("a sleep binary");
-    let core = dir.path().join("deskflow-core");
-    std::os::unix::fs::symlink(sleep, &core).unwrap();
-    let mut child = std::process::Command::new(&core).arg("60").spawn().unwrap();
+    let mut child = tool_like(dir.path(), "deskflow-core");
     let pid = child.id();
 
     let (hook, signals) = HookClient::spawn(hook_endpoint);

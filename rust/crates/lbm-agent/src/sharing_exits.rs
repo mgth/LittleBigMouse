@@ -59,10 +59,14 @@ impl Exits {
                 continue;
             }
             match Watch::start(running, self.tx.clone()) {
-                Some(watch) => {
+                Start::Watching(watch) => {
                     self.watches.insert(running.pid, watch);
                 }
-                None => eprintln!(
+                // Ended between the look and now: said ended at once, nothing to watch.
+                Start::Gone => {
+                    let _ = self.tx.send(running.pid);
+                }
+                Start::Refused => eprintln!(
                     "[lbm-agent] cannot watch {} ({}) for its end: said until the next look",
                     running.process, running.pid
                 ),
@@ -81,27 +85,37 @@ impl Exits {
     }
 }
 
+/// What starting a watch came to.
+enum Start {
+    Watching(Watch),
+    /// No process has that id any more: it ended between the look and the watch.
+    Gone,
+    /// The process is there, but the system will not let it be waited on.
+    Refused,
+}
+
 #[cfg(target_os = "linux")]
 struct Watch(tokio::task::JoinHandle<()>);
 
 #[cfg(target_os = "linux")]
 impl Watch {
-    fn start(running: &Running, tx: UnboundedSender<u32>) -> Option<Watch> {
+    fn start(running: &Running, tx: UnboundedSender<u32>) -> Start {
         use std::os::fd::{FromRawFd, OwnedFd};
         use tokio::io::unix::AsyncFd;
         use tokio::io::Interest;
 
         let pid = running.pid;
-        let raw = libc::pid_t::try_from(pid).ok()?;
+        let Ok(raw) = libc::pid_t::try_from(pid) else {
+            return Start::Refused;
+        };
         // SAFETY: pidfd_open takes a pid and flags and returns a new descriptor or -1.
         let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, raw, 0) };
         if fd < 0 {
             // ESRCH: already gone between the look and now.
             if std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
-                let _ = tx.send(pid);
-                return Some(Watch(tokio::spawn(async {})));
+                return Start::Gone;
             }
-            return None;
+            return Start::Refused;
         }
         // SAFETY: a descriptor pidfd_open just returned, owned from here on.
         let fd = unsafe { OwnedFd::from_raw_fd(fd as i32) };
@@ -109,8 +123,10 @@ impl Watch {
         // names now must still be the one found, or the one found has ended.
         let same = std::fs::read_to_string(format!("/proc/{pid}/comm"))
             .is_ok_and(|comm| comm.trim_end_matches('\n') == running.process);
-        let fd = AsyncFd::with_interest(fd, Interest::READABLE).ok()?;
-        Some(Watch(tokio::spawn(async move {
+        let Ok(fd) = AsyncFd::with_interest(fd, Interest::READABLE) else {
+            return Start::Refused;
+        };
+        Start::Watching(Watch(tokio::spawn(async move {
             if same {
                 // Readable once the process has ended; nothing wakes before.
                 let _ = fd.readable().await;
@@ -157,14 +173,19 @@ unsafe extern "system" fn ended(
 
 #[cfg(windows)]
 impl Watch {
-    fn start(running: &Running, tx: UnboundedSender<u32>) -> Option<Watch> {
-        use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    fn start(running: &Running, tx: UnboundedSender<u32>) -> Start {
+        use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, HANDLE};
         use windows::Win32::System::Threading::{
             OpenProcess, RegisterWaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE,
             WT_EXECUTEONLYONCE,
         };
         // SAFETY: a handle on a pid, for waiting only; closed in Drop or below.
-        let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, running.pid) }.ok()?;
+        let process = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, running.pid) } {
+            Ok(process) => process,
+            // No process has that id any more (an access refusal is ERROR_ACCESS_DENIED).
+            Err(e) if e.code() == ERROR_INVALID_PARAMETER.to_hresult() => return Start::Gone,
+            Err(_) => return Start::Refused,
+        };
         let context = Box::into_raw(Box::new(Context {
             pid: running.pid,
             tx,
@@ -187,9 +208,9 @@ impl Watch {
                 drop(Box::from_raw(context));
                 let _ = CloseHandle(process);
             }
-            return None;
+            return Start::Refused;
         }
-        Some(Watch {
+        Start::Watching(Watch {
             wait,
             process,
             context,
@@ -217,8 +238,8 @@ struct Watch;
 
 #[cfg(not(any(target_os = "linux", windows)))]
 impl Watch {
-    fn start(_running: &Running, _tx: UnboundedSender<u32>) -> Option<Watch> {
-        None
+    fn start(_running: &Running, _tx: UnboundedSender<u32>) -> Start {
+        Start::Refused
     }
 }
 
@@ -228,16 +249,28 @@ mod tests {
     use lbm_ipc::sharing::Tool;
     use std::time::Duration;
 
-    /// A process of this test, named like a sharing tool's (a link to `sleep`), so that
-    /// its `comm` is the name found.
+    /// A process of this test whose `comm` is `name`: a shell script of that name (Linux
+    /// names a script's process after the script, not its interpreter). It says when it
+    /// runs, then waits on its stdin, held open by the returned child, until killed.
+    /// Not a link to `sleep`: a multi-call `sleep` (uutils) refuses another name.
     fn tool_like(dir: &std::path::Path, name: &str) -> std::process::Child {
-        let sleep = ["/usr/bin/sleep", "/bin/sleep"]
-            .into_iter()
-            .find(|p| std::path::Path::new(p).exists())
-            .expect("a sleep binary");
-        let link = dir.join(name);
-        std::os::unix::fs::symlink(sleep, &link).unwrap();
-        std::process::Command::new(link).arg("60").spawn().unwrap()
+        use std::io::BufRead;
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::{Command, Stdio};
+        let script = dir.join(name);
+        std::fs::write(&script, "#!/bin/sh\necho ready\nread line\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut child = Command::new(script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut said = String::new();
+        std::io::BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut said)
+            .unwrap();
+        assert_eq!(said, "ready\n");
+        child
     }
 
     fn found(child: &std::process::Child, process: &str) -> Running {
@@ -330,5 +363,68 @@ mod tests {
             .expect("said ended")
             .unwrap();
         assert_eq!(pid, running.pid);
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use lbm_ipc::sharing::Tool;
+    use std::time::Duration;
+
+    fn found(pid: u32) -> Running {
+        Running {
+            tool: Tool::Deskflow,
+            process: "cmd.exe".to_owned(),
+            pid,
+            role: None,
+            window: true,
+            connected: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn the_end_of_a_watched_process_is_said() {
+        let mut child = std::process::Command::new("cmd")
+            .args(["/C", "ping -n 60 127.0.0.1 >NUL"])
+            .spawn()
+            .unwrap();
+        let mut exits = Exits::new();
+        let mut ended = exits.take_events().unwrap();
+        exits.follow(&[found(child.id())]);
+        assert_eq!(exits.watched(), 1);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), ended.recv())
+                .await
+                .is_err()
+        );
+        child.kill().unwrap();
+        let pid = tokio::time::timeout(Duration::from_secs(5), ended.recv())
+            .await
+            .expect("the end is said")
+            .unwrap();
+        assert_eq!(pid, child.id());
+        let _ = child.wait();
+    }
+
+    /// Ended, and its last handle closed, before the watch: no process has its id any
+    /// more, and it is said ended at once rather than taken for one that refuses.
+    #[tokio::test]
+    async fn a_process_gone_before_its_watch_is_said_ended() {
+        let mut child = std::process::Command::new("cmd")
+            .args(["/C", "exit"])
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        drop(child);
+        let mut exits = Exits::new();
+        let mut ended = exits.take_events().unwrap();
+        exits.follow(&[found(pid)]);
+        let said = tokio::time::timeout(Duration::from_secs(5), ended.recv())
+            .await
+            .expect("said ended")
+            .unwrap();
+        assert_eq!(said, pid);
     }
 }

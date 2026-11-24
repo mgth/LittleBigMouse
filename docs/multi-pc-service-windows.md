@@ -2,7 +2,7 @@
 
 > **Statut : option B (§ 1) validée par le mainteneur le 2026-11-24.** Choix par défaut
 > retenus pour les autres questions, en attendant son avis : port à part, `SendSAS` en
-> dernière étape optionnelle, écran de connexion essayé mais pas promis. Rien de ce qui
+> dernière étape optionnelle, écran de connexion hors de cette série (§ 2). Rien de ce qui
 > suit n'a tourné. Les comportements de Windows marqués *(à vérifier)* ne sont connus que
 > par la documentation ou par l'usage qu'en font d'autres outils, pas par un essai ici.
 
@@ -87,9 +87,18 @@ maître par maître.
   pourrait lancer la même commande avec sa propre empreinte, et l'utilisateur
   consentirait à l'invite UAC qu'il attendait. L'empreinte est celle que la page Machines
   du maître affiche déjà ; l'utilisateur les compare.
-- Le service est notifié d'un changement par un code de contrôle SCM privé (128+),
+- Le service est notifié d'un changement par un code de contrôle SCM privé (128),
   envoyé par la commande élevée ; il relit alors le magasin. Pas de surveillance du
   fichier.
+- **Un retrait prend effet tout de suite**, pas seulement à la connexion suivante : à la
+  relecture, toute connexion d'un maître qui n'est plus dans le magasin est fermée, et
+  l'injecteur reçoit un `Leave`, donc relâche ce que ce flux tenait enfoncé. Un magasin
+  devenu illisible ou mal protégé ferme toutes les connexions de la même façon.
+- Lecture, modification et écriture se font sous un même verrou (fichier
+  `trusted-masters.lock` à côté du magasin) : deux administrateurs qui approuvent et
+  retirent en même temps ne peuvent pas rétablir un maître dont le retrait a été
+  confirmé. Le dossier est contrôlé **avant** toute écriture ; le nouveau texte va dans un
+  fichier créé exprès, puis est renommé sur le magasin.
 
 ## 2. Architecture
 
@@ -112,7 +121,7 @@ flowchart LR
   MA -- "lien actuel 24817 : contrôle, fonds, presse-papiers" --> SA
   MA -- "flux d'entrée, TLS mutuel" --> SVC
   TM -. lu .-> SVC
-  SVC -- "tube anonyme hérité" --> INJ
+  SVC -- "tube nommé, SYSTEM seul" --> INJ
   SVC -. "état, lecture seule" .-> SA
 ```
 
@@ -131,8 +140,16 @@ Binaire séparé, le plus petit possible ; plomberie SCM par le crate `windows-s
   commande venue du réseau ne fait autre chose qu'une entrée.
 - **Lance l'injecteur** dans la session console active : jeton SYSTEM du service,
   `DuplicateTokenEx` + `SetTokenInformation(TokenSessionId)` (variante c du spike),
-  `CreateProcessAsUser` sur `winsta0\default`. Le lien est un **tube anonyme hérité** :
-  aucun objet nommé que quelqu'un pourrait ouvrir ou occuper avant lui.
+  `CreateProcessAsUser` sur `winsta0\default`, sans héritage de handles : Windows n'en
+  transmet pas d'une session à l'autre, et le service est en session 0. Le lien est un
+  **tube nommé créé pour ce lancement** : nom tiré au hasard (`lbm-inject-` et 128 bits),
+  DACL qui n'accorde que SYSTEM, première et seule instance
+  (`FILE_FLAG_FIRST_PIPE_INSTANCE`, une instance au plus), clients distants refusés. Le
+  service vérifie que le client est le processus qu'il a lancé
+  (`GetNamedPipeClientProcessId`), l'injecteur que le serveur est le processus qui l'a
+  lancé (`GetNamedPipeServerProcessId`, contre `--server`). Un second tube,
+  `<nom>-log`, ramène les diagnostics de l'injecteur ; rien de ce qui y arrive n'est
+  interprété. Un injecteur qui n'a pas ouvert son entrée en 5 s est arrêté.
 - **Suit les sessions** par `SERVICE_CONTROL_SESSIONCHANGE` (c'est l'équivalent, pour un
   service, de `WTSRegisterSessionNotification`, réservé aux fenêtres) :
   `WTS_CONSOLE_CONNECT`/`DISCONNECT`, `WTS_SESSION_LOGON`/`LOGOFF`. À chaque changement
@@ -141,9 +158,14 @@ Binaire séparé, le plus petit possible ; plomberie SCM par le crate `windows-s
   pointeur. Le suivant est lancé à l'`Enter` suivant. Les sessions RDP sont ignorées.
   Fin d'un injecteur : `RegisterWaitForSingleObject` sur son handle de processus, aucune
   scrutation.
-- **Avant toute ouverture de session** (écran de connexion, aucun utilisateur), il y a
-  quand même une session console : l'injecteur y est lancé de la même façon. C'est ce qui
-  permet de taper son mot de passe depuis le maître au démarrage *(à vérifier)*.
+- **Hors de cette série : l'écran de connexion avant toute session.** Le maître trouve le
+  service par le `Hello` de l'agent de l'esclave, et aucun agent ne tourne avant qu'un
+  utilisateur ouvre sa session : même un maître approuvé n'a alors rien qui lui dise de
+  piloter. Le scénario couvert est donc **une session ouverte**, verrouillée ou non. Une
+  suite possible : le maître garde, de la dernière liaison authentifiée, l'adresse et
+  l'empreinte épinglée du service et la disposition des écrans de l'esclave, et se
+  connecte directement au service quand aucun lien d'agent n'existe. Le service, lui,
+  saurait déjà lancer un injecteur dans la session console de l'écran de connexion.
 - Publie un état en lecture seule pour l'agent de la session (piloté ou non, par quel
   maître, bureau courant) : un pipe nommé dont la DACL accorde à SYSTEM l'écriture et à
   l'utilisateur de la session console **la lecture seule**, côté service ; rien de ce que
@@ -166,8 +188,9 @@ Tout ce que fait aujourd'hui l'esclave Windows de `lbm-hook`, et rien de plus.
   n'est pas ce qu'il *exécute*, et seul `remote::stream::pump` lit son entrée. Mêmes
   règles des deux côtés : rien avant `Enter`, tout relâché à la fin du flux, marque
   `INJECTED` dans `dwExtraInfo` que le hook local laisse passer.
-- Lit les lots sur son entrée standard, le tube hérité ; pas de réseau, pas de fichier,
-  pas de configuration.
+- Lit les lots sur le tube nommé que le service lui désigne (`--pipe`, refusé s'il n'a
+  pas la forme du service) et écrit ses diagnostics sur le second ; pas de réseau, pas
+  de fichier, pas de configuration.
 - **Suit le bureau d'entrée sans scrutation** : le thread d'injection, qui n'a aucune
   fenêtre ni crochet (condition de `SetThreadDesktop`), s'attache au bureau d'entrée
   (`OpenInputDesktop` + `SetThreadDesktop`) à chaque `Enter` et quand `SendInput` en
@@ -219,9 +242,10 @@ Liste de contrôle pour la relecture de chaque PR :
   TrustedInstaller (`admin_only`) — l'erreur de l'autostart élevé était précisément
   d'exécuter en élevé un binaire d'un dossier modifiable. Chemin d'image du service entre
   guillemets.
-- Aucun objet nommé que le service ouvrirait côté utilisateur ; le seul canal vers
-  l'injecteur est hérité. Le pipe d'état est créé par le service (premier instance,
-  `FILE_FLAG_FIRST_PIPE_INSTANCE`), en lecture seule pour l'utilisateur.
+- Le canal vers l'injecteur n'est ouvrable que par SYSTEM, sous un nom imprévisible,
+  et chaque bout vérifie l'autre par son numéro de processus. Le pipe d'état est créé par
+  le service (première instance, `FILE_FLAG_FIRST_PIPE_INSTANCE`), en lecture seule pour
+  l'utilisateur.
 - Le réseau avant authentification se limite à la poignée de main `rustls` ; après, à
   `lbm_ipc::input::decode`, déjà testé et borné. Aucun chemin du réseau vers autre chose
   que `SendInput` (et `SendSAS` si l'option est posée).
@@ -237,8 +261,11 @@ Liste de contrôle pour la relecture de chaque PR :
   Windows) ». Cochée, elle crée le service (`sc create`, démarrage automatique différé,
   actions de récupération), le dossier `%ProgramData%\LittleBigMouse\service` avec sa
   DACL, et la règle de pare-feu du port 24818 (même forme que celle de 24817, PR #811).
-  Désinstallation et mise à jour : arrêt du service avant la copie, suppression du
-  service, de la règle et du dossier.
+  Mise à jour : arrêt du service avant la copie, puis redémarrage ; **le dossier est
+  gardé**, avec l'identité du service et le magasin, sans quoi les maîtres approuvés
+  seraient oubliés et refuseraient la nouvelle empreinte qu'ils n'ont pas épinglée.
+  Désinstallation : suppression du service et de la règle ; le dossier n'est purgé qu'en
+  `usPostUninstall`, qu'Inno n'exécute pas lors d'une mise à jour par-dessus.
 - Le portable ne l'installe jamais ; ni l'agent ni l'UI ne savent installer le service.
 - Le dossier d'installation doit être sous Program Files pour que la vérification
   `admin_only` passe : un choix de dossier ailleurs désactive la tâche (ou le service
@@ -271,11 +298,13 @@ Avec un compte administrateur, puis un compte standard (à créer seulement avec
 mainteneur) ; service installé par l'installeur, maître Linux :
 
 - invite UAC (consentement, et demande d'identifiants pour le compte standard) ;
-- écran de verrouillage (Win+L), écran de connexion après redémarrage ;
+- écran de verrouillage (Win+L) ;
 - `osk.exe`, Gestionnaire des tâches, console administrateur ;
 - changement rapide d'utilisateur, déconnexion, veille ;
 - maître non approuvé : refusé, repli sur le chemin actuel ;
-- `trust` avec une empreinte qui n'est pas celle affichée : la confirmation le montre.
+- `trust` avec une empreinte qui n'est pas celle affichée : la confirmation le montre ;
+- `untrust` pendant une session pilotée : la connexion tombe, rien ne reste enfoncé ;
+- mise à jour par l'installeur : un maître approuvé retrouve le même service.
 
 ## Questions pour le mainteneur
 
@@ -286,4 +315,5 @@ mainteneur) ; service installé par l'installeur, maître Linux :
    port à part, plus simple.
 3. **Ctrl+Alt+Suppr** : faut-il l'option `SendSAS` (modification d'une stratégie système),
    ou l'écran de verrouillage et l'invite UAC suffisent-ils ?
-4. **Écran de connexion avant toute session** : à inclure, ou seulement la session ouverte ?
+4. **Écran de connexion avant toute session** : proposé hors de cette série (§ 2,
+   « Hors de cette série »), la suite possible y est décrite.

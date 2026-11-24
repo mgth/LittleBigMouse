@@ -26,6 +26,7 @@
 //! one. Asking is the whole point of not reading the keyboard; it also means the
 //! request can stay open for as long as the user takes to answer.
 
+use std::sync::atomic::Ordering;
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -92,9 +93,13 @@ pub fn shortcut_changed() {
 /// process lives. A portal that is not there is not an error: this desktop has no
 /// global shortcuts to offer, said once.
 async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
+    let mut registered = false;
     let mut announced_absence = false;
     let mut pause = FIRST_RETRY;
     loop {
+        if !registered {
+            registered = register().await;
+        }
         let generation = *GENERATION.borrow();
         let wanted = shared
             .rescue_shortcut
@@ -130,6 +135,52 @@ async fn watch(shared: &'static Shared, on_fire: fn(&'static Shared)) {
     }
 }
 
+/// The application id the portal knows this process by.
+///
+/// The portal finds the id of a process that is not sandboxed in the name of its
+/// systemd unit, which the desktop derives from the `.desktop` entry that started it:
+/// `app-littlebigmouse\x2dagent@autostart.service` for the agent's autostart entry, and
+/// this process with it. `littlebigmouse-agent` is no valid id, so the portal sees
+/// none, and the global shortcuts refuse a process with none ("An app id is
+/// required"). Said outright instead, as the portal's host registry allows.
+const APP_ID: &str = "io.github.mgth.LittleBigMouse";
+
+/// Tells the portal who is asking, before anything is asked on the connection. One too
+/// old to know the registry, or that already found an id of its own, keeps whatever it
+/// had. Whether that is settled: `false` only while the portal is not there yet, to be
+/// asked again before the next binding.
+async fn register() -> bool {
+    let Ok(app_id) = ashpd::AppID::try_from(APP_ID) else {
+        return true;
+    };
+    match ashpd::register_host_app(app_id).await {
+        Ok(()) => {
+            eprintln!("[LittleBigMouse.Hook] rescue: known to the portal as {APP_ID}");
+            true
+        }
+        Err(error) => {
+            let absent = not_there(&error);
+            if !absent {
+                eprintln!("[LittleBigMouse.Hook] rescue: not registered with the portal ({error})");
+            }
+            !absent
+        }
+    }
+}
+
+/// Whether the portal is not on the bus (yet), rather than answering.
+fn not_there(error: &ashpd::Error) -> bool {
+    match error {
+        ashpd::Error::Zbus(zbus::Error::MethodError(name, _, _)) => matches!(
+            name.as_str(),
+            "org.freedesktop.DBus.Error.ServiceUnknown"
+                | "org.freedesktop.DBus.Error.NameHasNoOwner"
+        ),
+        ashpd::Error::Zbus(zbus::Error::InputOutput(_)) => true,
+        _ => false,
+    }
+}
+
 /// Waits for the moment to ask again after `error`, and returns the next pause.
 async fn after_failure(
     error: &ashpd::Error,
@@ -143,7 +194,7 @@ async fn after_failure(
         // would only get the same one. Said every time, not once: saving a shortcut
         // clears the warning, and without this the window would then show a rescue
         // that no key can trigger.
-        shared.report_rescue_unavailable(wanted);
+        shared.report_rescue_refused(wanted);
         superseded(generation).await;
         return pause;
     }
@@ -237,10 +288,14 @@ fn note_trigger(shared: &Shared, wanted: &str, trigger: Option<&str>) {
                 "[LittleBigMouse.Hook] rescue: no key bound — give it one in the desktop's \
                  shortcut settings, under {DESCRIPTION:?}"
             );
-            shared.report_rescue_unavailable(wanted);
+            shared
+                .rescue_bound_by_desktop
+                .store(false, Ordering::SeqCst);
+            shared.report_rescue_refused(wanted);
         }
         Some(trigger) => {
             eprintln!("[LittleBigMouse.Hook] rescue: bound to {trigger}");
+            shared.rescue_bound_by_desktop.store(true, Ordering::SeqCst);
             shared.report_rescue_available(wanted);
         }
     }
@@ -316,6 +371,9 @@ async fn listen(
         }
     }
 
+    shared
+        .rescue_bound_by_desktop
+        .store(false, Ordering::SeqCst);
     let _ = binding.session.close().await;
 }
 
@@ -405,6 +463,57 @@ mod tests {
             }
         );
         waiting.abort();
+    }
+
+    /// The evdev backend reads the keyboards and watches them for the rescue: the
+    /// portal's refusal leaves it armed.
+    #[tokio::test]
+    async fn a_refusal_with_the_keyboards_read_leaves_the_rescue_armed() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        shared.read_rescue_from_keys();
+        let mut agent = crate::testing::Listening::to(shared).await;
+        let generation = *GENERATION.borrow();
+
+        let waiting = tokio::spawn(async move {
+            let refusal = ashpd::PortalError::NotAllowed("An app id is required".into());
+            let error = ashpd::Error::Portal(refusal);
+            after_failure(&error, shared, "Ctrl+Alt+F9", generation, FIRST_RETRY).await
+        });
+
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutAvailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+        waiting.abort();
+    }
+
+    /// The portal said no first, and the keyboards are read after: the warning is
+    /// withdrawn then.
+    #[tokio::test]
+    async fn keyboards_read_after_a_refusal_withdraw_the_warning() {
+        let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
+        let mut agent = crate::testing::Listening::to(shared).await;
+        shared.report_rescue_refused("Ctrl+Alt+F9");
+        assert_eq!(
+            agent.next("the refusal").await,
+            Event::ShortcutUnavailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+        shared.read_rescue_from_keys();
+        assert_eq!(
+            agent.next("the keyboards").await,
+            Event::ShortcutAvailable {
+                shortcut: "Ctrl+Alt+F9".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn the_app_id_is_one_the_portal_accepts() {
+        assert!(ashpd::AppID::try_from(APP_ID).is_ok());
     }
 
     /// Absent is not refused: the portal may still come, so nothing is reported yet.

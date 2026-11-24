@@ -2559,6 +2559,7 @@ dependencies = [
  "windows 0.58.0",
  "winresource",
  "x11rb 0.13.2",
+ "xkbcommon-dl",
  "zbus",
 ]
 

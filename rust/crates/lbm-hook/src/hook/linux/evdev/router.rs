@@ -62,6 +62,10 @@ pub fn run(shared: &'static Shared) -> bool {
 
     let debug = std::env::var("LBM_HOOK_DEBUG").is_ok();
 
+    // The keys read here are positions: where the layout puts the letters a shortcut
+    // names is asked of the compositor.
+    crate::hook::linux::keymap::spawn(shared);
+
     let mut router: Option<Router> = None;
     let mut hooked_since: Option<Instant> = None;
     let mut last_report = Instant::now();
@@ -306,9 +310,12 @@ impl Router {
             ));
         }
         eprintln!(
-            "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override",
+            "[LittleBigMouse.Hook] evdev: observing {} keyboard(s) for ctrl-override and the shortcuts",
             keyboards.len()
         );
+        if !keyboards.is_empty() {
+            shared.read_rescue_from_keys();
+        }
 
         // Take over from where the cursor really is: ask the compositor (KWin
         // scripting, logical coordinates — the zones' space), else where the

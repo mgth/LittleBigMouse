@@ -1344,7 +1344,8 @@ async fn forward(
             lost = hook.lost() => {
                 // A batch of the session never reached the hook, or reached it on a
                 // connection that ended since by no doing of this link's (the hook
-                // went, a write failed or took too long): the session is over there,
+                // went, a write failed or took too long, another master's stream ended
+                // and closed the connection they share): the session is over there,
                 // and what follows is ignored until an `Enter`. The master is told, as
                 // after a full queue below. Batches lost before the session began say
                 // nothing of it.

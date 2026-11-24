@@ -93,7 +93,7 @@ pub struct Sink {
     /// The number the last batch queued was given, by any sink.
     numbered: Arc<AtomicU64>,
     /// The number of the latest batch the hook did not get, or got on a connection
-    /// that ended since by no doing of the network side (not a [`Sink::release`]).
+    /// that ended since — a [`Sink::release`] of any link's included.
     lost: watch::Receiver<u64>,
 }
 
@@ -117,15 +117,17 @@ impl Sink {
 
     /// The stream ended: closes the connection after the batches already queued, so
     /// the hook releases what they left pressed. Waits for room in the queue, so that
-    /// it can neither be lost nor overtake those batches.
+    /// it can neither be lost nor overtake those batches. Every batch written on that
+    /// connection counts as lost ([`Sink::lost`]): the connection is shared, and the
+    /// session of another master on it ends with it.
     pub async fn release(&self) {
         let _ = self.messages.send(Message::Release).await;
     }
 
     /// Resolves when a batch was lost since the last time it did (or since this sink
     /// was made), with the number of the latest one: dropped for want of a connection,
-    /// or written on a connection that ended since by no doing of this side (the hook
-    /// went, a write failed or took too long). Every batch up to that number is the
+    /// or written on a connection that ended since (the hook went, a write failed or
+    /// took too long, a link's stream ended). Every batch up to that number is the
     /// hook's no more: a new connection's are ignored until an `Enter`. Never resolves
     /// once the connection's task is gone.
     pub async fn lost(&mut self) -> u64 {
@@ -269,8 +271,7 @@ async fn run(
     let tell = |number: u64| {
         lost.send_modify(|latest| *latest = (*latest).max(number));
     };
-    // The connection ended by no doing of the network side: what was written to it is
-    // the hook's no more.
+    // The connection ended: what was written to it is the hook's no more.
     let lose =
         |connection: &mut Option<Connection>, leaving: &mut Option<JoinHandle<()>>, number: u64| {
             if let Some(open) = connection {
@@ -305,7 +306,12 @@ async fn run(
                     close(&mut connection, &mut leaving, &driving);
                     return;
                 }
-                Some(Message::Release) => close(&mut connection, &mut leaving, &driving),
+                // The stream of one link ended. The hook serves one session per
+                // connection, shared by every master of this machine: closing it, so
+                // that the hook releases what that link left pressed, ends the session
+                // of any other master too. Their links are told, as of a loss; the one
+                // releasing has ended its own already.
+                Some(Message::Release) => lose(&mut connection, &mut leaving, 0),
                 Some(Message::Batch { number, bytes, crosses }) => {
                     // A crossing is worth an attempt at any time: one a second at most.
                     let may_try = crosses || retry_at.is_none_or(|at| Instant::now() >= at);

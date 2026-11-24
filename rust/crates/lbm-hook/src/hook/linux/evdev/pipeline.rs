@@ -464,7 +464,7 @@ impl Pipeline {
         if grabbed {
             self.crossing.grabbed_key(code, press, now);
         } else {
-            self.crossing.observed_key(code, press);
+            self.crossing.observed_key(code, press, now);
         }
     }
 
@@ -859,6 +859,36 @@ mod tests {
         lock(&mut rig);
         rig.move_by(-60, 0);
         assert!(!rig.pipe.is_remote(), "unlocked, it comes back");
+    }
+
+    /// The maintainer's case: a French keyboard, `Alt+Shift+M`, pressed while the
+    /// pointer is on the other machine. The key marked M is the one right of L.
+    #[test]
+    fn on_a_french_keyboard_alt_shift_m_locks_the_pointer_over_there() {
+        use crate::hook::crossing::keys::Letters;
+        const KEY_SEMICOLON: u16 = 39;
+        const KEY_M: u16 = 50;
+        let mut rig = Rig::new(true);
+        *rig.shared.letters.lock().unwrap() = Letters::from_keysyms([
+            (KEY_SEMICOLON, vec![u32::from(b'm'), u32::from(b'M')]),
+            (KEY_M, vec![u32::from(b','), u32::from(b'?')]),
+        ]);
+        *rig.shared.pointer_lock_shortcut.lock().unwrap() = "Alt+Shift+M".to_owned();
+        rig.shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+        rig.cycle(&[]);
+        rig.go_over();
+        for (code, value) in [
+            (KEY_LEFTALT, 1),
+            (KEY_LEFTSHIFT, 1),
+            (KEY_SEMICOLON, 1),
+            (KEY_SEMICOLON, 0),
+            (KEY_LEFTSHIFT, 0),
+            (KEY_LEFTALT, 0),
+        ] {
+            rig.type_key(code, value);
+        }
+        rig.move_by(-60, 0);
+        assert!(rig.pipe.is_remote(), "locked there, it stays there");
     }
 
     #[test]

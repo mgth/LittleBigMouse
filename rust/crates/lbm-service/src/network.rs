@@ -96,7 +96,8 @@ pub fn hello(name: &str) -> Hello {
 }
 
 enum Inner {
-    Linked(link::Link),
+    // Boxed: a live link is large, and the other message is a number.
+    Linked(Box<link::Link>),
     Closed(u64),
 }
 
@@ -164,7 +165,7 @@ async fn serve(
                         tokio::spawn(async move {
                             match pending.accept().await {
                                 Ok(link) => {
-                                    let _ = inner.send(Inner::Linked(link));
+                                    let _ = inner.send(Inner::Linked(Box::new(link)));
                                 }
                                 Err(error) => eprintln!(
                                     "[lbm-service] no link with master {fingerprint}: {error}"
@@ -181,7 +182,7 @@ async fn serve(
             },
             Some(message) = inner_rx.recv() => match message {
                 Inner::Linked(link) => {
-                    let (peer, sender, mut events) = link.into_parts();
+                    let (peer, sender, mut events) = (*link).into_parts();
                     // Approved when it knocked; maybe not any more.
                     if !trust.borrow().allows(&peer.fingerprint) {
                         tokio::spawn(async move { sender.close("no longer approved").await });

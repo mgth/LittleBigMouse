@@ -50,8 +50,8 @@ use tokio::time::Instant;
 /// Beyond it the hook is not keeping up: the stream is ended rather than queued further.
 const QUEUE: usize = 64;
 
-/// How long one connection attempt may take (a Windows pipe client waits for a server
-/// instead of failing).
+/// How long one connection attempt may take: a bound that is never reached in the
+/// usual case, both platforms answering at once (see [`connect`]).
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(250);
 
 /// After a failed attempt, batches are dropped for this long before the next one: a
@@ -373,6 +373,10 @@ async fn connect(endpoint: &str) -> io::Result<Box<dyn Stream>> {
     Ok(Box::new(tokio::net::UnixStream::connect(endpoint).await?))
 }
 
+/// Answers at once, never waiting for a server: `NotFound` when no hook serves the
+/// pipe, `ERROR_PIPE_BUSY` in the moment between the hook accepting a client and
+/// offering its next instance. Either way the batch that asked is dropped, as with no
+/// hook; a crossing then ends in `InputReset`.
 #[cfg(windows)]
 async fn connect(endpoint: &str) -> io::Result<Box<dyn Stream>> {
     Ok(Box::new(

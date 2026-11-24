@@ -49,18 +49,18 @@ pub fn trust(machine_id: &str, name: &str) -> Result<(), String> {
             Trusted::Renamed => "renamed",
         }
     );
-    notify_service();
-    Ok(())
+    notify_service()
 }
 
+/// The service is told even when the master was already gone from the store: a first
+/// `untrust` whose notice failed is made good by running it again.
 pub fn untrust(machine_id: &str) -> Result<(), String> {
     if store::edit(|trusted| trusted.untrust(machine_id))? {
         println!("withdrawn");
-        notify_service();
     } else {
         println!("not trusted");
     }
-    Ok(())
+    notify_service()
 }
 
 pub fn list() -> Result<(), String> {
@@ -71,18 +71,40 @@ pub fn list() -> Result<(), String> {
 }
 
 /// Tells a running service to read the store again. Nothing to tell when it is not
-/// installed or not running: it reads the store when it starts.
-fn notify_service() {
-    let notified = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
-        .and_then(|manager| manager.open_service(SERVICE_NAME, ServiceAccess::USER_DEFINED_CONTROL))
-        .and_then(|service| {
-            let code =
-                UserEventCode::from_raw(CONTROL_RELOAD_TRUST).expect("128 is a user-defined code");
-            service.notify(code).map(|_| ())
-        });
-    if let Err(error) = notified {
-        eprintln!("the service was not told ({error}); it reads the store when it starts");
+/// installed or not running: it reads the store when it starts. A running service that
+/// could not be told is an error: it goes on with its older copy, which for a
+/// withdrawal means a master still trusted.
+fn notify_service() -> Result<(), String> {
+    use windows_service::service::ServiceState;
+    const ERROR_SERVICE_DOES_NOT_EXIST: i32 = 1060;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .map_err(|e| format!("the service manager: {e}"))?;
+    let service = match manager.open_service(
+        SERVICE_NAME,
+        ServiceAccess::USER_DEFINED_CONTROL | ServiceAccess::QUERY_STATUS,
+    ) {
+        Ok(service) => service,
+        Err(windows_service::Error::Winapi(error))
+            if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST) =>
+        {
+            return Ok(())
+        }
+        Err(error) => return Err(format!("the service could not be told: {error}")),
+    };
+    let running = service
+        .query_status()
+        .map(|status| status.current_state == ServiceState::Running)
+        .map_err(|e| format!("the service could not be told: {e}"))?;
+    if !running {
+        return Ok(());
     }
+    let code = UserEventCode::from_raw(CONTROL_RELOAD_TRUST).expect("128 is a user-defined code");
+    service.notify(code).map(|_| ()).map_err(|error| {
+        format!(
+            "the store changed but the running service was not told ({error}): run the \
+             command again, or restart the service"
+        )
+    })
 }
 
 /// `01:23:…`, easier to compare by eye.

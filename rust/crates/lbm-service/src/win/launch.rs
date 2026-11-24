@@ -95,10 +95,11 @@ pub struct Injector {
 unsafe impl Send for Injector {}
 
 impl Injector {
-    /// Asks the system to send `session` on `exits` when the process ends: no thread
-    /// waits for it, and nothing polls.
-    pub fn notify_exit(&mut self, exits: Sender<u32>) -> Result<(), String> {
-        let context = Box::into_raw(Box::new((self.session, exits)));
+    /// Asks the system to send `launch` on `exits` when the process ends: no thread
+    /// waits for it, and nothing polls. The launch number, not the session, tells this
+    /// injector's exit from that of an older one of the same session.
+    pub fn notify_exit(&mut self, launch: u64, exits: Sender<u64>) -> Result<(), String> {
+        let context = Box::into_raw(Box::new((launch, exits)));
         let mut wait = HANDLE::default();
         // SAFETY: the context outlives the wait: it is freed by the callback, which
         // runs once (WT_EXECUTEONLYONCE), or below when the registration fails.
@@ -148,7 +149,7 @@ impl Injector {
 
 unsafe extern "system" fn exited(context: *mut c_void, _timed_out: BOOLEAN) {
     // SAFETY: the box handed over by `notify_exit`, taken back once.
-    let context = unsafe { Box::from_raw(context as *mut (u32, Sender<u32>)) };
+    let context = unsafe { Box::from_raw(context as *mut (u64, Sender<u64>)) };
     let _ = context.1.send(context.0);
 }
 

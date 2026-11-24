@@ -36,8 +36,8 @@ pub enum Event {
     SessionChanged,
     /// A master's stream starts and needs an injector (step 4).
     Wanted,
-    /// The injector of this session ended.
-    Exited(u32),
+    /// The injector of this launch ended.
+    Exited(u64),
     /// `lbm-service trust`/`untrust` changed the approved masters.
     TrustChanged,
     Stop,
@@ -137,13 +137,13 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
     // Read now and at every change; the listener of step 4 will serve these.
     let mut trusted = read_trust();
     let mut running: Option<launch::Injector> = None;
-    let (exits, exited) = mpsc::channel::<u32>();
+    let (exits, exited) = mpsc::channel::<u64>();
     // Exits come on their own channel, forwarded as events, so the wait callbacks
     // never hold the deciding thread's sender.
     let forward = events.clone();
     std::thread::spawn(move || {
-        for session in exited {
-            if forward.send(Event::Exited(session)).is_err() {
+        for launch in exited {
+            if forward.send(Event::Exited(launch)).is_err() {
                 break;
             }
         }
@@ -158,9 +158,10 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                 trusted = read_trust();
                 None
             }
-            Event::Exited(session) => {
-                supervisor.exited(session);
-                if running.as_ref().is_some_and(|i| i.session == session) {
+            Event::Exited(launch) => {
+                // Only the exit of the injector running now: a late one of a replaced
+                // injector, even of the same session, leaves the new one alone.
+                if supervisor.exited(launch) {
                     if let Some(gone) = running.take() {
                         gone.stop(Duration::ZERO);
                     }
@@ -169,7 +170,7 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
             }
         };
         match action {
-            Some(Action::Launch(session)) => {
+            Some(Action::Launch { session, launch }) => {
                 match launch::launch(injector, session, |line| eprintln!("[lbm-inject] {line}")) {
                     Ok(mut started) => {
                         eprintln!(
@@ -178,24 +179,23 @@ fn decide(injector: &Path, events: &mpsc::Sender<Event>, heard: &mpsc::Receiver<
                         );
                         // Without its exit watched, an injector that leaves would never be
                         // launched again in this session: a failed watch is a failed start.
-                        match started.notify_exit(exits.clone()) {
+                        match started.notify_exit(launch, exits.clone()) {
                             Ok(()) => running = Some(started),
                             Err(error) => {
                                 eprintln!("[lbm-service] {error}");
                                 started.stop(STOP_GRACE);
-                                supervisor.launch_failed(session);
+                                supervisor.launch_failed(launch);
                             }
                         }
                     }
                     Err(error) => {
                         eprintln!("[lbm-service] no injector in session {session}: {error}");
-                        supervisor.launch_failed(session);
+                        supervisor.launch_failed(launch);
                     }
                 }
             }
-            Some(Action::Stop(session)) => {
+            Some(Action::Stop { .. }) => {
                 if let Some(stopped) = running.take() {
-                    debug_assert_eq!(stopped.session, session);
                     stopped.stop(STOP_GRACE);
                 }
             }

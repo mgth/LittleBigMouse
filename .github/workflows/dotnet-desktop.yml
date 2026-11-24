@@ -325,14 +325,15 @@ jobs:
         output-artifact-directory: artifacts\signed-app
 
     # A signing request can come back "successful" having signed nothing that
-    # matters, so assert on the two executables Windows will actually judge.
+    # matters, so assert on the executables Windows will actually judge: the UI,
+    # the hook, and the agent the UI starts.
     - name: Verify signed binaries
       id: signed
       run: |
         $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
         if (-not $ui) { throw 'SignPath returned no signed UI executable' }
         $dir = $ui.Directory.FullName
-        foreach ($target in @($ui.FullName, (Join-Path $dir 'LittleBigMouse.Hook.exe'))) {
+        foreach ($target in @($ui.FullName, (Join-Path $dir 'LittleBigMouse.Hook.exe'), (Join-Path $dir 'lbm-agent.exe'))) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target
           if ($sig.Status -ne 'Valid') { throw "$target signature: $($sig.StatusMessage)" }

@@ -10,9 +10,13 @@
 //! - when this machine's own evdev backend is routing, it owns the cursor position
 //!   (`EvdevCursor`): a local mouse moved after the remote pointer resumes from where
 //!   the backend last put the cursor, not from where the master left it;
-//! - a freshly created device is not seen by the compositor at once, so the very
-//!   first events after it is built can be lost. The devices are therefore built at
-//!   the first injection and then kept for the life of the hook.
+//!
+//! A freshly created device is not seen by the compositor at once: what it emits in
+//! the first few hundred milliseconds is lost (measured under KWin 6: everything up to
+//! 300 ms after the creation, nothing from 450 ms on). Both devices are therefore
+//! built when a driven session starts ([`Injector::unpark`]), together, and kept for
+//! the life of the hook; and the first frame for a device that young waits until it is
+//! [`SETTLE`] old — once, at the start of the first session.
 
 use std::sync::TryLockError;
 use std::time::{Duration, Instant};
@@ -31,6 +35,10 @@ use super::{Injection, Injector};
 /// left alone before trying again: not at every report.
 const RETRY: Duration = Duration::from_secs(5);
 
+/// How old a device must be before what it emits reaches the compositor's clients;
+/// see the module's note.
+const SETTLE: Duration = Duration::from_millis(700);
+
 /// Product ids beside the evdev backend's 0x4d55 (pointer) and 0x4d56 (keyboard).
 const POINTER_PRODUCT: u16 = 0x4d57;
 const KEYBOARD_PRODUCT: u16 = 0x4d58;
@@ -48,6 +56,8 @@ pub struct UinputInjector {
     pointer_failed: Option<Instant>,
     keyboard_failed: Option<Instant>,
     no_desktop_said: bool,
+    /// Until when a device just built cannot be written to usefully.
+    settled_at: Option<Instant>,
     /// Buttons this injector pressed and has not released: the pointer device is not
     /// rebuilt for a new desktop while one is held, which would drop it mid-drag.
     buttons_held: usize,
@@ -67,6 +77,7 @@ impl UinputInjector {
             pointer_failed: None,
             keyboard_failed: None,
             no_desktop_said: false,
+            settled_at: None,
             buttons_held: 0,
             wheel_rest: (0, 0),
             pointer_frame: Vec::with_capacity(16),
@@ -131,6 +142,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.pointer = Some(Pointer { device, desktop });
                 self.pointer_failed = None;
+                self.settled_at = Some(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual pointer: {error}");
@@ -147,6 +159,7 @@ impl UinputInjector {
             Ok(device) => {
                 self.keyboard = Some(device);
                 self.keyboard_failed = None;
+                self.settled_at = Some(Instant::now() + SETTLE);
             }
             Err(error) => {
                 eprintln!("[LittleBigMouse.Hook] remote input: no virtual keyboard: {error}");
@@ -202,6 +215,16 @@ impl UinputInjector {
     }
 }
 
+/// How long to hold a frame for a device that is not settled yet; `None` once it is,
+/// and from then on.
+fn still_settling(settled_at: &mut Option<Instant>, now: Instant) -> Option<Duration> {
+    let wait = settled_at.and_then(|at| at.checked_duration_since(now));
+    if wait.is_none() {
+        *settled_at = None;
+    }
+    wait.filter(|w| !w.is_zero())
+}
+
 /// Two values for one code cannot share a frame — the second would overwrite the
 /// first — so a press and release of the same key, or two positions, are split.
 fn conflicts(frame: &[InputEvent], event: &InputEvent) -> bool {
@@ -232,6 +255,12 @@ impl Injector for UinputInjector {
         }
         if batch.iter().any(|i| matches!(i, Injection::Key { .. })) {
             self.ensure_keyboard();
+        }
+        // Blocks this endpoint's own thread only; what arrives meanwhile waits in the
+        // connection and follows in order.
+        if let Some(wait) = still_settling(&mut self.settled_at, Instant::now()) {
+            std::thread::sleep(wait);
+            self.settled_at = None;
         }
         for injection in batch {
             match *injection {
@@ -298,5 +327,38 @@ impl Injector for UinputInjector {
     /// edge actions. The pointer stays where the master left it.
     fn park(&mut self) {}
 
-    fn unpark(&mut self) {}
+    /// Builds both devices ahead of the session's first motion, so that they settle
+    /// together and a first key does not wait on its own.
+    fn unpark(&mut self) {
+        self.ensure_pointer();
+        self.ensure_keyboard();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_young_device_holds_its_first_frame_for_what_is_left_of_the_settling() {
+        let now = Instant::now();
+        let mut settled_at = Some(now + Duration::from_millis(300));
+        assert_eq!(
+            still_settling(&mut settled_at, now + Duration::from_millis(100)),
+            Some(Duration::from_millis(200))
+        );
+        assert!(settled_at.is_some(), "still to wait for");
+    }
+
+    #[test]
+    fn a_settled_device_never_waits_again() {
+        let now = Instant::now();
+        let mut settled_at = Some(now);
+        assert_eq!(
+            still_settling(&mut settled_at, now + Duration::from_millis(1)),
+            None
+        );
+        assert_eq!(settled_at, None);
+        assert_eq!(still_settling(&mut settled_at, now), None);
+    }
 }

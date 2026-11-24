@@ -52,6 +52,7 @@ pub mod tray;
 pub mod wallpaper;
 pub mod wallpaper_cache;
 pub mod wallpaper_job;
+pub mod wallpaper_watch;
 pub mod watch;
 #[cfg(any(windows, test))]
 mod windows_topology;

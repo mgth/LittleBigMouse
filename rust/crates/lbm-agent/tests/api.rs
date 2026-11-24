@@ -1638,8 +1638,8 @@ async fn a_remote_sends_its_wallpapers_at_link_up_and_after_a_display_change_and
     let (first, wallpapers) = next_wallpapers(&mut link).await;
     assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#102030")]);
 
-    // The user changes the wallpaper: nothing is said — there is no timer — until the
-    // next display event, which brings the new one.
+    // The wallpaper changes and the desktop says nothing of it (one that cannot): nothing
+    // is read — there is no timer — until the next display event, which brings the new one.
     shown.show(vec![solid([0x40, 0x50, 0x60])]);
     let asked = shown.asked();
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -1648,6 +1648,170 @@ async fn a_remote_sends_its_wallpapers_at_link_up_and_after_a_display_change_and
     let (next, wallpapers) = next_wallpapers(&mut link).await;
     assert!(next > first, "{next} after {first}");
     assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#405060")]);
+}
+
+/// Whether `link` stays without a `Wallpapers` for `within`.
+async fn no_wallpapers(link: &mut lbm_net::link::Link, within: Duration) -> bool {
+    use lbm_net::link::Event;
+    use lbm_net::wire::Control;
+    let end = tokio::time::Instant::now() + within;
+    loop {
+        match tokio::time::timeout_at(end, link.next()).await {
+            Err(_) => return true,
+            Ok(Some(Event::Control(Control::Wallpapers { .. }))) => return false,
+            Ok(Some(Event::Closed(reason))) => panic!("the link ended: {reason:?}"),
+            Ok(None) => panic!("the link ended"),
+            Ok(Some(_)) => {}
+        }
+    }
+}
+
+/// Waits for `desktop` to be watched `count` times over.
+async fn watched(desktop: &lbm_agent::desktop::FakeDesktop, count: usize) {
+    for _ in 0..500 {
+        if desktop.watching() == count {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!(
+        "{} watch(es) on the desktop, {count} expected",
+        desktop.watching()
+    );
+}
+
+#[tokio::test]
+async fn a_wallpaper_changed_in_the_system_is_sent_once_per_burst_and_only_a_linked_master_has_the_desktop_watched(
+) {
+    use lbm_agent::wallpaper_watch::{LONGEST, QUIET};
+    use lbm_net::wire::{Hello, Role};
+
+    let dir = tempfile::tempdir().unwrap();
+    let (hook_endpoint, api_endpoint) = endpoints(&dir);
+    let _fake = FakeHook::bind(&hook_endpoint).unwrap();
+    let config = dir.path().join("config");
+    let master = lbm_net::identity::Identity::load_or_create(&dir.path().join("master")).unwrap();
+    lbm_net::peers::PeerStore::load(&config)
+        .insert(lbm_net::peers::PairedPeer {
+            machine_id: master.fingerprint().to_owned(),
+            name: "desk".into(),
+            address: String::new(),
+            role: Role::Master,
+        })
+        .unwrap();
+    // The remote's desktop, never the developer's: what it shows and says is the test's.
+    let desktop = std::sync::Arc::new(lbm_agent::desktop::FakeDesktop::default());
+    desktop.show(vec![solid([0x10, 0x20, 0x30])]);
+    let shown = desktop.clone();
+
+    let (hook, signals) = HookClient::spawn(hook_endpoint);
+    let (inputs, inputs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (calls, _listener) = listen(&api_endpoint);
+    let peers = lbm_agent::peers::Service::new(
+        config.clone(),
+        lbm_agent::peers::Setup {
+            bind: "127.0.0.1".parse().unwrap(),
+            input_endpoint: None,
+            options: lbm_net::link::Options::default(),
+        },
+    );
+    tokio::spawn(async move {
+        let world = Screens {
+            state: Enabled(None),
+            rebuilds: 0,
+        };
+        let mut agent = Agent::new(world, Timings::default(), hook, inputs)
+            .with_api(calls)
+            .with_peers(peers)
+            .with_desktop(desktop);
+        agent.run(signals, inputs_rx, std::future::pending()).await;
+    });
+
+    let mut frontend = Frontend::connect(&api_endpoint).await;
+    assert_eq!(shown.watching(), 0, "the mode is off: nothing is watched");
+    let on = frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": true, "Port": 0, "Name": "tower" }))
+        .await["Result"]
+        .clone();
+    let address = on["ListenAddress"].as_str().unwrap().to_owned();
+    frontend.ask(json!({ "Method": "Refresh" })).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        shown.watching(),
+        0,
+        "the mode is on but no master is linked: nothing is watched"
+    );
+
+    let link_up = || async {
+        lbm_net::link::connect(
+            address.as_str(),
+            &master,
+            Hello::new("desk", "0", Role::Master),
+            lbm_net::link::Options::default(),
+        )
+        .await
+        .unwrap()
+        .accept()
+        .await
+        .unwrap()
+    };
+    let mut link = link_up().await;
+    let (first, wallpapers) = next_wallpapers(&mut link).await;
+    assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#102030")]);
+    watched(&shown, 1).await;
+
+    // The user changes the wallpaper, and the desktop says so the way desktops do: more
+    // than once. One reading, one message.
+    shown.show(vec![solid([0x40, 0x50, 0x60])]);
+    let asked = shown.asked();
+    for _ in 0..5 {
+        shown.change();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(shown.asked(), asked, "read before the burst went quiet");
+    let (next, wallpapers) = next_wallpapers(&mut link).await;
+    assert!(next > first, "{next} after {first}");
+    assert_eq!(wallpapers, [colour_of("DELA0B1_ABC123", "#405060")]);
+    assert!(
+        no_wallpapers(&mut link, LONGEST).await,
+        "one burst, two messages"
+    );
+    assert_eq!(shown.asked(), asked + 1, "one burst, one reading");
+
+    // An event that changed nothing the master would see (the same picture set again,
+    // another setting of the same file): read, since only the reading can tell, and not
+    // sent — the master's revision does not move.
+    shown.change();
+    assert!(
+        no_wallpapers(&mut link, QUIET * 3).await,
+        "the same wallpapers were sent again"
+    );
+    assert_eq!(shown.asked(), asked + 2);
+
+    // The master leaves: the watch goes with it, and what the desktop says is nobody's.
+    drop(link);
+    watched(&shown, 0).await;
+    let asked = shown.asked();
+    shown.change();
+    tokio::time::sleep(QUIET * 2).await;
+    assert_eq!(shown.asked(), asked, "read with no master to send to");
+
+    // It comes back: watched again, once. And turning the mode off lets go of it.
+    let mut link = link_up().await;
+    watched(&shown, 1).await;
+    shown.show(vec![solid([0x70, 0x80, 0x90])]);
+    shown.change();
+    loop {
+        // What was last read comes first at link-up; the change follows.
+        let (_, wallpapers) = next_wallpapers(&mut link).await;
+        if wallpapers == [colour_of("DELA0B1_ABC123", "#708090")] {
+            break;
+        }
+    }
+    frontend
+        .ask(json!({ "Method": "SetMultiPc", "Enabled": false, "Port": 0, "Name": "tower" }))
+        .await;
+    watched(&shown, 0).await;
 }
 
 #[tokio::test]

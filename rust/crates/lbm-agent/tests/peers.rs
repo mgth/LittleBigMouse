@@ -27,6 +27,8 @@ fn setup_with(input_endpoint: Option<String>, options: link::Options) -> Setup {
         bind: "127.0.0.1".parse().unwrap(),
         input_endpoint,
         options,
+        // Never the system's clipboard in a test: the developer's own is in it.
+        clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
     }
 }
 
@@ -105,6 +107,7 @@ impl Node {
                 port: Some(port),
                 name: Some(name.into()),
                 pointer_lock_shortcut: None,
+                clipboard: Default::default(),
             })
             .await
             .unwrap();
@@ -206,6 +209,7 @@ async fn with_the_mode_off_nothing_listens_and_no_identity_is_made() {
         port,
         name: None,
         pointer_lock_shortcut: None,
+        ..Settings::default()
     }
     .save(dir.path())
     .unwrap();
@@ -686,6 +690,7 @@ async fn the_master_hooks_stream_crosses_to_the_remote_hook_until_the_link_ends(
         port: None,
         name: None,
         pointer_lock_shortcut: None,
+        clipboard: Default::default(),
     })
     .await
     .unwrap();
@@ -2076,6 +2081,7 @@ async fn the_pointer_lock_shortcut_changes_without_dropping_a_link_and_the_lock_
         port: None,
         name: None,
         pointer_lock_shortcut: Some(shortcut.to_owned()),
+        clipboard: Default::default(),
     };
     let state: PeersState =
         serde_json::from_value(desk.ask(set(" Ctrl+Alt+L ")).await.unwrap()).unwrap();
@@ -2538,6 +2544,7 @@ async fn a_remotes_rulers_go_when_its_screens_change_or_the_mode_is_turned_off()
             port: None,
             name: None,
             pointer_lock_shortcut: None,
+            clipboard: Default::default(),
         })
         .await
         .unwrap();

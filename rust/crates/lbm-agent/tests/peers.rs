@@ -495,6 +495,62 @@ async fn a_masters_batches_reach_the_remotes_hook_in_order_and_its_end_releases_
 
 #[cfg(unix)]
 #[tokio::test]
+async fn the_remotes_state_says_which_master_drives_it() {
+    use lbm_ipc::input::{encode, InputEvent};
+    let master_dir = tempfile::tempdir().unwrap();
+    let master = Identity::load_or_create(master_dir.path()).unwrap();
+    let master_id = master.fingerprint().to_owned();
+    let tower_dir = tempfile::tempdir().unwrap();
+    pair(tower_dir.path(), &master_id, "", Role::Master);
+    let mut hook = endpoint::serve(tower_dir.path(), "input.sock");
+
+    let mut tower = Node::new(tower_dir.path(), Some(hook.path.clone()));
+    let on = tower.turn_on(0, "tower").await;
+    assert_eq!(on.driven_by, None, "nobody drives it yet");
+    let address = on.listen_address.unwrap();
+    let mut link = master_connects(&master, &address)
+        .await
+        .accept()
+        .await
+        .unwrap();
+    next_control(&mut link).await;
+    tower.until(|s| linked(s, &master_id)).await;
+    let sender = link.sender();
+
+    // Motion before any crossing drives nothing: the master's pointer is not here.
+    sender.input(&batch(1)).await.unwrap();
+    assert_eq!(hook.next().await, Some(batch(1)));
+    assert_eq!(tower.state().await.driven_by, None);
+
+    // Its Enter, as it reaches the hook: driven by that master.
+    let crossing = encode(&[
+        InputEvent::Enter { x: 0, y: 0 },
+        InputEvent::Motion { x: 1, y: 0 },
+    ]);
+    sender.input(&crossing).await.unwrap();
+    assert_eq!(hook.next().await, Some(crossing.clone()));
+    tower
+        .until(|s| s.driven_by.as_deref() == Some(master_id.as_str()))
+        .await;
+    // The master's own entry is not "driven": that is the other way round.
+    assert_eq!(tower.state().await.driven, None);
+
+    // Its Leave: nobody drives it any more.
+    let home = encode(&[InputEvent::Motion { x: 2, y: 0 }, InputEvent::Leave]);
+    sender.input(&home).await.unwrap();
+    assert_eq!(hook.next().await, Some(home));
+    tower.until(|s| s.driven_by.is_none()).await;
+
+    // Over here again, then the link ends without a Leave: the end of the stream is one.
+    sender.input(&crossing).await.unwrap();
+    assert_eq!(hook.next().await, Some(crossing));
+    tower.until(|s| s.driven_by.is_some()).await;
+    sender.close("done").await;
+    tower.until(|s| s.driven_by.is_none()).await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn a_master_that_left_cleanly_and_goes_releases_the_remotes_hook() {
     use lbm_ipc::input::{encode, InputEvent};
     let master_dir = tempfile::tempdir().unwrap();

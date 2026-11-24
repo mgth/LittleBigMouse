@@ -117,6 +117,13 @@ enum Internal {
         machine_id: String,
         reason: CloseReason,
     },
+    /// A master's stream crossed onto this machine (`driving`) or left it: its `Enter`
+    /// and `Leave` as they reach the hook, a session ended here, the end of the link.
+    Driving {
+        id: u64,
+        machine_id: String,
+        driving: bool,
+    },
     Expired {
         machine_id: String,
         serial: u64,
@@ -204,6 +211,9 @@ struct Actor {
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
     pointer_locked: bool,
+    /// The master whose stream drives this machine now, with the id of its link
+    /// ([`PeersState::driven_by`]).
+    driven_by: Option<(String, u64)>,
     internal: mpsc::UnboundedSender<Internal>,
     notices: mpsc::UnboundedSender<Notice>,
     published: Option<PeersState>,
@@ -289,6 +299,7 @@ pub(super) async fn run(
         relaying: None,
         pointer_lock_shortcut: start.pointer_lock_shortcut,
         pointer_locked: false,
+        driven_by: None,
         internal,
         notices: start.notices,
         published: None,
@@ -429,6 +440,10 @@ impl Actor {
                 .map(|(machine_id, _)| machine_id.clone()),
             pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
             pointer_locked: self.pointer_locked,
+            driven_by: self
+                .driven_by
+                .as_ref()
+                .map(|(machine_id, _)| machine_id.clone()),
             peers,
         }
     }
@@ -509,6 +524,11 @@ impl Actor {
                 machine_id,
                 reason,
             } => self.closed(id, &machine_id, reason),
+            Internal::Driving {
+                id,
+                machine_id,
+                driving,
+            } => self.driving(id, machine_id, driving),
             Internal::Expired { machine_id, serial } => {
                 if self
                     .pending
@@ -975,7 +995,27 @@ impl Actor {
         }
     }
 
+    /// A master's stream crossed onto this machine, or left it. Only the link of the
+    /// master that drives says it left: a second master's `Leave` (or the end of its
+    /// link) says nothing of the first one's pointer.
+    fn driving(&mut self, id: u64, machine_id: String, driving: bool) {
+        let link = (machine_id, id);
+        if driving {
+            if self.links.get(&link.0).is_some_and(|l| l.id == id) {
+                if self.driven_by.as_ref() != Some(&link) {
+                    eprintln!("[lbm-agent] multi-PC: driven by {}", link.0);
+                }
+                self.driven_by = Some(link);
+            }
+        } else if self.driven_by.as_ref() == Some(&link) {
+            eprintln!("[lbm-agent] multi-PC: no longer driven by {}", link.0);
+            self.driven_by = None;
+        }
+    }
+
     fn closed(&mut self, id: u64, machine_id: &str, reason: CloseReason) {
+        // The end of the stream is its `Leave`, whatever came before it.
+        self.driving(id, machine_id.to_owned(), false);
         if !self.links.get(machine_id).is_some_and(|l| l.id == id) {
             return;
         }
@@ -1244,6 +1284,7 @@ impl Actor {
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
         self.selected = None;
+        self.driven_by = None;
         self.relaying = None;
         self.hook.set_target(None);
         self.pending.clear();
@@ -1285,6 +1326,19 @@ async fn forward(
     // here: the end of the link ends it, whether a session is under way or the master
     // left cleanly, so the hook does not go on holding a client for a master gone.
     let mut used = false;
+    // This master's pointer is on this machine: its `Enter` reached the hook, and
+    // neither its `Leave` nor the end of its session here has since. Told to the
+    // manager as it changes, for the state.
+    let mut driving = false;
+    let drive = |driving: &mut bool, now: bool| {
+        if std::mem::replace(driving, now) != now {
+            let _ = internal.send(Internal::Driving {
+                id,
+                machine_id: machine_id.clone(),
+                driving: now,
+            });
+        }
+    };
     let reason = loop {
         let event = tokio::select! {
             lost = hook.lost() => {
@@ -1301,6 +1355,7 @@ async fn forward(
                         "[lbm-agent] multi-PC: the hook lost input of the session: \
                          the master is told"
                     );
+                    drive(&mut driving, false);
                     reset(&link);
                 }
                 continue;
@@ -1315,7 +1370,11 @@ async fn forward(
                     if leaves {
                         session = None;
                         reset_said = false;
+                        drive(&mut driving, false);
                     } else if crosses || !reset_said {
+                        if crosses {
+                            drive(&mut driving, true);
+                        }
                         reset_said = false;
                         session.get_or_insert(number);
                     }
@@ -1331,6 +1390,7 @@ async fn forward(
                     }
                     session = None;
                     reset_said = true;
+                    drive(&mut driving, false);
                     reset(&link);
                 }
             }

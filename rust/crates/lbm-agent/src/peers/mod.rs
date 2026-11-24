@@ -197,6 +197,13 @@ pub struct PeersState {
     /// Said by the hook; absent from the state of an older agent.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The machine id of the master whose mouse and keyboard drive this machine now —
+    /// its stream crossed onto this machine and has not left — or `None`. The other
+    /// end of [`Self::driven`]: by the `Enter` and `Leave` of that stream as they reach
+    /// the hook, the end of the stream (its link, or its session here) counting as a
+    /// `Leave`. Absent from the state of an older agent, which means "nobody".
+    #[serde(default)]
+    pub driven_by: Option<String>,
     pub peers: Vec<PeerEntry>,
 }
 
@@ -706,6 +713,7 @@ impl Service {
             selected_remote: None,
             selection: 0,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut
@@ -784,6 +792,7 @@ mod tests {
             selected_remote: Some(selected.to_owned()),
             selection: 1,
             driven: None,
+            driven_by: None,
             pointer_lock_shortcut: String::new(),
             pointer_locked: false,
             peers,

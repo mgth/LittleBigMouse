@@ -40,6 +40,9 @@ pub struct Peer {
     pub problem: Option<String>,
     /// It receives this machine's mouse and keyboard now: the pointer crossed to it.
     pub driven: bool,
+    /// Its mouse and keyboard drive this machine now: its pointer crossed onto it (it
+    /// is this machine's master).
+    pub drives: bool,
 }
 
 /// The agent's multi-PC state (`Peers`).
@@ -131,20 +134,22 @@ fn printed_fingerprint(ui: &mut egui::Ui, whose: &str, machine_id: &str) {
 }
 
 /// Which machine the mouse and keyboard go to, in words: said once a remote is linked,
-/// the only time it can be anything but this machine.
+/// the only time it can be anything but this machine — or, on a machine a master
+/// drives, while that master's pointer is on it.
 pub fn input_goes_to(state: &State) -> Option<String> {
     if !state.enabled {
         return None;
     }
+    if let Some(master) = state.peers.iter().find(|peer| peer.drives) {
+        return Some(format!(
+            "Driven by {}: its mouse and keyboard are on this machine",
+            named(master)
+        ));
+    }
     if let Some(peer) = state.peers.iter().find(|peer| peer.driven) {
-        let name = if peer.name.is_empty() {
-            "an unnamed machine"
-        } else {
-            peer.name.as_str()
-        };
         return Some(locked(
             state,
-            format!("The mouse and keyboard are on {name}"),
+            format!("The mouse and keyboard are on {}", named(peer)),
         ));
     }
     state
@@ -157,6 +162,15 @@ pub fn input_goes_to(state: &State) -> Option<String> {
                 "The mouse and keyboard are on this machine".to_owned(),
             )
         })
+}
+
+/// What `peer` is called in a sentence.
+fn named(peer: &Peer) -> &str {
+    if peer.name.is_empty() {
+        "an unnamed machine"
+    } else {
+        peer.name.as_str()
+    }
 }
 
 /// `words`, and that the pointer stays there when it is locked.
@@ -398,6 +412,9 @@ fn peer_row(ui: &mut egui::Ui, peer: &Peer) -> Option<Did> {
         if peer.driven {
             crate::theme::status(ui, "Has the mouse and keyboard", crate::theme::ACCENT);
         }
+        if peer.drives {
+            crate::theme::status(ui, "Drives this machine", crate::theme::ACCENT);
+        }
     });
     let role = match (peer.role, peer.pending) {
         (_, true) => "Waiting for you to accept it",
@@ -538,6 +555,7 @@ mod tests {
             pending: false,
             displays: 1,
             driven: false,
+            drives: false,
             problem: None,
         };
         let mut state = State {
@@ -573,6 +591,41 @@ mod tests {
         assert_eq!(input_goes_to(&state), None);
         state.enabled = false;
         state.peers.clear();
+        assert_eq!(input_goes_to(&state), None);
+    }
+
+    #[test]
+    fn a_driven_machine_says_which_master_drives_it() {
+        let desk = Peer {
+            machine_id: "dd".into(),
+            name: "desk".into(),
+            address: String::new(),
+            connected: true,
+            role: Role::Master,
+            pending: false,
+            displays: 0,
+            driven: false,
+            drives: false,
+            problem: None,
+        };
+        let mut state = State {
+            enabled: true,
+            peers: vec![desk],
+            ..State::default()
+        };
+        // A master linked, its pointer at home: nothing to say, as before.
+        assert_eq!(input_goes_to(&state), None);
+        state.peers[0].drives = true;
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by desk: its mouse and keyboard are on this machine")
+        );
+        state.peers[0].name.clear();
+        assert_eq!(
+            input_goes_to(&state).as_deref(),
+            Some("Driven by an unnamed machine: its mouse and keyboard are on this machine")
+        );
+        state.enabled = false;
         assert_eq!(input_goes_to(&state), None);
     }
 

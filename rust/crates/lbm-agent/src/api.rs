@@ -392,6 +392,11 @@ pub struct Snapshot {
     /// this one — by the multi-PC pointer lock's shortcut. Additive.
     #[serde(default)]
     pub pointer_locked: bool,
+    /// The master whose mouse and keyboard drive this machine now, by the name it goes
+    /// by here (multi-PC mode, this machine its remote); `None` when no master's pointer
+    /// is on this machine. The other end of [`Self::driven_machine`]. Additive.
+    #[serde(default)]
+    pub driven_by: Option<String>,
 }
 
 /// An answer to request `id`.

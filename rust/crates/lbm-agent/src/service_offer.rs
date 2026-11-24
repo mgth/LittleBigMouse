@@ -349,16 +349,21 @@ mod tests {
             Some(24818),
             "the offer written is heard"
         );
+        // What the writes may still have queued is not taken for the removal's.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        while changes.try_recv().is_ok() {}
         delete(&format!(r"{above}\LittleBigMouse\InputService"));
         assert!(heard(&mut changes).await, "the offer removed is heard");
         assert_eq!(windows_side::read_at(&place), None);
         delete(&above);
     }
 
+    /// A notification: not a watch that stopped (`None`), nor a timeout.
     #[cfg(windows)]
     async fn heard(changes: &mut tokio::sync::mpsc::UnboundedReceiver<()>) -> bool {
-        tokio::time::timeout(std::time::Duration::from_secs(5), changes.recv())
-            .await
-            .is_ok()
+        matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(5), changes.recv()).await,
+            Ok(Some(()))
+        )
     }
 }

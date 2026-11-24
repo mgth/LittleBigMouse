@@ -32,6 +32,8 @@ struct Inner {
     opened: usize,
     /// The number of the last copy made here.
     copy: u64,
+    /// How long a read takes, as a slow application or a large clipboard would.
+    read_delay: std::time::Duration,
 }
 
 /// The clipboard, shared between the test and the sharing.
@@ -86,6 +88,11 @@ impl Memory {
         inner.copy += 1;
         inner.content = Some(Content::Local(content));
         formats
+    }
+
+    /// Reads answer after `delay` from now on.
+    pub fn slow_reads(&self, delay: std::time::Duration) {
+        self.0.lock().unwrap().read_delay = delay;
     }
 
     pub fn content(&self) -> Option<Content> {
@@ -158,7 +165,15 @@ impl Clipboard for Open {
                     },
                     _ => Err("nothing copied here".to_owned()),
                 };
-                let _ = reply.send(data);
+                let delay = inner.read_delay;
+                if delay.is_zero() {
+                    let _ = reply.send(data);
+                } else {
+                    std::thread::spawn(move || {
+                        std::thread::sleep(delay);
+                        let _ = reply.send(data);
+                    });
+                }
             }
         }
     }

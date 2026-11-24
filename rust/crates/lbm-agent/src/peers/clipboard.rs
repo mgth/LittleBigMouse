@@ -180,6 +180,9 @@ pub(super) struct Sharing {
     seen: HashMap<(String, u64), u64>,
     /// This machine's id: of two copies made at once, the one of the lower id wins.
     machine_id: String,
+    /// The copy whose files are being listed, by its serial: until then the other
+    /// machines may still hold what was announced before, and a change must be told.
+    listing: Option<u64>,
     held: Option<Held>,
     /// The last number given to a copy here or an offer held: one counter for both.
     serial: u64,
@@ -219,6 +222,7 @@ impl Sharing {
             local: None,
             seen: HashMap::new(),
             machine_id,
+            listing: None,
             held: None,
             serial: 0,
             incoming: HashMap::new(),
@@ -476,14 +480,18 @@ impl Sharing {
                     .collect();
                 // Copied here: no other machine's offer is held any more.
                 self.let_go(Some(peers));
-                if self.local.is_none() && formats.is_empty() {
+                if self.local.is_none() && self.listing.is_none() && formats.is_empty() {
                     // Nothing shared before, nothing now: nobody needs telling.
                     return;
                 }
+                // A new serial even for nothing shared: a listing under way is old news
+                // from now on, and its files must not be offered once it ends.
                 self.serial += 1;
+                self.listing = None;
                 if formats.contains(&ClipFormat::Files) {
                     // Announced once listed: the other side needs the list to ask.
                     self.local = None;
+                    self.listing = Some(self.serial);
                     self.list(self.serial, copy, formats);
                     return;
                 }
@@ -562,10 +570,11 @@ impl Sharing {
         listed: Result<Vec<Listed>, String>,
         peers: &[Peer<'_>],
     ) {
-        if serial != self.serial || self.held.is_some() {
+        if self.listing != Some(serial) || serial != self.serial || self.held.is_some() {
             // Copied over meanwhile.
             return;
         }
+        self.listing = None;
         let files = match listed {
             Ok(files) if !files.is_empty() => files,
             Ok(_) => {
@@ -852,6 +861,7 @@ impl Sharing {
                 } else {
                     Vec::new()
                 };
+                self.listing = None;
                 self.held = Some(Held {
                     machine_id: from.machine_id.to_owned(),
                     link: from.id,
@@ -1102,7 +1112,7 @@ mod tests {
                         folder: false,
                     },
                     source: PathBuf::new(),
-                    stamp: files::Stamp::of(&std::fs::metadata(".").unwrap()),
+                    stamp: None,
                 })
                 .collect()
         };

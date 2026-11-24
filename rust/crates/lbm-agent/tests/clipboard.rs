@@ -305,7 +305,7 @@ fn some_files(dir: &Path) -> (Vec<std::path::PathBuf>, Vec<u8>) {
     (vec![photos, dir.join("note.txt")], large)
 }
 
-fn lines(paths: &[std::path::PathBuf]) -> Vec<u8> {
+fn pack(paths: &[std::path::PathBuf]) -> Vec<u8> {
     lbm_agent::peers::clipboard_files::pack_paths(paths)
 }
 
@@ -316,7 +316,7 @@ async fn files_copied_on_one_machine_are_fetched_into_the_reception_folder_of_th
     let (roots, large) = some_files(source.path());
     tower
         .clipboard
-        .copy(vec![(ClipFormat::Files, lines(&roots))]);
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
     assert_eq!(offered(&desk.clipboard).await, [ClipFormat::Files]);
 
     let pasted = desk.clipboard.paste(ClipFormat::Files).await.unwrap();
@@ -351,7 +351,7 @@ async fn files_over_the_bound_are_not_offered_and_the_copier_says_why() {
     let (roots, _) = some_files(source.path());
     tower.clipboard.copy(vec![
         (ClipFormat::Text, b"a caption".to_vec()),
-        (ClipFormat::Files, lines(&roots)),
+        (ClipFormat::Files, pack(&roots)),
     ]);
     // The text still crosses; the files do not.
     assert_eq!(offered(&desk.clipboard).await, [ClipFormat::Text]);
@@ -534,4 +534,26 @@ async fn a_newer_copy_than_the_one_announced_is_never_sent() {
         .replace(vec![(ClipFormat::Text, b"not announced".to_vec())]);
     let error = desk.clipboard.paste(ClipFormat::Text).await.unwrap_err();
     assert!(error.contains("changed since"), "{error}");
+}
+
+#[tokio::test]
+async fn files_whose_copy_was_cleared_while_they_were_listed_are_never_offered() {
+    let (desk, tower) = linked_pair(both_ways(None), both_ways(None)).await;
+    let source = tempfile::tempdir().unwrap();
+    let (roots, _) = some_files(source.path());
+    // The listing reads the paths first: slow, so that the copy is emptied before it ends.
+    tower.clipboard.slow_reads(Duration::from_millis(200));
+    tower
+        .clipboard
+        .copy(vec![(ClipFormat::Files, pack(&roots))]);
+    // Emptied once the paths were read, before the listing of the folder ends.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    tower.clipboard.copy(vec![]);
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !matches!(desk.clipboard.content(), Some(Content::Offer { formats, .. }) if formats.contains(&ClipFormat::Files)),
+            "the files of a copy gone are not offered"
+        );
+    }
 }

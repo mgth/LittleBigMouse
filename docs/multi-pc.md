@@ -450,10 +450,15 @@ sees it.
   those paths; it copies from there. A name that would land outside that folder (`..`,
   an absolute path, a drive) refuses the whole offer, and so do two entries that would
   land on one file (`Photo.jpg` and `photo.jpg` where case is ignored, or after names
-  Windows cannot hold were made fit). A name that is not UTF-8 is not offered: the wire
-  carries names as text. Every range is read from the very file that was listed — not a
-  link since, same file (device and inode on Unix), size and time — or the paste fails
-  rather than mix two versions. A list too large for one control message is not offered,
+  Windows cannot hold were made fit); and since the volume of the reception folder may
+  ignore case where the system does not (a share), every entry is created only if absent,
+  and one landing on another fails the paste rather than overwrite it. A name that is not
+  UTF-8 is not offered: the wire carries names as text; a narrow `CF_HDROP` is decoded in
+  the ANSI code page, and one it cannot decode is not read. Every range is read from the
+  very file that was listed — not a link since, the same file (device and inode on Unix,
+  volume and file index on Windows), size and time, checked before and after the read —
+  or the paste fails rather than mix two versions. A copy emptied or replaced while its
+  files are listed is never offered. A list too large for one control message is not offered,
   and the copier's state says so. Paths go between the system clipboard and the sharing
   NUL-separated, exactly as the system has them. The fetch starts at the first read and is not tied to it: the reader may
   give up first (a Qt application under Wayland after one second without data, Windows

@@ -552,7 +552,7 @@ fn read(window: HWND, copy: u64, format: ClipFormat, limit: usize) -> Data {
                 .and_then(|dib| convert::dib_to_png(&dib)),
         },
         ClipFormat::Files => bytes_of(u32::from(CF_HDROP.0), limit).and_then(|drop| {
-            let paths = convert::paths_from_dropfiles(&drop);
+            let paths = convert::paths_from_dropfiles(&drop, &ansi_path)?;
             if paths.is_empty() {
                 Err("no file was copied".to_owned())
             } else {
@@ -590,4 +590,21 @@ fn bytes_of(format: u32, limit: usize) -> Data {
         let _ = GlobalUnlock(memory);
         Ok(bytes)
     }
+}
+
+/// A name in the system's ANSI code page, as an older application puts it in `CF_HDROP`,
+/// or `None` when it is not valid there.
+fn ansi_path(name: &[u8]) -> Option<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::Globalization::{MultiByteToWideChar, CP_ACP, MB_ERR_INVALID_CHARS};
+    // SAFETY: the sizes are those of the slices passed.
+    let needed = unsafe { MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, name, None) };
+    if needed <= 0 {
+        return None;
+    }
+    let mut wide = vec![0u16; needed as usize];
+    // SAFETY: as above.
+    let written =
+        unsafe { MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, name, Some(&mut wide)) };
+    (written == needed).then(|| std::path::PathBuf::from(std::ffi::OsString::from_wide(&wide)))
 }

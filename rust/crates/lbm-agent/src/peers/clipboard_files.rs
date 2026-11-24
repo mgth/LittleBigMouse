@@ -33,31 +33,60 @@ pub struct Listed {
     pub entry: ClipFile,
     pub source: PathBuf,
     /// The file as it was listed: a read of it checks it is still that one.
-    pub stamp: Stamp,
+    /// The file as it was listed, `None` for a folder: a read of it checks it is still
+    /// that one.
+    pub stamp: Option<Stamp>,
 }
 
-/// What tells one version of a file from another: its size and time of change, and on
-/// Unix the file itself (device and inode), so that a file replaced by another under the
-/// same name is told apart even with the same size and time.
+/// What tells one version of a file from another: its size and time of change, and the
+/// file itself — device and inode on Unix, volume and file index on Windows — so that a
+/// file replaced by another under the same name is told apart even with the same size
+/// and a time kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stamp {
     len: u64,
     modified: Option<SystemTime>,
-    #[cfg(unix)]
     file: (u64, u64),
 }
 
 impl Stamp {
-    pub fn of(metadata: &std::fs::Metadata) -> Stamp {
-        #[cfg(unix)]
-        use std::os::unix::fs::MetadataExt;
-        Stamp {
+    /// The stamp of an open file, read from its handle, not its path.
+    pub fn of(file: &std::fs::File) -> std::io::Result<Stamp> {
+        let metadata = file.metadata()?;
+        Ok(Stamp {
             len: metadata.len(),
             modified: metadata.modified().ok(),
-            #[cfg(unix)]
-            file: (metadata.dev(), metadata.ino()),
-        }
+            file: identity(file, &metadata)?,
+        })
     }
+}
+
+#[cfg(unix)]
+fn identity(_: &std::fs::File, metadata: &std::fs::Metadata) -> std::io::Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    Ok((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(windows)]
+fn identity(file: &std::fs::File, _: &std::fs::Metadata) -> std::io::Result<(u64, u64)> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the handle of an open file, for as long as the call.
+    unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }
+        .map_err(std::io::Error::other)?;
+    Ok((
+        u64::from(info.dwVolumeSerialNumber),
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn identity(_: &std::fs::File, _: &std::fs::Metadata) -> std::io::Result<(u64, u64)> {
+    Ok((0, 0))
 }
 
 /// The paths a clipboard holds, as the backends hand them over: separated by NUL, the
@@ -151,7 +180,7 @@ impl Walk {
                     folder: true,
                 },
                 source: path.to_owned(),
-                stamp: Stamp::of(&metadata),
+                stamp: None,
             });
             // Within what is left of the budget, before anything is sorted: a folder of
             // a million files is given up after the first entries over the bound.
@@ -178,6 +207,9 @@ impl Walk {
                     usize::try_from(self.max_bytes).unwrap_or(usize::MAX),
                 ));
             }
+            let stamp = std::fs::File::open(path)
+                .and_then(|file| Stamp::of(&file))
+                .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
             self.listed.push(Listed {
                 entry: ClipFile {
                     path: relative,
@@ -185,7 +217,7 @@ impl Walk {
                     folder: false,
                 },
                 source: path.to_owned(),
-                stamp: Stamp::of(&metadata),
+                stamp: Some(stamp),
             });
         }
         Ok(())
@@ -206,22 +238,26 @@ pub fn read_range(listed: &Listed, offset: u64, length: u64) -> Result<Vec<u8>, 
     }
     let mut file = std::fs::File::open(path)
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
-    let opened = file
-        .metadata()
-        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
-    if Stamp::of(&opened) != listed.stamp {
+    let same = |file: &std::fs::File| {
+        Stamp::of(file).ok().as_ref() == listed.stamp.as_ref() && listed.stamp.is_some()
+    };
+    if !same(&file) {
         return Err(changed());
     }
     file.seek(SeekFrom::Start(offset))
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
     let mut data = Vec::new();
-    file.take(length)
+    (&mut file)
+        .take(length)
         .read_to_end(&mut data)
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
-    // And still that one once read: a change under the read is a change too.
-    match std::fs::metadata(path) {
-        Ok(after) if Stamp::of(&after) == listed.stamp => Ok(data),
-        _ => Err(changed()),
+    // And still that one once read, at that path: a change under the read, or another
+    // file renamed over it meanwhile, is a change too.
+    let still = std::fs::File::open(path).is_ok_and(|again| same(&again));
+    if same(&file) && still {
+        Ok(data)
+    } else {
+        Err(changed())
     }
 }
 
@@ -386,23 +422,40 @@ pub async fn fetch(fetch: Fetch) -> Result<Vec<PathBuf>, String> {
         if !file.path.contains('/') {
             tops.push(path.clone());
         }
+        // Created only if absent, folders as files: the folder of this paste is new, so
+        // something there already is another entry that landed on the same name — a
+        // volume that ignores case where this system does not, a share — and is never
+        // written over.
+        let clash = |path: &Path| {
+            format!(
+                "two files would have the same name here: {}",
+                path.display()
+            )
+        };
         if file.folder {
-            blocking(move || {
-                std::fs::create_dir_all(&path)
-                    .map_err(|error| format!("{} cannot be made: {error}", path.display()))
+            blocking(move || match std::fs::create_dir(&path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Err(clash(&path))
+                }
+                Err(error) => Err(format!("{} cannot be made: {error}", path.display())),
             })
             .await?;
             continue;
         }
         let target = path.clone();
         blocking(move || {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|error| format!("{} cannot be made: {error}", parent.display()))?;
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)
+            {
+                Ok(_) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Err(clash(&target))
+                }
+                Err(error) => Err(format!("{} cannot be written: {error}", target.display())),
             }
-            std::fs::File::create(&target)
-                .map(drop)
-                .map_err(|error| format!("{} cannot be written: {error}", target.display()))
         })
         .await?;
         let mut offset = 0;
@@ -627,6 +680,52 @@ mod tests {
             .unwrap_err()
             .contains("more than 10"));
         assert_eq!(walk_within(&[top], 1000, 51).unwrap().len(), 51);
+    }
+
+    #[test]
+    fn a_file_replaced_by_one_of_the_same_size_and_time_is_told_apart() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f");
+        std::fs::write(&file, b"version one").unwrap();
+        let listed = walk(std::slice::from_ref(&file), 100).unwrap().remove(0);
+        let time = std::fs::metadata(&file).unwrap().modified().unwrap();
+        let other = dir.path().join("g");
+        std::fs::write(&other, b"version two").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&other)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+        std::fs::rename(&other, &file).unwrap();
+        assert!(read_range(&listed, 0, 4).unwrap_err().contains("changed"));
+    }
+
+    #[tokio::test]
+    async fn an_entry_landing_on_one_already_written_fails_the_fetch_and_overwrites_nothing() {
+        // What a volume that ignores case does to `Photo.jpg` then `photo.jpg`: the
+        // second lands on the first. Played here by two entries of one name.
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("paste");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("x"), b"first").unwrap();
+        let fetch = Fetch {
+            link: LinkSender::closed(),
+            machine_id: "m".into(),
+            link_id: 1,
+            serial: 1,
+            local: 1,
+            files: vec![ClipFile {
+                path: "x".into(),
+                size: 0,
+                folder: false,
+            }],
+            folder: folder.clone(),
+            routes: Routes::default(),
+            transfers: Arc::new(AtomicU64::new(0)),
+        };
+        assert!(super::fetch(fetch).await.unwrap_err().contains("same name"));
+        assert_eq!(std::fs::read(folder.join("x")).unwrap(), b"first");
     }
 
     #[test]

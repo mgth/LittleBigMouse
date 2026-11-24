@@ -493,6 +493,14 @@ pub struct LinkSender {
 }
 
 impl LinkSender {
+    /// A sender of no link: everything sent fails as on a link closed. For a caller,
+    /// a test mostly, that needs one before or without a link.
+    pub fn closed() -> LinkSender {
+        let (outgoing, _) = mpsc::channel(1);
+        let (bulk, _) = mpsc::channel(1);
+        LinkSender { outgoing, bulk }
+    }
+
     /// Queues a control message, waiting for room if the queue is full.
     pub async fn control(&self, message: &Control) -> Result<(), SendError> {
         let frame = wire::encode_control(message).map_err(SendError::Invalid)?;

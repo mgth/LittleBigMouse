@@ -270,9 +270,9 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 - **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
   un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
-- **Presse-papiers** : texte, image (PR #821) et fichiers codés, jamais essayés sur du
-  vrai matériel ; glisser-déposer étudié et écarté pour l'instant. Voir la section
-  suivante.
+- **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
+  dans les deux sens ; fichiers codés, jamais essayés sur du vrai matériel ;
+  glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
 - ~~**Pare-feu Windows**~~ : fait (PR #811). L'installeur
   Inno Setup (`LittleBigMouse.Setup/LittleBigMouse.iss`) pose la règle TCP 24817 pour
   `lbm-agent.exe`, sous-réseau local, tous profils (le profil « Public » est celui
@@ -323,15 +323,19 @@ pris en charge, l'état le dit. GNOME n'a ni l'un ni l'autre.
   seulement quand l'option est cochée et qu'une machine qui partage est liée. Le hook n'en
   sait rien.
 
-### Ce qui n'a jamais tourné
+### Essai réel, et ce qui n'a pas encore tourné
 
-- **Rien n'a tourné sur du vrai matériel** : ni KWin, ni Windows, ni entre les deux. Les
-  essais sont deux agents en boucle locale avec un presse-papiers en mémoire
-  (`lbm-agent/tests/clipboard.rs`), les conversions (fins de ligne, DIB ↔ PNG) et le
-  classement des types MIME en tests unitaires, et la priorité du flux d'entrée sur un
-  transfert de 8 Mio au niveau du lien (`lbm-net`).
-- Le code Wayland n'a jamais parlé à KWin ; le code Windows n'a jamais été exécuté (il
-  compile pour `x86_64-pc-windows-gnu`, clippy propre). Points à surveiller à l'essai :
+- **Essayé le 2026-11-24 sur la paire du mainteneur** (maître KDE Plasma 6.8.3 Wayland,
+  esclave Windows 11 vm124, les deux agents à `f1c04196`, presse-papiers ouvert dans les
+  deux sens) : **le texte et l'image passent dans les deux sens.** Côté Linux l'agent a
+  ouvert `ext-data-control-v1` auprès de KWin sans erreur.
+- Avant cela, les essais étaient deux agents en boucle locale avec un presse-papiers en
+  mémoire (`lbm-agent/tests/clipboard.rs`), les conversions (fins de ligne, DIB ↔ PNG),
+  le classement des types MIME, et la priorité du flux d'entrée sur un transfert de
+  8 Mio au niveau du lien (`lbm-net`).
+- Pas encore observé : quelles applications ont servi de source et de cible, une image
+  volumineuse sur un réseau lent (Qt abandonne après une seconde sans données), l'effet
+  du tampon d'envoi réduit en Wi-Fi, et les points suivants :
   le rendu différé quand une application lit `CF_DIBV5` ou `CF_BITMAP` (que Windows
   synthétise depuis `CF_DIB`), le fil du presse-papiers bloqué pendant un rendu, et
   Klipper qui pourrait reprendre la sélection à son compte quand la source disparaît.
@@ -342,8 +346,8 @@ pris en charge, l'état le dit. GNOME n'a ni l'un ni l'autre.
 
 | Palier | Contenu | Windows | Linux | État |
 |---|---|---|---|---|
-| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé (PR #821), jamais essayé en vrai |
-| 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé (PR #821), jamais essayé en vrai |
+| 1 | Texte | `CF_UNICODETEXT` | `text/plain;charset=utf-8`, `UTF8_STRING`, `text/plain` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
+| 1 | Image | `PNG` enregistré, `CF_DIB` | `image/png` | Codé (PR #821), passe dans les deux sens (essai réel du 2026-11-24) |
 | 2 | Texte mis en forme | `HTML Format`, `Rich Text Format` | `text/html`, `text/rtf` | Pas commencé ; l'en-tête de `HTML Format` (décalages) est à reconstruire |
 | 3 | Fichiers | `CF_HDROP` | `text/uri-list` | Codé (PR « palier 3 »), jamais essayé en vrai |
 | 4 | Glisser-déposer entre machines | — | — | Étudié, non codé : voir plus bas |

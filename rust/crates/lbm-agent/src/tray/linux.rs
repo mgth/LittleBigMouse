@@ -27,7 +27,7 @@ impl ksni::Tray for AgentTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        icons::pixmaps(self.0.icon())
+        icons::badged(self.0.icon(), self.0.badge())
             .iter()
             .map(|p| ksni::Icon {
                 width: p.width as i32,
@@ -151,5 +151,24 @@ mod tests {
         tray.activate(0, 0);
         assert_eq!(opened.load(Ordering::Relaxed), 1);
         assert_eq!(tray.icon_pixmap().len(), 6);
+    }
+
+    #[test]
+    fn the_pixmaps_carry_the_badge() {
+        let (mut model, _calls, _) = super::super::tests::model();
+        model.show(&serde_json::json!({ "Engine": "Running" }));
+        let plain = AgentTray(model).icon_pixmap();
+        let (mut model, _calls, _) = super::super::tests::model();
+        model.show(&serde_json::json!({ "Engine": "Running", "DrivenBy": "desk" }));
+        let driven = AgentTray(model).icon_pixmap();
+        assert_eq!(driven.len(), plain.len());
+        assert_ne!(
+            driven[0].data, plain[0].data,
+            "the host is sent another icon"
+        );
+        assert_eq!(
+            driven[5].data,
+            icons::badged(icons::TrayIcon::On, icons::Badge::Driven)[5].argb
+        );
     }
 }

@@ -33,7 +33,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use super::{follow, Action, TrayModel};
 use crate::api::{self, Call};
-use crate::icons::{self, Pixmap, TrayIcon};
+use crate::icons::{self, Badge, Pixmap, TrayIcon};
 
 const CLASS_NAME: PCWSTR = w!("LittleBigMouseAgentTray");
 /// The icon's messages to its window.
@@ -46,8 +46,8 @@ const ICON_ID: u32 = 1;
 /// What the window procedure reads, on the tray's thread.
 struct Tray {
     model: Arc<Mutex<TrayModel>>,
-    /// One icon per state, made once.
-    icons: [HICON; 4],
+    /// One icon per state and badge, made once, in [`index`] order.
+    icons: Vec<HICON>,
     /// Explorer's "the taskbar is back" broadcast.
     taskbar_created: u32,
     /// Whether the notification area is currently holding our icon. NIM_MODIFY on an
@@ -97,13 +97,11 @@ pub async fn run(calls: UnboundedSender<Call>, open: Arc<dyn Fn() + Send + Sync>
 /// The tray's thread: the window, the icon, the message loop. Sends back the window (as
 /// a number: a handle does not cross threads in the `windows` types) once the icon is up.
 fn window_thread(model: Arc<Mutex<TrayModel>>, ready: tokio::sync::oneshot::Sender<Option<isize>>) {
-    let icons = [
-        TrayIcon::On,
-        TrayIcon::Off,
-        TrayIcon::Dead,
-        TrayIcon::Paused,
-    ]
-    .map(|icon| make_icon(best_size(icons::pixmaps(icon))).unwrap_or_default());
+    let icons: Vec<HICON> = STATES
+        .iter()
+        .flat_map(|&icon| BADGES.map(|badge| (icon, badge)))
+        .map(|(icon, badge)| make_icon(best_size(icons::badged(icon, badge))).unwrap_or_default())
+        .collect();
     // SAFETY: plain Win32 window setup on this thread, torn down below on this thread.
     let window = unsafe {
         let module = GetModuleHandleW(None).unwrap_or_default();
@@ -162,7 +160,8 @@ fn window_thread(model: Arc<Mutex<TrayModel>>, ready: tokio::sync::oneshot::Send
             DispatchMessageW(&message);
         }
     }
-    for icon in icons {
+    let icons = TRAY.with(|tray| tray.borrow_mut().take().map(|t| t.icons));
+    for icon in icons.into_iter().flatten() {
         // SAFETY: made above, no longer shown.
         unsafe {
             let _ = DestroyIcon(icon);
@@ -211,7 +210,7 @@ fn notify(window: HWND, message: windows::Win32::UI::Shell::NOTIFY_ICON_MESSAGE)
             uID: ICON_ID,
             uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
             uCallbackMessage: WM_TRAY,
-            hIcon: tray.icons[index(model.icon())],
+            hIcon: tray.icons[index(model.icon(), model.badge())],
             ..Default::default()
         };
         let tip: Vec<u16> = format!("LittleBigMouse — {}", model.state())
@@ -224,13 +223,19 @@ fn notify(window: HWND, message: windows::Win32::UI::Shell::NOTIFY_ICON_MESSAGE)
     })
 }
 
-fn index(icon: TrayIcon) -> usize {
-    match icon {
-        TrayIcon::On => 0,
-        TrayIcon::Off => 1,
-        TrayIcon::Dead => 2,
-        TrayIcon::Paused => 3,
-    }
+const STATES: [TrayIcon; 4] = [
+    TrayIcon::On,
+    TrayIcon::Off,
+    TrayIcon::Dead,
+    TrayIcon::Paused,
+];
+const BADGES: [Badge; 3] = [Badge::None, Badge::Away, Badge::Driven];
+
+/// Where the icon of `icon` under `badge` is in [`Tray::icons`].
+fn index(icon: TrayIcon, badge: Badge) -> usize {
+    let state = STATES.iter().position(|&s| s == icon).unwrap_or(0);
+    let badge = BADGES.iter().position(|&b| b == badge).unwrap_or(0);
+    state * BADGES.len() + badge
 }
 
 unsafe extern "system" fn window_procedure(
@@ -398,13 +403,25 @@ mod tests {
             TrayIcon::Dead,
             TrayIcon::Paused,
         ] {
-            for pixmap in icons::pixmaps(icon) {
-                let made = make_icon(pixmap).expect("an icon");
-                // SAFETY: made just above.
-                unsafe { DestroyIcon(made) }.unwrap();
+            for badge in BADGES {
+                for pixmap in icons::badged(icon, badge) {
+                    let made = make_icon(pixmap).expect("an icon");
+                    // SAFETY: made just above.
+                    unsafe { DestroyIcon(made) }.unwrap();
+                }
             }
             assert!(best_size(icons::pixmaps(icon)).width >= 16);
         }
+    }
+
+    #[test]
+    fn every_state_and_badge_has_an_icon_of_its_own() {
+        let mut seen: Vec<usize> = STATES
+            .iter()
+            .flat_map(|&icon| BADGES.map(|badge| index(icon, badge)))
+            .collect();
+        seen.sort_unstable();
+        assert_eq!(seen, (0..STATES.len() * BADGES.len()).collect::<Vec<_>>());
     }
 
     #[test]

@@ -42,6 +42,7 @@ fn laptop(pending: bool) -> Peer {
         displays: 2,
         problem: None,
         driven: false,
+        drives: false,
     }
 }
 
@@ -224,6 +225,25 @@ fn a_paired_machine_says_what_it_is_and_can_be_forgotten() {
     h.get_by_label("Forget laptop").click();
     h.run();
     assert_eq!(h.state().did, Some(Did::Forget(LAPTOP.into())));
+}
+
+#[test]
+fn a_driven_machine_shows_its_master_on_the_page() {
+    let desk = Peer {
+        machine_id: "dd".into(),
+        name: "desk".into(),
+        role: Role::Master,
+        displays: 0,
+        drives: true,
+        ..laptop(false)
+    };
+    let mut h = page(Some(state(vec![desk])));
+    h.run();
+    assert!(h.query_by_label("Drives this machine").is_some());
+    assert!(h
+        .query_by_label("Driven by desk: its mouse and keyboard are on this machine")
+        .is_some());
+    assert!(h.query_by_label("Has the mouse and keyboard").is_none());
 }
 
 #[test]

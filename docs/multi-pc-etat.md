@@ -35,7 +35,7 @@ qui va le pointeur quand il y entre.
 | Modèle | `lbm-layout`, `lbm-display`, `lbm-store`, `lbm-zones` | Machine portée par la source, clé de dalle inter-machines, fusion des écrans distants, zones avec hôte |
 | Agent | `lbm-agent/src/peers` | Gestion des pairs, API (`Peers`, `SetMultiPc`, `PeerConnect`…), relais du flux, un esclave « sélectionné » |
 | Hook maître | `lbm-hook/src/hook/crossing` (règles, toutes plateformes), `lbm-hook/src/hook/linux/evdev` et le maître Windows (ligne suivante) | Traversée, capture des claviers quand le pointeur est parti, retour local si le hook maître perd son relais, curseur local masqué |
-| Maître Windows (PR #PRMASTER) | `lbm-hook/src/hook/ll_master.rs` (neutre, testé partout avec le vrai moteur), `hook/windows/master.rs`, `remote::keymap::linux_key` | Hooks bas niveau `WH_MOUSE_LL` et `WH_KEYBOARD_LL` sur l'automate commun : mouvement avalé et lu comme déplacement depuis le curseur figé, curseur caché sous la fenêtre de l'esclave Windows (`remote/windows/hider.rs`, réutilisée), clavier avalé une fois relâchées les touches tenues ici, table scancode → code evdev, verrous par `GetKeyState`, retour au changement de bureau (Ctrl+Alt+Suppr, Win+L) et quand une fenêtre élevée prend le focus ; hook clavier et fenêtre de masquage posés seulement quand le flux a un client (`Outlet::on_change`), minuterie seulement quand le pointeur est parti. Exemple `lbm-hook --example input_sink` : un esclave qui consigne le flux au lieu de l'injecter, pour essayer un maître sans piloter le bureau de l'esclave |
+| Maître Windows (PR #828) | `lbm-hook/src/hook/ll_master.rs` (neutre, testé partout avec le vrai moteur), `hook/windows/master.rs`, `remote::keymap::linux_key` | Hooks bas niveau `WH_MOUSE_LL` et `WH_KEYBOARD_LL` sur l'automate commun : mouvement avalé et lu comme déplacement depuis le curseur figé, curseur caché sous la fenêtre de l'esclave Windows (`remote/windows/hider.rs`, réutilisée), clavier avalé une fois relâchées les touches tenues ici, table scancode → code evdev, verrous par `GetKeyState`, retour au changement de bureau (Ctrl+Alt+Suppr, Win+L) et quand une fenêtre élevée prend le focus ; hook clavier et fenêtre de masquage posés seulement quand le flux a un client (`Outlet::on_change`), minuterie seulement quand le pointeur est parti. Exemple `lbm-hook --example input_sink` : un esclave qui consigne le flux au lieu de l'injecter, pour essayer un maître sans piloter le bureau de l'esclave |
 | Hook esclave | `lbm-hook/src/remote` | Injection `SendInput` (Windows) et uinput (Linux), relâchement de tout ce qui est tenu en fin de session, curseur rangé |
 | Interface | `lbm-app` | Page Machines, écrans distants sur la carte, bascule de source, vignettes de fond d'écran distantes |
 | Commutation d'entrée | `lbm-agent/src/input_switch.rs` | VCP 0x60 par `ddcutil` ou dxva2, pour un moniteur câblé sur deux entrées sans KVM |
@@ -194,7 +194,7 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
 |---|---|---|
 | **Linux, backend evdev** | Livré, vérifié sous KDE Wayland | Livré, vérifié sous KWin 6 avec `peer_drive` comme maître (correctifs de la PR #807) |
 | **Linux, backend portail Wayland ou X11** | Absent : les zones distantes ne sont jamais franchissables | Livré si `/dev/uinput` est accessible en écriture, jamais essayé sur matériel |
-| **Windows** | Livré (PR #PRMASTER), essayé sur la vm124 face à un esclave Linux de test, avec une souris simulée ; jamais face à un esclave Windows ni avec une vraie souris | Livré, vérifié |
+| **Windows** | Livré (PR #828), essayé sur la vm124 face à un esclave Linux de test, avec une souris simulée ; jamais face à un esclave Windows ni avec une vraie souris | Livré, vérifié |
 | **macOS** | Absent | Absent |
 
 Prérequis des rôles Linux, qui ne sont pas les mêmes :
@@ -237,7 +237,7 @@ ne demandent que du temps sur les machines actuelles :
 
 ### 2. Maître Windows
 
-Fait (PR #PRMASTER) ; voir « The Windows master » dans [`multi-pc.md`](multi-pc.md).
+Fait (PR #828) ; voir « The Windows master » dans [`multi-pc.md`](multi-pc.md).
 Ce qui a été tranché, et pourquoi :
 
 - **Mouvement relatif pendant que le pointeur est parti** : avaler chaque mouvement et
@@ -260,7 +260,7 @@ Ce qui a été tranché, et pourquoi :
 - **Automate** : `hook::ll_master` implémente `Platform` ; une « trame » est un
   événement, passé ou avalé. Secours, pointeur verrouillé et verrous fonctionnent comme
   sous Linux (essayés), au défaut de disposition près (« Faiblesses connues »).
-- **Identité des moniteurs** : PR à part (#PRIDS), l'id Windows calculé sur l'EDID de
+- **Identité des moniteurs** : PR à part (#827), l'id Windows calculé sur l'EDID de
   l'esclave.
 - **Fenêtres élevées** côté maître : vérifié, un hook non élevé ne voit rien de
   l'entrée destinée à une fenêtre élevée au premier plan (ni mouvement ni touche), même
@@ -508,7 +508,7 @@ macOS n'a de sens qu'après.
 
 1. Valider l'existant (esclave Linux, VCP 0x60, fonds en direct).
 2. ~~Sortir l'automate de traversée du module evdev~~ (fait, #810).
-3. ~~Maître Windows~~ (PR #PRMASTER ; reste l'essai avec de vrais périphériques et un
+3. ~~Maître Windows~~ (PR #828 ; reste l'essai avec de vrais périphériques et un
    esclave Windows, et la disposition du clavier pour les raccourcis).
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
@@ -525,8 +525,8 @@ macOS n'a de sens qu'après.
 Tenu à jour au fil des branches ; une ligne disparaît quand sa PR est fusionnée et que
 les sections ci-dessus en tiennent compte.
 
-Maître Windows : PR #PRMASTER (hooks bas niveau), non fusionnée ; l'identité des écrans
-distants sur un maître Windows est une PR à part (#PRIDS).
+Maître Windows : PR #828 (hooks bas niveau), non fusionnée ; l'identité des écrans
+distants sur un maître Windows est une PR à part (#827).
 
 La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; elle est
 décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les

@@ -80,6 +80,10 @@ pub struct ZonesLayout {
     /// and only while its input stream has a client. Every other backend moves the
     /// real cursor in real pixels, and a remote zone's pixels do not exist here.
     remote_enterable: bool,
+    /// The other machines whose zones are in play while [`Self::remote_enterable`]:
+    /// `None` for every one (a master whose agent names none), else only those
+    /// ([`Self::set_drivable_hosts`]).
+    drivable: Option<Vec<String>>,
 }
 
 /// A point of the engine's pixel space, seen from the machine it is on.
@@ -128,6 +132,7 @@ impl Default for ZonesLayout {
             bottom: 0.0,
             travels: HashMap::new(),
             remote_enterable: false,
+            drivable: None,
         }
     }
 }
@@ -256,11 +261,16 @@ impl ZonesLayout {
     /// compiler would have written had that zone not been there.
     fn init(&mut self) {
         let remote = self.remote_enterable;
+        let drivable = self.drivable.as_deref();
+        let arena = &self.arena;
         self.zones = self
             .all_zones
             .iter()
             .copied()
-            .filter(|&z| remote || self.arena[z].host.is_none())
+            .filter(|&z| match arena[z].host.as_deref() {
+                None => true,
+                Some(host) => remote && drivable.is_none_or(|d| d.iter().any(|h| h == host)),
+            })
             .collect();
         self.main_zones.clear();
         self.travels.clear();
@@ -319,6 +329,24 @@ impl ZonesLayout {
             return;
         }
         self.remote_enterable = enterable;
+        self.init();
+    }
+
+    /// Which other machines' zones may be in play: `None` for every one, as before an
+    /// agent named any; `Some` for those only — the machines the agent can relay to
+    /// now (`Command::Drivable`). A zone of any other machine is out of play, and a
+    /// border to it a wall, even while [`Self::remote_enterable`]. Rebuilds only on a
+    /// change, like [`Self::set_remote_enterable`]; the order of `hosts` does not count.
+    pub fn set_drivable_hosts(&mut self, hosts: Option<&[String]>) {
+        let mut hosts = hosts.map(<[String]>::to_vec);
+        if let Some(hosts) = &mut hosts {
+            hosts.sort();
+            hosts.dedup();
+        }
+        if self.drivable == hosts {
+            return;
+        }
+        self.drivable = hosts;
         self.init();
     }
 
@@ -638,6 +666,44 @@ mod tests {
         assert_eq!(layout.host_point(Point::new(3010, 0)), None);
         assert!(layout.has_remote_zones());
         assert!(!layout.remote_enterable());
+    }
+
+    // Here (0..1920) links right to A (3000..4920), which links right to B (6000..7920).
+    const THREE_MACHINES: &str = concat!(
+        r#"<ZonesLayout><MainZones>"#,
+        r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="1" Name="A" Host="aaaa" HostX="3000" HostY="0"><PixelsBounds><Rect Left="3000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="2"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="2" Name="B" Host="bbbb" HostX="6000" HostY="0"><PixelsBounds><Rect Left="6000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="1054" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    #[test]
+    fn only_the_drivable_machines_zones_are_in_play_once_the_agent_names_them() {
+        let mut layout = ZonesLayout::from_xml(THREE_MACHINES).expect("parse");
+        let (here, _) = zone_by_name(&layout, "Here");
+        let (a, _) = zone_by_name(&layout, "A");
+        let (b, _) = zone_by_name(&layout, "B");
+        layout.set_remote_enterable(true);
+        // Named by nobody: every machine, as before.
+        assert_eq!(layout.main_zones, vec![here, a, b]);
+
+        layout.set_drivable_hosts(Some(&["aaaa".to_owned()]));
+        assert_eq!(layout.main_zones, vec![here, a]);
+        assert_eq!(layout.arena[a].right[0].target, None, "B is a wall");
+        assert_eq!(layout.host_point(Point::new(6010, 0)), None);
+
+        layout.set_drivable_hosts(Some(&["bbbb".to_owned(), "aaaa".to_owned()]));
+        assert_eq!(layout.main_zones, vec![here, a, b]);
+        assert_eq!(layout.arena[a].right[0].target, Some(b));
+
+        layout.set_drivable_hosts(Some(&[]));
+        assert_eq!(layout.main_zones, vec![here]);
+        // Without a client, none, whatever the agent named.
+        layout.set_drivable_hosts(None);
+        layout.set_remote_enterable(false);
+        assert_eq!(layout.main_zones, vec![here]);
     }
 
     #[test]

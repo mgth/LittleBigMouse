@@ -2455,13 +2455,12 @@ impl App {
     fn screen_overlay_controls(&mut self, ui: &mut egui::Ui) {
         use lbm_overlay::Mode;
         let (mode, label, selected) = match self.mode {
-            // Rulers are drawn on the selected screen, which must be one of this
-            // machine's to be drawn on at all.
-            lbm_ui::mode::Mode::Location => (
-                Mode::Rulers,
-                "Rulers on screens",
-                self.selected.is_some() && self.selected_remote().is_none(),
-            ),
+            // Rulers measure the selected panel, on every screen: this machine's and the
+            // remotes' (remote_rulers). A remote's panel measures as well as a local one,
+            // its millimetres being the layout's.
+            lbm_ui::mode::Mode::Location => {
+                (Mode::Rulers, "Rulers on screens", self.selected.is_some())
+            }
             lbm_ui::mode::Mode::Resistance => (Mode::Resistance, "Resistance on screens", true),
             _ => return,
         };
@@ -5252,7 +5251,8 @@ mod machines_tests {
             .collect();
         assert_eq!(targets, ["DP-1"]);
 
-        // Location: the place stays editable, the rulers are for this machine's screens.
+        // Location: the place stays editable, and the rulers can measure it, on this
+        // machine's screens and on the remote's.
         app.mode = lbm_ui::mode::Mode::Location;
         let (text, nodes) = properties(&mut app);
         assert!(
@@ -5260,7 +5260,7 @@ mod machines_tests {
             "a remote screen is placed here"
         );
         if lbm_overlay::SUPPORTED {
-            assert!(disabled(&nodes, "Rulers on screens"));
+            assert!(!disabled(&nodes, "Rulers on screens"));
         }
         assert!(text.contains("This screen is showing laptop"), "{text}");
         assert_eq!(

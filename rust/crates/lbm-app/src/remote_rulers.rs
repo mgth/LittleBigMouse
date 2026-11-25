@@ -333,6 +333,51 @@ mod tests {
     }
 
     #[test]
+    fn a_remotes_panel_selected_is_measured_on_every_screen() {
+        let (layout, here) = layout_with_a_remote();
+        let laptop = layout
+            .monitors()
+            .iter()
+            .find(|m| m.id != here)
+            .unwrap()
+            .id
+            .clone();
+        let measured = layout
+            .depth_projection(layout.monitor(&laptop).unwrap())
+            .unwrap()
+            .bounds();
+        let measures_the_laptop = |bands: &[Band]| {
+            assert!(!bands.is_empty());
+            for band in bands {
+                let Content::Ruler { measured_mm, .. } = band.content else {
+                    panic!("rulers");
+                };
+                let expected = if band.side.vertical() {
+                    measured.height()
+                } else {
+                    measured.width()
+                };
+                assert!((measured_mm - expected).abs() < 1e-9);
+            }
+        };
+        // On the laptop itself: its own panel, from zero.
+        let (wanted, errors) = super::wanted(&layout, Some(&laptop));
+        assert!(errors.is_empty(), "{errors:?}");
+        measures_the_laptop(&wanted["0a00"]);
+        for band in &wanted["0a00"] {
+            let Content::Ruler { zero_mm, .. } = band.content else {
+                unreachable!()
+            };
+            assert!(zero_mm.abs() < 1e-9, "{zero_mm}");
+        }
+        // On this machine's screen, as the window draws it (machines::local_view).
+        let local = crate::machines::local_view(&layout);
+        let bands = scene::from_layout(&local, Mode::Rulers, Some(&laptop)).unwrap();
+        assert!(bands.iter().all(|b| b.monitor == here));
+        measures_the_laptop(&bands);
+    }
+
+    #[test]
     fn a_remote_off_its_desktop_gets_no_rulers() {
         let (mut layout, here) = layout_with_a_remote();
         let remote: Vec<_> = layout

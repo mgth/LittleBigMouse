@@ -584,7 +584,9 @@ sees it.
 
 "Rulers on screens" (Location mode) draws on every screen a ruler graduated in
 millimetres from the selected panel. The remote's screens get theirs too, each at its
-place and its physical size.
+place and its physical size. The selected panel may be a remote's as well as one of
+the master's: its millimetres are the layout's either way, and every screen, the
+master's and the remotes', measures it.
 
 - **Computed by the master**, from its layout: `lbm-app` takes, per remote machine on
   the map, the layout with every other machine's sources off their desktop

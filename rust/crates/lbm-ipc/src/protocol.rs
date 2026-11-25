@@ -107,6 +107,17 @@ pub enum Command {
         #[serde(rename = "Shortcut")]
         shortcut: String,
     },
+    /// Multi-PC master: the machines this agent relays the input stream to now, by
+    /// machine id (docs/multi-pc.md, "Several remotes at once"). Sent on every
+    /// connection after `Hello`, and again whenever the set changes. From then on a
+    /// hook that says `InputHosts` (`crate::input::HOSTS_CAPABILITY`) names the
+    /// machine before each `Enter` it writes, puts in play only those machines' zones,
+    /// and brings the pointer home from a machine that leaves the set. An older hook
+    /// ignores it, and an agent that never sends it gets batches with no destination.
+    Drivable {
+        #[serde(rename = "Hosts")]
+        hosts: Vec<String>,
+    },
     /// Leave.
     Quit,
     /// A command this version does not know. Kept rather than refused: a frame is
@@ -447,6 +458,19 @@ mod tests {
             parse(&frame(&[Command::Excluded { processes: vec![] }])),
             [Command::Excluded { processes: vec![] }]
         );
+    }
+
+    #[test]
+    fn the_drivable_machines_read_back_as_themselves_including_none() {
+        for hosts in [vec!["aaaa".to_owned(), "bbbb".to_owned()], vec![]] {
+            let command = Command::Drivable { hosts };
+            assert_eq!(parse(&frame(std::slice::from_ref(&command))), [command]);
+        }
+        assert!(serde_json::to_string(&Command::Drivable {
+            hosts: vec!["aaaa".to_owned()]
+        })
+        .unwrap()
+        .contains(r#""Command":"Drivable","Hosts":["aaaa"]"#));
     }
 
     #[test]

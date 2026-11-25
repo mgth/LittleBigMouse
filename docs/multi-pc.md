@@ -362,6 +362,9 @@ On a remote (`lbm-hook/src/remote`):
   - event `{ "Event": "Peers", "Peers": <state> }` to subscribers on every change.
 - `cargo run -p lbm-agent --example peer_drive -- ADDR ID_DIR [script]` is a master
   without a hook, for trying a remote by hand (see the example's header).
+- `cargo run -p lbm-agent --example multi_master -- pair|drive …` is a master of several
+  remotes without a hook: the manager, as the master of a hook that names its machines,
+  plays that hook itself across every remote (see the example's header).
 
 ## The master's layout (lot 5b)
 

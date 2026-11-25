@@ -359,7 +359,26 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   `InputHosts`, l'agent lui dit quelles machines il peut joindre (`Drivable`) ; sans l'un
   ou l'autre, la règle « un seul esclave sélectionné » reste en vigueur. Limite connue :
   le presse-papiers ne passe pas d'un esclave à un autre (seulement esclave ↔ maître).
-  Code en cours, voir « Travaux en cours ».
+  Code : PR #836 (hook, les deux maîtres) et #839 (agent), voir « Travaux en cours ».
+
+  **Essayé le 2026-11-25, en local seulement** (les deux PR fusionnées sur une branche
+  d'essai) : `examples/multi_master` en maître — le gestionnaire multi-PC de l'agent,
+  sans monde ni hook, qui joue lui-même un hook nommant ses machines — face à deux
+  esclaves jetables sur ce poste (`lbm-agent --fake-hook`, `XDG_RUNTIME_DIR` et
+  configuration à eux, ports 24901 et 24902, chacun avec `lbm-hook --example input_sink`
+  qui consigne au lieu d'injecter), en TLS sur la boucle locale. Maître → esclave 1
+  (mouvements, touche, clic) → directement l'esclave 2 → retour à l'esclave 1 → retour au
+  maître : chaque esclave n'a reçu que ses événements, l'esclave 1 rangé et l'esclave 2
+  sorti du même lot, `Driven` juste à chaque étape. Un premier passage, mal câblé (le
+  puits d'entrée écoutait à côté), a aussi montré le retour du pointeur sur `InputReset`
+  de l'esclave où il était.
+
+  **Jamais tourné sur du vrai matériel** : le vrai hook maître (evdev ou Windows) pilotant
+  deux esclaves — couvert par des tests avec le vrai moteur, des deux maîtres, mais pas
+  par une souris ; deux esclaves physiques ; un esclave Windows parmi plusieurs (vm124),
+  son service compris ; l'interface (carte et page Machines) avec deux esclaves fusionnés ;
+  le retour au pointeur quand un lien tombe pendant qu'il est sur une autre machine,
+  ailleurs que dans les tests.
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
   dans les deux sens ; les fichiers (PR #822) passent aussi ;
   glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
@@ -653,7 +672,9 @@ décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles g
 [`multi-pc.md`](multi-pc.md).
 
 Plusieurs esclaves à la fois : conception dans `multi-pc.md` (« Several remotes at
-once ») ; le code suit en deux PR indépendantes vers `v6`, hook puis agent.
+once », PR #835) ; code en deux PR indépendantes vers `v6`, #836 (hook) et #839 (agent),
+chacune sans effet seule. Celle qui est fusionnée en second a un conflit d'une ligne dans
+`lbm-hook/src/daemon/mod.rs` (garder le bras `Drivable` de #836).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

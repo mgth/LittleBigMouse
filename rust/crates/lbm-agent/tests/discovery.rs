@@ -452,3 +452,82 @@ async fn a_machine_heard_on_two_networks_keeps_one_address_until_it_has_a_new_on
     desk.until(|s| at(s).as_deref() == Some("127.0.0.3:24817"))
         .await;
 }
+
+/// Found in review: a paired remote heard at A, then at B, then at A again with B gone,
+/// was called at B forever — the address shown stays B, A having been heard before. It
+/// is called where its datagram came from, and that address is kept once the link
+/// proves it.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_paired_remote_back_at_an_address_heard_before_is_called_there() {
+    let (desk_dir, tower_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let desk_udp = free_udp_port();
+    let desk_id = Identity::load_or_create(desk_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let tower_id = Identity::load_or_create(tower_dir.path())
+        .unwrap()
+        .fingerprint()
+        .to_owned();
+    let port = free_port();
+    // Paired at B, where nobody listens now (the tower will listen at A only).
+    let at_a = format!("127.0.0.1:{port}");
+    let at_b = format!("127.0.0.2:{port}");
+    pair(desk_dir.path(), &tower_id, &at_b, Role::Remote);
+    pair(tower_dir.path(), &desk_id, "", Role::Master);
+    let mut desk = Node::new(desk_dir.path(), setup(desk_udp, &[]));
+    desk.set(true, 0, "desk").await;
+    let announce = {
+        let tower_id = tower_id.clone();
+        move |from: [u8; 4]| {
+            let datagram = Beacon {
+                kind: Kind::Announce,
+                machine_id: tower_id.clone(),
+                name: "tower".into(),
+                port,
+            };
+            UdpSocket::bind(SocketAddr::from((from, 0)))
+                .unwrap()
+                .send_to(&datagram.encode(), loopback(desk_udp))
+                .unwrap();
+        }
+    };
+    let shown = |state: &PeersState| seen(state, &tower_id).map(|seen| seen.address.clone());
+    // Heard at A, then at B, while it is off: both calls fail.
+    announce([127, 0, 0, 1]);
+    desk.until(|s| shown(s) == Some(at_a.clone())).await;
+    announce([127, 0, 0, 2]);
+    desk.until(|s| shown(s) == Some(at_b.clone())).await;
+
+    // Back at A, B gone: every announce from A is a chance to call it there.
+    let mut tower = Node::new(
+        tower_dir.path(),
+        Setup {
+            discovery: None,
+            ..setup(free_udp_port(), &[])
+        },
+    );
+    tower.set(true, port, "tower").await;
+    let keep_announcing = tokio::spawn(async move {
+        loop {
+            announce([127, 0, 0, 1]);
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    });
+    let state = desk.until(|s| linked(s, &tower_id)).await;
+    keep_announcing.abort();
+    let entry = state
+        .peers
+        .iter()
+        .find(|p| p.peer.machine_id == tower_id)
+        .unwrap();
+    assert_eq!(entry.peer.address, at_a);
+    assert_eq!(
+        PeerStore::load(desk_dir.path())
+            .get(&tower_id)
+            .unwrap()
+            .address,
+        at_a
+    );
+}

@@ -216,8 +216,11 @@ impl Actor {
                 );
             }
         }
-        let shown = self.discovery.seen[&beacon.machine_id].address;
-        self.reach_paired(&beacon.machine_id, shown);
+        // Called where this datagram came from, not at the address shown: that one
+        // stays put for a machine heard on several networks, and may be one it left —
+        // a machine back at an address heard before (A, then B, then A with B gone)
+        // would be called at B forever. The link proves the address before it is kept.
+        self.reach_paired(&beacon.machine_id, address);
     }
 
     /// A paired remote that is not linked is called on now that it said it is there:

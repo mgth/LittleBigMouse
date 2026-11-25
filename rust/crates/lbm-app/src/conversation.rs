@@ -155,9 +155,9 @@ impl Conversation {
                 }
                 Vec::new()
             }
-            // The window's `machines` controller reads it; the bar has nothing to do
-            // with which machines are paired.
-            Message::Peers(_) => Vec::new(),
+            // The window's `machines` and `remote_rulers` read them; the bar has nothing
+            // to do with which machines are paired, nor with a drag on their screens.
+            Message::Peers(_) | Message::PeerOverlayInput { .. } => Vec::new(),
             // A message this version does not know. Ignored rather than guessed at: the
             // client keeps the same rule for events it cannot name.
             Message::Unknown(_) => Vec::new(),

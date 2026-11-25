@@ -88,12 +88,17 @@ the Windows secure desktop (UAC, lock screen), the portal and X11 backends as ma
   - `ClipboardOffer { Serial, Formats }`, `ClipboardRequest { Serial, Format, Transfer }`,
     `ClipboardAbort { Transfer, Reason }` — either way, between peers that both announced
     `Clipboard`: see "Shared clipboard"
-  - `Overlay { Revision, Bands: [Band] }` — master → remote: the rulers to draw on the
-    remote's screens, in place of any drawn before; empty takes them down (see "Rulers
-    on a remote's screens"). Sent only to a remote whose `Hello` lists the capability
-    `RemoteOverlay`; added after protocol 1 without a new version
+  - `Overlay { Revision, Bands: [Band], Interactive? }` — master → remote: the rulers
+    to draw on the remote's screens, in place of any drawn before; empty takes them down
+    (see "Rulers on a remote's screens"). `Interactive`: they take the pointer there,
+    and what is done on them comes back as `OverlayInput`; a remote that does not know
+    the field draws them passive. Sent only to a remote whose `Hello` lists the
+    capability `RemoteOverlay`; added after protocol 1 without a new version
   - `OverlayFailed { Revision, Error }` — remote → master: the rulers of `Revision`
     are not shown, refused or taken down, and why
+  - `OverlayInput { Revision, Input }` — remote → master: a gesture on interactive rulers
+    (an `lbm_overlay::input::Input`, its band as the remote shows it), in order, to the
+    master whose rulers are shown only; `Revision` is the one shown when it was made
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -360,10 +365,12 @@ On a remote (`lbm-hook/src/remote`):
     fingerprint), `Incompatible` or `Lost`; absent for a link ended on purpose;
   - `PeerWallpapers { MachineId }` (capability `PeerWallpapers`) → `{ MachineId,
     Revision, Wallpapers: [{ Display, Image | Color }] }`, see "Wallpapers";
-  - `PeerOverlay { MachineId, Bands }` (capability `PeerOverlay`) → `null`: the rulers
-    to draw on that remote's screens, empty to take them down, see "Rulers on a remote's
-    screens"; `OverlayError` on the remote's entry in `Peers` says why it does not show
-    them;
+  - `PeerOverlay { MachineId, Bands, Interactive? }` (capability `PeerOverlay`) →
+    `null`: the rulers to draw on that remote's screens, empty to take them down, see
+    "Rulers on a remote's screens"; `OverlayError` on the remote's entry in `Peers` says
+    why it does not show them. `Interactive` (capability `PeerOverlayInput`): they are
+    dragged there, and the event `PeerOverlayInput { MachineId, Input }` brings what is
+    done on them to the frontend that showed them, and to no other;
   - `SetMultiPc { Enabled, Port?, Name? }` → the same state, once the listener is up or
     everything is closed;
   - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
@@ -730,6 +737,7 @@ sees it.
   Wayland gives up after one second without data, so a large picture over a slow network
   may fail to paste. X11 and the
   primary selection are not shared.
+
 ## Rulers on a remote's screens
 
 "Rulers on screens" (Location mode) draws on every screen a ruler graduated in
@@ -749,13 +757,33 @@ master's and the remotes', measures it.
 - **Checked and drawn by the remote**: every band must be a ruler on one of its attached
   screens as they are now — same output, same pixel rectangle, same scale — or the whole
   set is refused with `OverlayFailed` (a master working from an older report must not
-  draw across the wrong place). Drawn by `lbm_overlay::Standalone`, **passive**: the
-  pointer and the keyboard go through them (the remote has no editor to hand a drag to;
-  the rulers are dragged from the master's own screens). Windows: layered windows owned
-  by a hidden window, on a thread waiting on its message queue only. Linux: the
-  layer-shell or X11 surfaces of the same helper process the editor uses (the agent run
-  as `--screen-overlay-host`), whose two-second lease the thread renews every 500 ms
-  while — and only while — rulers are shown.
+  draw across the wrong place). Drawn by `lbm_overlay::Standalone`. Windows: layered
+  windows owned by a hidden window, on a thread waiting on its message queue only.
+  Linux: the layer-shell or X11 surfaces of the same helper process the editor uses (the
+  agent run as `--screen-overlay-host`), whose two-second lease the thread renews every
+  500 ms while — and only while — rulers are shown; a gesture or an error from the
+  helper wakes the thread at once.
+- **Dragged there as here**: with an agent that announces `PeerOverlayInput`, the
+  window asks for them `Interactive`. The remote's surfaces then take the pointer (the
+  master's, injected there) and the keyboard as the master's own do; every gesture —
+  press, move, release, wheel, Escape — goes back on the link to the master whose rulers
+  they are, in order, and the agent hands it to the window that showed them alone.
+  Wherever they wait — for the link on the remote, for the next frame in the window
+  (`lbm_overlay::input::Gestures`) — a move that follows a move on the same ruler
+  replaces it (where the pointer is now is what a drag needs), and nothing else is
+  merged nor dropped, so the release that commits a drag always follows. Should 1024
+  presses, releases, notches or keys wait all the same, they are given up for a
+  `Cancel`, which ends the gesture under way instead of leaving it open. The master's agent takes the gestures of the current showing only:
+  from the revision it began with — rulers turned on, made draggable, or sent again on a
+  new link — to the last it sent, so a late release from rulers since closed never
+  commits a drag of those reopened. The window takes a gesture only
+  on a band it sent to that machine and still shows, and acts on it with the code that
+  handles its own screens' (`screen_input`): dragging a ruler moves that screen's
+  monitor in the layout, the wheel scales it, Escape hides the rulers. The remote edits
+  nothing; the master stays the layout's only editor. Two masters: the remote shows the
+  rulers of the one that asked last, and only that one hears the gestures (the other's
+  surfaces are gone). With an older agent or remote they are drawn **passive**: the
+  pointer goes through them, and they are dragged from the master's screens.
 - **Never left behind**: they go when the master sends an empty set (rulers off,
   Escape, another mode, the remote leaving the map), when the master's frontend that
   asked goes (the agent takes down, on each remote, the rulers that connection wrote

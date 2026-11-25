@@ -7,6 +7,11 @@
 //! the agent (`PeerOverlay`), which passes them on. The remote checks them against its
 //! screens and draws them, passive: the pointer goes through them there.
 //!
+//! With an agent that passes gestures back (`PeerOverlayInput`), they are asked to be
+//! dragged there: what is done on them comes back from the remote as an
+//! [`lbm_overlay::input::Input`] on one of the bands sent, and this window acts on it as
+//! on a gesture on its own screens — it stays the layout's only editor.
+//!
 //! Sent only when they change, never on a timer: a drag sends a new set as the ruler's
 //! zero moves, a still layout sends nothing. Turning the rulers off sends an empty set to
 //! every remote that had some; the agent takes them down by itself if this window goes.
@@ -14,11 +19,14 @@
 use std::collections::{BTreeMap, HashMap};
 
 use lbm_layout::model::Layout;
+use lbm_overlay::input::Input;
 use lbm_overlay::scene::{self, Band, Mode};
 use serde_json::{json, Value};
 
 /// The agent's capability for the request.
 pub const CAPABILITY: &str = "PeerOverlay";
+/// The agent's capability for `Interactive` and the `PeerOverlayInput` event.
+pub const INPUT_CAPABILITY: &str = "PeerOverlayInput";
 
 /// The rulers each remote gets, by machine id, and why some could not be computed.
 pub type Wanted = (BTreeMap<String, Vec<Band>>, Vec<String>);
@@ -73,6 +81,8 @@ fn machine_view(layout: &Layout, machine: &str) -> Layout {
 pub struct RemoteRulers {
     /// The agent announced the capability; without it nothing is sent.
     offered: bool,
+    /// The agent passes the gestures on them back: they are asked to be dragged there.
+    dragged: bool,
     /// What the agent was last asked to show, per remote.
     sent: HashMap<String, Vec<Band>>,
     /// The requests out, and the remote each is about.
@@ -89,6 +99,7 @@ impl RemoteRulers {
     pub fn connected(&mut self, capabilities: &[String]) {
         *self = RemoteRulers {
             offered: capabilities.iter().any(|c| c == CAPABILITY),
+            dragged: capabilities.iter().any(|c| c == INPUT_CAPABILITY),
             ..Default::default()
         };
     }
@@ -126,10 +137,11 @@ impl RemoteRulers {
                 continue;
             }
             self.refused.remove(&machine);
-            requests.push((
-                machine.clone(),
-                json!({"MachineId": machine, "Bands": bands}),
-            ));
+            let mut request = json!({"MachineId": machine, "Bands": bands});
+            if self.dragged {
+                request["Interactive"] = json!(true);
+            }
+            requests.push((machine.clone(), request));
             self.sent.insert(machine, bands);
         }
         requests
@@ -158,6 +170,24 @@ impl RemoteRulers {
             }
         }
         true
+    }
+
+    /// A gesture on the rulers of `machine` (the `PeerOverlayInput` event), if it is one
+    /// on a band this window sent there and still shows: a remote's word about its own
+    /// screens is taken only for what it was asked to show.
+    pub fn gesture(&self, machine: &str, input: &Value) -> Option<Input> {
+        let input: Input = serde_json::from_value(input.clone()).ok()?;
+        let shown = self.sent.get(machine)?;
+        (input.valid()
+            && shown.iter().any(|b| {
+                b.monitor == input.band.monitor
+                    && b.connector == input.band.connector
+                    && b.screen == input.band.screen
+                    && b.side == input.band.side
+                    && matches!(b.content, scene::Content::Ruler { .. })
+                    && matches!(input.band.content, scene::Content::Ruler { .. })
+            }))
+        .then_some(input)
     }
 
     /// The agent's `Peers` state: why a remote says it does not show its rulers.
@@ -387,6 +417,72 @@ mod tests {
         assert_eq!(off.len(), 1);
         assert_eq!(off[0].1, json!({"MachineId": "a", "Bands": []}));
         assert!(rulers.clear().is_empty());
+    }
+
+    #[test]
+    fn rulers_are_dragged_there_only_with_an_agent_that_passes_the_gestures_back() {
+        let mut rulers = RemoteRulers::default();
+        rulers.connected(&[CAPABILITY.into()]);
+        let sent = rulers.changes(wanted(&[("a", 0.0)]), vec![]);
+        assert_eq!(
+            sent[0].1.get("Interactive"),
+            None,
+            "an older agent: passive"
+        );
+        rulers.connected(&[CAPABILITY.into(), INPUT_CAPABILITY.into()]);
+        let sent = rulers.changes(wanted(&[("a", 0.0)]), vec![]);
+        assert_eq!(sent[0].1["Interactive"], true);
+        // Taking them down asks nothing of the kind.
+        assert_eq!(rulers.clear()[0].1.get("Interactive"), None);
+    }
+
+    #[test]
+    fn only_a_gesture_on_a_band_sent_to_that_machine_is_taken() {
+        let mut rulers = RemoteRulers::default();
+        rulers.connected(&[CAPABILITY.into(), INPUT_CAPABILITY.into()]);
+        rulers.changes(wanted(&[("a", 0.0)]), vec![]);
+        let shown = band("a", 0.0);
+        let press = |band: &Band| {
+            serde_json::to_value(Input::new(
+                band,
+                lbm_overlay::input::Kind::Press,
+                (40.0, 10.0),
+                1.0,
+                0,
+                false,
+                false,
+            ))
+            .unwrap()
+        };
+        let taken = rulers
+            .gesture("a", &press(&shown))
+            .expect("on a band sent there");
+        assert_eq!(taken.band.monitor, "a");
+        assert!(
+            rulers.gesture("b", &press(&shown)).is_none(),
+            "another machine"
+        );
+        let mut moved = shown.clone();
+        moved.screen.x += 1;
+        assert!(
+            rulers.gesture("a", &press(&moved)).is_none(),
+            "another place"
+        );
+        let mut passive = shown.clone();
+        passive.passive = true;
+        assert!(
+            rulers.gesture("a", &press(&passive)).is_none(),
+            "a passive band"
+        );
+        assert!(
+            rulers.gesture("a", &json!({"kind": "Press"})).is_none(),
+            "unreadable"
+        );
+        // The zero moved since (a drag in progress): still the same ruler.
+        rulers.changes(wanted(&[("a", 25.0)]), vec![]);
+        assert!(rulers.gesture("a", &press(&shown)).is_some());
+        rulers.clear();
+        assert!(rulers.gesture("a", &press(&shown)).is_none(), "taken down");
     }
 
     #[test]

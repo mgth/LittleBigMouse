@@ -6,21 +6,24 @@
 //! shown: [`Standalone::show`] starts it, dropping the handle ends it, and with it every
 //! surface. Nothing is left installed between two showings.
 //!
-//! Every band shown this way is [`Band::passive`]: there is no editor here to hand a drag
-//! to, so the pointer and the keyboard go through the rulers to whatever is beneath.
+//! The bands are either [`Band::passive`] ([`Standalone::show`]): the pointer and the
+//! keyboard go through them to whatever is beneath; or they take them
+//! ([`Standalone::interactive`]) and hand every gesture to a callback, for an editor
+//! elsewhere — the master's, in the multi-PC mode — to act on.
 //!
 //! What the thread waits on:
 //!
 //! - **Windows**: its message queue, and nothing else. A new scene or the end is posted
 //!   to it as a thread message; a display change arrives as `WM_DISPLAYCHANGE` on the
-//!   surfaces themselves. No timer.
+//!   surfaces themselves, a gesture as the surfaces' own mouse and key messages. No timer.
 //! - **Linux**: the surfaces belong to the same helper process an editor uses
 //!   (`--screen-overlay-host`, which the binary must dispatch to
 //!   [`crate::linux::run_host`], as `lbm-app` and `lbm-agent` do). That helper ends itself
 //!   when it is not told anything for two seconds, so that a wedged owner leaves no ruler
 //!   behind; the thread therefore renews it every [`PULSE`] while — and only while —
-//!   something is shown.
+//!   something is shown. A gesture or an error from the helper wakes it at once.
 
+use crate::input::Input;
 use crate::scene::Band;
 
 /// How often the Linux helper's lease is renewed while rulers are shown. Its lease is two
@@ -31,18 +34,32 @@ pub const PULSE: std::time::Duration = std::time::Duration::from_millis(500);
 /// being valid (a display changed under them, the helper died). They are gone by then.
 pub type OnError = Box<dyn FnOnce(String) + Send>;
 
+/// Called from the overlay thread with every gesture on an interactive band, in order.
+pub type OnInput = Box<dyn FnMut(Input) + Send>;
+
+/// What the overlay thread is told.
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
+enum Message {
+    Show(Vec<Band>),
+    /// The Linux helper said something: an input to pass on, or an error.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Woken,
+    Stop,
+}
+
 /// The surfaces of a process without a window, while they are shown.
 pub struct Standalone {
     #[cfg(any(windows, target_os = "linux"))]
-    sender: std::sync::mpsc::Sender<Option<Vec<Band>>>,
+    sender: std::sync::mpsc::Sender<Message>,
     #[cfg(windows)]
     thread_id: u32,
+    passive: bool,
 }
 
-/// The same bands, made passive.
-fn passive(mut bands: Vec<Band>) -> Vec<Band> {
+/// The same bands, made passive or not.
+fn marked(mut bands: Vec<Band>, passive: bool) -> Vec<Band> {
     for band in &mut bands {
-        band.passive = true;
+        band.passive = passive;
     }
     bands
 }
@@ -51,21 +68,45 @@ impl Standalone {
     /// Starts showing `bands`, passive, on a thread of their own. An error found once
     /// shown comes back through `on_error`, and the thread ends with it.
     pub fn show(bands: Vec<Band>, on_error: OnError) -> Result<Standalone, String> {
+        Self::start(bands, on_error, None)
+    }
+
+    /// Starts showing `bands`, taking the pointer and the keyboard: what is done on them
+    /// goes to `on_input`, which nothing here acts on.
+    pub fn interactive(
+        bands: Vec<Band>,
+        on_error: OnError,
+        on_input: OnInput,
+    ) -> Result<Standalone, String> {
+        Self::start(bands, on_error, Some(on_input))
+    }
+
+    fn start(
+        bands: Vec<Band>,
+        on_error: OnError,
+        on_input: Option<OnInput>,
+    ) -> Result<Standalone, String> {
         if bands.is_empty() {
             return Err("Nothing to show.".into());
         }
-        platform::spawn(passive(bands), on_error)
+        let passive = on_input.is_none();
+        platform::spawn(marked(bands, passive), on_error, on_input, passive)
     }
 
-    /// Shows `bands` instead of what was shown. Ignored once the thread has ended on an
-    /// error (which `on_error` has reported).
+    /// Whether the bands let the pointer through.
+    pub fn passive(&self) -> bool {
+        self.passive
+    }
+
+    /// Shows `bands` instead of what was shown, as passive as they were. Ignored once the
+    /// thread has ended on an error (which `on_error` has reported).
     pub fn update(&self, bands: Vec<Band>) {
         if bands.is_empty() {
             return;
         }
         #[cfg(any(windows, target_os = "linux"))]
         {
-            let _ = self.sender.send(Some(passive(bands)));
+            let _ = self.sender.send(Message::Show(marked(bands, self.passive)));
             self.wake();
         }
     }
@@ -84,7 +125,7 @@ impl Drop for Standalone {
     fn drop(&mut self) {
         #[cfg(any(windows, target_os = "linux"))]
         {
-            let _ = self.sender.send(None);
+            let _ = self.sender.send(Message::Stop);
             self.wake();
         }
     }
@@ -94,25 +135,52 @@ impl Drop for Standalone {
 mod platform {
     use super::*;
     use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::sync::{Arc, Mutex};
+    use std::time::Instant;
 
-    pub(super) fn spawn(bands: Vec<Band>, on_error: OnError) -> Result<Standalone, String> {
-        let (sender, receiver) = mpsc::channel::<Option<Vec<Band>>>();
+    pub(super) fn spawn(
+        bands: Vec<Band>,
+        on_error: OnError,
+        mut on_input: Option<OnInput>,
+        passive: bool,
+    ) -> Result<Standalone, String> {
+        let (sender, receiver) = mpsc::channel::<Message>();
+        // The helper's reader thread wakes this one; a sender behind a lock, as the
+        // waker must be shareable.
+        let woken = Mutex::new(sender.clone());
+        let waker: crate::linux::Waker = Arc::new(move || {
+            let _ = woken.lock().map(|s| s.send(Message::Woken));
+        });
         std::thread::Builder::new()
             .name("lbm-overlay".into())
             .spawn(move || {
-                let mut overlay = crate::Overlay::default();
+                let mut overlay = crate::Manager::new(crate::linux::Native::with_waker(waker));
                 let mut shown = bands;
+                // A sync renews the lease: once per pulse, or for a new scene — not for
+                // every gesture, which would write to the helper at the mouse's rate.
+                let mut synced: Option<Instant> = None;
                 loop {
-                    if let Err(error) = overlay.sync(&shown) {
-                        overlay.clear();
-                        on_error(error);
-                        return;
+                    if synced.is_none_or(|at| at.elapsed() >= PULSE) {
+                        if let Err(error) = overlay.sync(&shown) {
+                            overlay.clear();
+                            on_error(error);
+                            return;
+                        }
+                        synced = Some(Instant::now());
                     }
-                    match receiver.recv_timeout(PULSE) {
-                        Ok(Some(bands)) => shown = bands,
-                        // The lease is renewed by the sync above.
-                        Err(RecvTimeoutError::Timeout) => {}
-                        Ok(None) | Err(RecvTimeoutError::Disconnected) => {
+                    for input in overlay.take_input() {
+                        if let Some(on_input) = &mut on_input {
+                            on_input(input);
+                        }
+                    }
+                    let wait = synced.map_or(PULSE, |at| PULSE.saturating_sub(at.elapsed()));
+                    match receiver.recv_timeout(wait) {
+                        Ok(Message::Show(bands)) => {
+                            shown = bands;
+                            synced = None;
+                        }
+                        Ok(Message::Woken) | Err(RecvTimeoutError::Timeout) => {}
+                        Ok(Message::Stop) | Err(RecvTimeoutError::Disconnected) => {
                             overlay.clear();
                             return;
                         }
@@ -120,7 +188,7 @@ mod platform {
                 }
             })
             .map_err(|e| format!("Cannot start screen overlays: {e}"))?;
-        Ok(Standalone { sender })
+        Ok(Standalone { sender, passive })
     }
 }
 
@@ -147,8 +215,13 @@ mod platform {
         }
     }
 
-    pub(super) fn spawn(bands: Vec<Band>, on_error: OnError) -> Result<Standalone, String> {
-        let (sender, receiver) = mpsc::channel::<Option<Vec<Band>>>();
+    pub(super) fn spawn(
+        bands: Vec<Band>,
+        on_error: OnError,
+        mut on_input: Option<OnInput>,
+        passive: bool,
+    ) -> Result<Standalone, String> {
+        let (sender, receiver) = mpsc::channel::<Message>();
         let (started, thread_id) = mpsc::channel::<u32>();
         std::thread::Builder::new()
             .name("lbm-overlay".into())
@@ -179,14 +252,21 @@ mod platform {
                     if msg.hwnd.is_invalid() && msg.message == WAKE {
                         for next in receiver.try_iter() {
                             match next {
-                                Some(bands) => shown = bands,
-                                None => return,
+                                Message::Show(bands) => shown = bands,
+                                Message::Woken => {}
+                                Message::Stop => return,
                             }
                         }
                     } else {
                         unsafe {
                             let _ = TranslateMessage(&msg);
                             DispatchMessageW(&msg);
+                        }
+                        // What the window procedure queued of the pointer and the keys.
+                        for input in overlay.take_input() {
+                            if let Some(on_input) = &mut on_input {
+                                on_input(input);
+                            }
                         }
                     }
                 }
@@ -195,14 +275,23 @@ mod platform {
         let thread_id = thread_id
             .recv()
             .map_err(|_| "The screen overlay thread did not start.".to_owned())?;
-        Ok(Standalone { sender, thread_id })
+        Ok(Standalone {
+            sender,
+            thread_id,
+            passive,
+        })
     }
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
 mod platform {
     use super::*;
-    pub(super) fn spawn(_: Vec<Band>, _: OnError) -> Result<Standalone, String> {
+    pub(super) fn spawn(
+        _: Vec<Band>,
+        _: OnError,
+        _: Option<OnInput>,
+        _: bool,
+    ) -> Result<Standalone, String> {
         Err("Screen overlays are currently available on Windows and Linux only.".into())
     }
 }

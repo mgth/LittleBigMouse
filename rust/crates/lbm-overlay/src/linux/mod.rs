@@ -6,7 +6,7 @@ use crate::{
     scene::{Band, Content, Pixels, Side},
     Backend,
 };
-pub use process::Native;
+pub use process::{Native, Waker};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, Read},

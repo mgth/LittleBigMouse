@@ -382,6 +382,10 @@ pub enum Notice {
         request: Option<u64>,
         error: Option<String>,
     },
+    /// A gesture on the interactive rulers this machine asked remote `from` to show
+    /// (`Control::OverlayInput`): an `lbm_overlay::input::Input`, for the frontend that
+    /// asked for them to act on.
+    OverlayInput { from: String, input: Value },
 }
 
 /// A frontend's request, as far as the multi-PC mode goes.
@@ -680,8 +684,9 @@ impl Service {
 
     /// The rulers this machine's editor wants on the screens of its remote `machine_id`
     /// (`PeerOverlay`): `lbm_overlay::scene::Band`s in that remote's desktop pixels;
-    /// none takes them down. Whether the manager runs to be told.
-    pub fn overlay(&mut self, machine_id: &str, bands: Vec<Value>) -> bool {
+    /// none takes them down. `interactive`: they are dragged there, and what is done on
+    /// them comes back as [`Notice::OverlayInput`]. Whether the manager runs to be told.
+    pub fn overlay(&mut self, machine_id: &str, bands: Vec<Value>, interactive: bool) -> bool {
         let Some(running) = &self.running else {
             return false;
         };
@@ -690,6 +695,7 @@ impl Service {
             .send(Command::Overlay {
                 machine_id: machine_id.to_owned(),
                 bands,
+                interactive,
             })
             .is_ok()
     }

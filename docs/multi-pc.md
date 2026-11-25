@@ -607,8 +607,14 @@ place and its physical size.
   window asks for them `Interactive`. The remote's surfaces then take the pointer (the
   master's, injected there) and the keyboard as the master's own do; every gesture —
   press, move, release, wheel, Escape — goes back on the link to the master whose rulers
-  they are, in order (a queue of 256; a link that stalls loses the latest), and the
-  agent hands it to the window that showed them alone. The window takes a gesture only
+  they are, in order, and the agent hands it to the window that showed them alone.
+  While the link lags, a move that follows a move on the same ruler replaces it (where
+  the pointer is now is what a drag needs); a press, a release, a wheel notch or a key
+  is never merged nor dropped short of 1024 waiting, so the release that commits a drag
+  always arrives. The master's agent takes the gestures of the current showing only:
+  from the revision it began with — rulers turned on, made draggable, or sent again on a
+  new link — to the last it sent, so a late release from rulers since closed never
+  commits a drag of those reopened. The window takes a gesture only
   on a band it sent to that machine and still shows, and acts on it with the code that
   handles its own screens' (`screen_input`): dragging a ruler moves that screen's
   monitor in the layout, the wheel scales it, Escape hides the rulers. The remote edits

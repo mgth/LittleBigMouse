@@ -260,33 +260,72 @@ struct Overlaid {
     shown: Box<dyn Shown>,
 }
 
-/// How many gestures may wait for the master's link: a link that stalls loses the
-/// latest ones (a drag's end included: the master's editor ends it on the next press).
-const OVERLAY_INPUTS: usize = 256;
+/// The gestures waiting for the master's link, and whether the surfaces that make them
+/// are gone; the sending task is woken by the notify.
+type Outbox = (
+    std::sync::Mutex<(overlay::Gestures, bool)>,
+    tokio::sync::Notify,
+);
+
+/// Says the surfaces are gone when the callback that held it is dropped with them.
+struct Closing(Arc<Outbox>);
+impl Drop for Closing {
+    fn drop(&mut self) {
+        if let Ok(mut pending) = self.0 .0.lock() {
+            pending.1 = true;
+        }
+        self.0 .1.notify_one();
+    }
+}
 
 /// What hands the gestures on interactive overlays to the master on `sender`, in the
-/// order they were made: one task sends them, one after the other, for as long as the
-/// surfaces live (it ends with the callback, which the surfaces' thread drops).
+/// order they were made ([`overlay::Gestures`]: moves merged, nothing that ends a drag
+/// dropped): one task sends them, one after the other, for as long as the surfaces live,
+/// then sends what is left and ends.
 fn overlay_inputs(
     sender: LinkSender,
     revision: Arc<AtomicU64>,
 ) -> lbm_overlay::standalone::OnInput {
-    let (queue, mut inputs) = mpsc::channel::<Control>(OVERLAY_INPUTS);
+    let outbox: Arc<Outbox> = Arc::new(Default::default());
+    let sending = outbox.clone();
     tokio::spawn(async move {
-        while let Some(message) = inputs.recv().await {
+        loop {
+            let next = {
+                let Ok(mut pending) = sending.0.lock() else {
+                    return;
+                };
+                match pending.0.pop() {
+                    Some(next) => Some(next),
+                    None if pending.1 => return,
+                    None => None,
+                }
+            };
+            let Some((revision, input)) = next else {
+                // A notify given while nothing waited is kept: none is missed.
+                sending.1.notified().await;
+                continue;
+            };
+            let Ok(input) = serde_json::to_value(&input) else {
+                continue;
+            };
+            let message = Control::OverlayInput { revision, input };
             if sender.control(&message).await.is_err() {
                 return;
             }
         }
     });
+    let closing = Closing(outbox);
     Box::new(move |input| {
-        let Ok(input) = serde_json::to_value(&input) else {
-            return;
-        };
-        let _ = queue.try_send(Control::OverlayInput {
-            revision: revision.load(Ordering::Acquire),
-            input,
-        });
+        let outbox = &closing.0;
+        let kept = outbox
+            .0
+            .lock()
+            .map(|mut pending| pending.0.push(revision.load(Ordering::Acquire), input))
+            .unwrap_or(false);
+        if !kept {
+            eprintln!("[lbm-agent] multi-PC: the master's link does not keep up: a gesture on the rulers is dropped");
+        }
+        outbox.1.notify_one();
     })
 }
 
@@ -359,6 +398,10 @@ struct Actor {
     overlays: HashMap<String, (Vec<Value>, bool)>,
     overlay_revision: u64,
     overlay_sent: HashMap<String, u64>,
+    /// For each remote whose rulers are dragged there, the revision their showing began
+    /// with: a gesture made on the surfaces of an earlier showing — rulers since taken
+    /// down or passive — is late, and belongs to no drag of this one.
+    overlay_session: HashMap<String, u64>,
     overlay_errors: HashMap<String, String>,
     /// As a remote: the overlays a master asked for, while shown.
     overlaid: Option<Overlaid>,
@@ -493,6 +536,7 @@ pub(super) async fn run(
         overlays: HashMap::new(),
         overlay_revision: 0,
         overlay_sent: HashMap::new(),
+        overlay_session: HashMap::new(),
         overlay_errors: HashMap::new(),
         overlaid: None,
         overlay_generation: 0,
@@ -1110,8 +1154,9 @@ impl Actor {
         if info.hello.role == Role::Remote {
             if let Some((bands, interactive)) = self.overlays.get(&machine_id).cloned() {
                 self.overlay_errors.remove(&machine_id);
+                // A new link: the remote draws them on new surfaces, a showing of its own.
                 if let Err(error) =
-                    self.send_overlay(&machine_id, &info.hello, &sender, bands, interactive)
+                    self.send_overlay(&machine_id, &info.hello, &sender, bands, interactive, true)
                 {
                     self.overlay_errors.insert(machine_id.clone(), error);
                 }
@@ -1382,10 +1427,16 @@ impl Actor {
             // A gesture on the rulers this machine asked to be dragged there, given to
             // the editor that asked; none once it stopped asking.
             Control::OverlayInput { revision, input } if live.info.hello.role == Role::Remote => {
+                // From the surfaces of this showing — any revision of it, as a drag
+                // outlives those it causes — and none sent later.
                 let asked = self
                     .overlays
                     .get(machine_id)
                     .is_some_and(|(_, interactive)| *interactive)
+                    && self
+                        .overlay_session
+                        .get(machine_id)
+                        .is_some_and(|began| *began <= revision)
                     && self
                         .overlay_sent
                         .get(machine_id)
@@ -1935,6 +1986,15 @@ impl Actor {
         self.overlay_errors.remove(&machine_id);
         let known = self.overlays.contains_key(&machine_id);
         let interactive = interactive && !bands.is_empty();
+        // Dragged there after not being: a new showing, whose gestures alone count.
+        let begins = interactive
+            && !self
+                .overlays
+                .get(&machine_id)
+                .is_some_and(|(_, dragged)| *dragged);
+        if !interactive {
+            self.overlay_session.remove(&machine_id);
+        }
         if bands.is_empty() {
             self.overlays.remove(&machine_id);
             if !known {
@@ -1952,7 +2012,9 @@ impl Actor {
             return;
         };
         let (hello, sender) = (live.info.hello.clone(), live.sender.clone());
-        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands, interactive) {
+        if let Err(error) =
+            self.send_overlay(&machine_id, &hello, &sender, bands, interactive, begins)
+        {
             self.overlay_errors.insert(machine_id, error);
         }
     }
@@ -1967,6 +2029,7 @@ impl Actor {
         sender: &LinkSender,
         bands: Vec<Value>,
         interactive: bool,
+        begins: bool,
     ) -> Result<(), String> {
         if !hello.capabilities.iter().any(|c| c == OVERLAY_CAPABILITY) {
             return if bands.is_empty() {
@@ -1981,6 +2044,12 @@ impl Actor {
         self.overlay_revision += 1;
         self.overlay_sent
             .insert(machine_id.to_owned(), self.overlay_revision);
+        if !interactive {
+            self.overlay_session.remove(machine_id);
+        } else if begins || !self.overlay_session.contains_key(machine_id) {
+            self.overlay_session
+                .insert(machine_id.to_owned(), self.overlay_revision);
+        }
         let message = Control::Overlay {
             revision: self.overlay_revision,
             bands,
@@ -2103,6 +2172,7 @@ impl Actor {
         }
         self.overlays.clear();
         self.overlay_sent.clear();
+        self.overlay_session.clear();
         self.selected = None;
         self.driven_by = None;
         self.relaying = None;

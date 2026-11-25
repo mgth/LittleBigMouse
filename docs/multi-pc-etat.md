@@ -139,9 +139,9 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
 - Règles sur l'esclave : manipulables seulement avec un agent maître et un esclave à
-  jour (sinon inertes, on aligne en tirant celles des écrans du maître) ; un lien qui
-  cale perd les derniers gestes au-delà de 256 en attente (une fin de glissé perdue est
-  rattrapée au prochain appui) ; « Rulers on screens » reste grisé quand l'écran
+  jour (sinon inertes, on aligne en tirant celles des écrans du maître) ; sur un lien
+  lent, les déplacements se fondent en un seul, et rien d'autre n'est perdu avant 1024
+  gestes en attente (le relâché qui valide un glissé arrive toujours, revue de la #840) ; « Rulers on screens » reste grisé quand l'écran
   sélectionné est celui de l'esclave, comme avant ; sous Linux, l'esclave renouvelle le
   bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
   au-delà).

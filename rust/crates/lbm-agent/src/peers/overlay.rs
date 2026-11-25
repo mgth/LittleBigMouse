@@ -9,9 +9,11 @@
 //! shown: passive, or — when the master asks — taking the pointer, what is done on them
 //! going back to the master, whose editor acts on it. The remote itself edits nothing.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use lbm_ipc::peer::PeerDisplay;
+use lbm_overlay::input::{Input, Kind};
 use lbm_overlay::scene::{Band, Content, Pixels};
 use lbm_overlay::standalone::{OnError, OnInput};
 use serde_json::Value;
@@ -167,6 +169,58 @@ fn check_band(band: &Band, displays: &[PeerDisplay]) -> Result<(), String> {
     Ok(())
 }
 
+/// The most gestures that wait for the master's link once moves are merged: presses,
+/// releases, wheel notches and keys, which come at the rate of a hand. Only a link
+/// stalled for good reaches it.
+pub const MAX_GESTURES: usize = 1024;
+
+/// The gestures on interactive overlays waiting for the master's link, with the revision
+/// shown when each was made, in order.
+///
+/// None that ends or changes something is ever merged or dropped before
+/// [`MAX_GESTURES`] — above all the release that commits a drag, which the master's
+/// editor applies only then. A move that follows a move on the same band replaces it:
+/// what is pending of a drag is where the pointer is now, so a slow link delays it and
+/// never makes the queue grow with the mouse's rate.
+#[derive(Debug, Default)]
+pub struct Gestures {
+    queue: VecDeque<(u64, Input)>,
+}
+
+impl Gestures {
+    /// Queues `input`, made under `revision`; whether it was kept.
+    pub fn push(&mut self, revision: u64, input: Input) -> bool {
+        if let Some((last_revision, last)) = self.queue.back_mut() {
+            if last.kind == Kind::Move
+                && input.kind == Kind::Move
+                && last.band.binding() == input.band.binding()
+            {
+                *last_revision = revision;
+                *last = input;
+                return true;
+            }
+        }
+        if self.queue.len() >= MAX_GESTURES {
+            return false;
+        }
+        self.queue.push_back((revision, input));
+        true
+    }
+
+    /// The oldest, to send.
+    pub fn pop(&mut self) -> Option<(u64, Input)> {
+        self.queue.pop_front()
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,5 +327,62 @@ mod tests {
         assert!(check(&[serde_json::json!({"Nonsense": 1})], &displays).is_err());
         let many: Vec<Band> = (0..=MAX_BANDS).map(|_| ruler("DP-1", 0)).collect();
         assert!(check(&values(&many), &displays).is_err());
+    }
+
+    fn gesture(band: &Band, kind: Kind, at: f64) -> Input {
+        Input::new(band, kind, (at, 10.0), 1.0, 0, false, false)
+    }
+
+    #[test]
+    fn moves_merge_and_nothing_that_ends_a_drag_is_lost() {
+        let top = ruler("A", 0);
+        let mut left = top.clone();
+        left.side = lbm_overlay::scene::Side::Left;
+        let mut gestures = Gestures::default();
+        assert!(gestures.push(1, gesture(&top, Kind::Press, 10.0)));
+        // A drag on a link that does not keep up: thousands of moves, one waiting.
+        for at in 11..5000 {
+            assert!(gestures.push(1 + at as u64 / 1000, gesture(&top, Kind::Move, at as f64)));
+        }
+        assert_eq!(gestures.len(), 2);
+        assert!(gestures.push(6, gesture(&top, Kind::Release, 5000.0)));
+        // A move after the release, or on another band, is a gesture of its own.
+        assert!(gestures.push(6, gesture(&top, Kind::Move, 5001.0)));
+        assert!(gestures.push(6, gesture(&left, Kind::Move, 3.0)));
+        assert!(gestures.push(6, gesture(&top, Kind::Wheel(1.0), 3.0)));
+        assert!(gestures.push(6, gesture(&top, Kind::Wheel(1.0), 3.0)));
+        let sent: Vec<(u64, Kind, f64)> = std::iter::from_fn(|| gestures.pop())
+            .map(|(revision, input)| (revision, input.kind, input.at))
+            .collect();
+        assert_eq!(
+            sent,
+            [
+                (1, Kind::Press, 10.0),
+                (5, Kind::Move, 4999.0),
+                (6, Kind::Release, 5000.0),
+                (6, Kind::Move, 5001.0),
+                // Along its own axis: a left ruler's runs down the screen.
+                (6, Kind::Move, 10.0),
+                (6, Kind::Wheel(1.0), 3.0),
+                (6, Kind::Wheel(1.0), 3.0),
+            ]
+        );
+        assert!(gestures.is_empty());
+    }
+
+    #[test]
+    fn a_link_stalled_for_good_keeps_the_oldest_gestures() {
+        let top = ruler("A", 0);
+        let mut gestures = Gestures::default();
+        for i in 0..MAX_GESTURES {
+            let kind = if i % 2 == 0 {
+                Kind::Press
+            } else {
+                Kind::Release
+            };
+            assert!(gestures.push(1, gesture(&top, kind, i as f64)));
+        }
+        assert!(!gestures.push(1, gesture(&top, Kind::Press, 0.0)));
+        assert_eq!(gestures.pop().unwrap().1.at, 0.0);
     }
 }

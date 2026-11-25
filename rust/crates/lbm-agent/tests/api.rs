@@ -2178,6 +2178,55 @@ async fn what_is_done_on_a_remotes_rulers_goes_to_the_window_that_showed_them_al
 }
 
 #[tokio::test]
+async fn a_late_gesture_from_rulers_since_closed_is_not_taken_for_one_on_those_reopened() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start_as(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        None,
+        &[lbm_net::wire::OVERLAY_CAPABILITY],
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let mut link = master.link_the_laptop().await;
+    let band = json!({"monitor": "eDP-1@laptop", "connector": "eDP-1"});
+    let show = |zero: u32| {
+        json!({ "Method": "PeerOverlay", "MachineId": laptop_id,
+            "Bands": [{"monitor": "eDP-1@laptop", "connector": "eDP-1", "zero": zero}],
+            "Interactive": true })
+    };
+    let mut revision = async |frontend: &mut Frontend, request: Value| {
+        frontend.ask(request).await;
+        next_overlay(&mut link, Duration::from_secs(5))
+            .await
+            .unwrap()
+            .0
+    };
+    let first = revision(&mut master.frontend, show(0)).await;
+    revision(
+        &mut master.frontend,
+        json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [] }),
+    )
+    .await;
+    let reopened = revision(&mut master.frontend, show(0)).await;
+    let dragged = revision(&mut master.frontend, show(5)).await;
+    assert!(first < reopened && reopened < dragged);
+
+    let release = json!({"band": band, "kind": "Release", "at": 40.0});
+    for (made, heard) in [(first, false), (reopened, true), (dragged, true)] {
+        link.sender()
+            .control(&lbm_net::wire::Control::OverlayInput {
+                revision: made,
+                input: release.clone(),
+            })
+            .await
+            .unwrap();
+        let event = next_overlay_input(&mut master.frontend, Duration::from_millis(500)).await;
+        assert_eq!(event.is_some(), heard, "made under {made}: {event:?}");
+    }
+}
+
+#[tokio::test]
 async fn rulers_for_a_remote_too_old_to_draw_them_are_not_sent_and_the_user_is_told() {
     let tmp = tempfile::tempdir().unwrap();
     let mut master = Master::start(&tmp, lbm_agent::discovery::Discovery::Fallback).await;

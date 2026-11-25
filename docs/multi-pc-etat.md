@@ -352,8 +352,14 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 ### 6. Transversal
 
-- **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
-  un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
+- **Plusieurs esclaves à la fois.** Conception écrite : « Several remotes at once »
+  dans [`multi-pc.md`](multi-pc.md). La destination n'existe que sur le saut hook → agent
+  du maître (événement `Host` avant chaque `Enter`, l'agent découpe les lots et la
+  retire) ; rien ne change pour un esclave, quelle que soit sa version. Le hook annonce
+  `InputHosts`, l'agent lui dit quelles machines il peut joindre (`Drivable`) ; sans l'un
+  ou l'autre, la règle « un seul esclave sélectionné » reste en vigueur. Limite connue :
+  le presse-papiers ne passe pas d'un esclave à un autre (seulement esclave ↔ maître).
+  Code en cours, voir « Travaux en cours ».
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
   dans les deux sens ; les fichiers (PR #822) passent aussi ;
   glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
@@ -645,6 +651,9 @@ La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; 
 décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les
 écrans de l'esclave (PR #817) le sont aussi, voir « Rulers on a remote's screens » dans
 [`multi-pc.md`](multi-pc.md).
+
+Plusieurs esclaves à la fois : conception dans `multi-pc.md` (« Several remotes at
+once ») ; le code suit en deux PR indépendantes vers `v6`, hook puis agent.
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

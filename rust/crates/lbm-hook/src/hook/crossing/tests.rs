@@ -8,7 +8,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use lbm_ipc::input::{decode, InputEvent as Wire};
+use lbm_ipc::input::{by_host, decode, InputEvent as Wire};
 
 use super::keys::{Letters, HOLD};
 use super::*;
@@ -44,6 +44,10 @@ struct Recording {
     accepting: bool,
     client: u64,
     sent: Vec<Wire>,
+    /// What was sent, each event with the machine the last `Host` marker named.
+    routed: Vec<(Option<String>, Wire)>,
+    /// The machine the last marker named, across batches as on the stream.
+    marked: Option<String>,
     /// The keyboards are grabbed: asked for, and not let go since.
     grabbed: bool,
     releases: usize,
@@ -65,8 +69,15 @@ impl Platform for Recording {
         if !(self.connected && self.accepting) {
             return false;
         }
-        self.sent
-            .extend(decode(&batch).expect("a batch that decodes"));
+        for (host, run) in by_host(&batch).expect("a batch that walks") {
+            if let Some(host) = host {
+                self.marked = Some(host.to_owned());
+            }
+            for event in decode(run).expect("a batch that decodes") {
+                self.sent.push(event);
+                self.routed.push((self.marked.clone(), event));
+            }
+        }
         true
     }
 
@@ -168,6 +179,8 @@ impl Rig {
                 accepting: true,
                 client: 1,
                 sent: Vec::new(),
+                routed: Vec::new(),
+                marked: None,
                 grabbed: false,
                 releases: 0,
                 hides: Vec::new(),
@@ -199,6 +212,25 @@ impl Rig {
             &[],
         );
         assert!(self.crossing.is_remote(), "the pointer went over");
+    }
+
+    /// The agent names the machines it drives; read at the next cycle.
+    fn set_drivable(&mut self, hosts: Option<&[&str]>) {
+        *self.shared.drivable.lock().unwrap() =
+            hosts.map(|hosts| hosts.iter().map(|h| (*h).to_owned()).collect());
+        self.shared.drivable_revision.fetch_add(1, Ordering::SeqCst);
+        self.cycle(None, &[]);
+    }
+
+    /// The pointer reached `host`'s screen at `pixel`, from wherever it was.
+    fn enter(&mut self, host: &str, pixel: (i32, i32), inputs: &[Input]) {
+        self.cycle(
+            Some(Place::Enter {
+                pixel: point(pixel),
+                host: host.to_owned(),
+            }),
+            inputs,
+        );
     }
 
     /// The pointer reached the other machine, whose `Enter` could not be queued.
@@ -858,4 +890,171 @@ fn the_rescue_let_go_early_here_fires_nothing() {
     rig.crossing
         .check_rescue(rig.shared, Instant::now() + HOLD, &mut rig.m);
     assert!(rig.shared.want_hook.load(Ordering::SeqCst));
+}
+
+fn named(host: &str, event: Wire) -> (Option<String>, Wire) {
+    (Some(host.to_owned()), event)
+}
+
+#[test]
+fn once_the_agent_names_its_machines_every_enter_says_which_and_only_then() {
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    assert_eq!(rig.m.routed, [(None, Wire::Enter { x: 0, y: 500 })]);
+    rig.come_back(START);
+
+    rig.set_drivable(Some(&["abcd", "efgh"]));
+    rig.m.routed.clear();
+    rig.go_over();
+    rig.move_to((5, 500));
+    assert_eq!(
+        rig.m.routed,
+        [
+            named("abcd", Wire::Enter { x: 0, y: 500 }),
+            named("abcd", Wire::Motion { x: 5, y: 500 }),
+        ]
+    );
+}
+
+#[test]
+fn from_one_remote_straight_to_another_is_a_leave_then_an_enter_with_its_machine() {
+    let mut rig = Rig::new(true);
+    rig.set_drivable(Some(&["abcd", "efgh"]));
+    rig.m.locks = Locks {
+        caps: Some(true),
+        ..Locks::default()
+    };
+    rig.go_over();
+    rig.type_key(KEY_LEFTSHIFT, Press::Down);
+    rig.m.routed.clear();
+    let hides = rig.m.hides.len();
+
+    rig.enter("efgh", (1919, 300), &[Input::Button(BTN_LEFT, Press::Down)]);
+    assert!(rig.crossing.is_remote());
+    assert_eq!(rig.crossing.driving(), Some("efgh"));
+    assert_eq!(
+        rig.m.routed,
+        [
+            named("abcd", Wire::Leave),
+            named("efgh", Wire::Enter { x: 1919, y: 300 }),
+            named("efgh", Wire::Locks(rig.m.locks)),
+            named(
+                "efgh",
+                Wire::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                }
+            ),
+        ]
+    );
+    // Still over there: grabbed, hidden, nothing shown or released here.
+    assert!(rig.m.grabbed);
+    assert_eq!(rig.m.shows, 0);
+    assert_eq!(rig.m.releases, 0);
+    assert_eq!(rig.m.hides.len(), hides);
+
+    // The Shift pressed on the first machine was released there by its Leave: its
+    // release is not the second's to see. The button pressed on the second is.
+    rig.m.routed.clear();
+    rig.type_key(KEY_LEFTSHIFT, Press::Up);
+    rig.cycle(None, &[Input::Button(BTN_LEFT, Press::Up)]);
+    assert_eq!(
+        rig.m.routed,
+        [named(
+            "efgh",
+            Wire::Button {
+                code: BTN_LEFT,
+                pressed: false
+            }
+        )]
+    );
+
+    // And home from the second: its Leave, nothing for the first.
+    rig.m.routed.clear();
+    rig.come_back(START);
+    assert_eq!(rig.m.routed, [named("efgh", Wire::Leave)]);
+    assert_eq!(rig.m.shows, 1);
+}
+
+#[test]
+fn without_names_from_one_remote_to_another_still_comes_home() {
+    let mut rig = Rig::new(true);
+    rig.go_over();
+    rig.m.sent.clear();
+    rig.enter("efgh", (1919, 300), &[]);
+    assert!(!rig.crossing.is_remote());
+    assert_eq!(rig.m.sent, [Wire::Leave]);
+    assert_eq!(rig.m.returned.last(), Some(&START));
+}
+
+#[test]
+fn a_machine_the_agent_no_longer_drives_sends_the_pointer_home() {
+    let mut rig = Rig::new(true);
+    rig.set_drivable(Some(&["abcd", "efgh"]));
+    rig.go_over();
+    // Another machine leaving the set changes nothing here.
+    rig.set_drivable(Some(&["abcd"]));
+    assert!(rig.crossing.is_remote());
+    rig.m.routed.clear();
+    rig.set_drivable(Some(&["efgh"]));
+    assert!(!rig.crossing.is_remote());
+    assert_eq!(rig.m.routed, [named("abcd", Wire::Leave)]);
+    assert!(!rig.m.grabbed);
+    assert_eq!(rig.m.shows, 1);
+}
+
+#[test]
+fn locked_on_one_remote_another_one_does_not_take_the_pointer() {
+    let mut rig = Rig::new(true);
+    rig.set_drivable(Some(&["abcd", "efgh"]));
+    rig.set_lock_shortcut("Ctrl+Alt+L");
+    rig.go_over();
+    rig.press_lock();
+    assert!(rig.crossing.is_locked());
+    rig.m.routed.clear();
+    rig.enter("efgh", (1919, 300), &[]);
+    assert_eq!(rig.crossing.driving(), Some("abcd"));
+    assert!(rig.m.routed.is_empty(), "{:?}", rig.m.routed);
+}
+
+#[test]
+fn a_switch_the_stream_refuses_brings_the_pointer_home() {
+    let mut rig = Rig::new(true);
+    rig.set_drivable(Some(&["abcd", "efgh"]));
+    rig.go_over();
+    rig.m.accepting = false;
+    rig.enter("efgh", (1919, 300), &[]);
+    assert!(!rig.crossing.is_remote());
+    assert!(!rig.m.grabbed);
+    assert_eq!(rig.m.shows, 1);
+    assert_eq!(rig.m.returned.last(), Some(&START));
+}
+
+#[test]
+fn only_the_drivable_machines_zones_are_put_in_play() {
+    let xml = concat!(
+        r#"<ZonesLayout><MainZones>"#,
+        r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+        r#"<Zone Id="1" Name="A" Host="abcd" HostX="3000" HostY="0"><PixelsBounds><Rect Left="3000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+        r#"<Zone Id="2" Name="B" Host="efgh" HostX="6000" HostY="0"><PixelsBounds><Rect Left="6000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="1054" Top="0" Width="527" Height="296"></Rect></PhysicalBounds></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+    let mut layout = ZonesLayout::from_xml(xml).unwrap();
+    let mut rig = Rig::new(true);
+    rig.crossing.put_in_play(&mut layout, true);
+    assert_eq!(layout.main_zones.len(), 3, "named by nobody: all of them");
+    rig.set_drivable(Some(&["efgh"]));
+    rig.crossing.put_in_play(&mut layout, true);
+    assert_eq!(layout.main_zones.len(), 2);
+    assert!(layout.host_point(Point::new(3010, 0)).is_none());
+    // From the machine being driven, another's zone is an Enter of it.
+    assert_eq!(
+        locate(&layout, Point::new(6010, 0), false, Some("abcd")),
+        Place::Enter {
+            pixel: Point::new(10, 0),
+            host: "efgh".to_owned()
+        }
+    );
+    rig.crossing.put_in_play(&mut layout, false);
+    assert_eq!(layout.main_zones.len(), 1);
 }

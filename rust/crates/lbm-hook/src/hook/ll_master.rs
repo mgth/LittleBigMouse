@@ -480,7 +480,8 @@ impl<D: Desk, L: Link> LlMaster<D, L> {
         };
         // Only once the cycle found a client: asked of the system only then.
         let enterable = connected && !self.crossing.walled_in() && self.desk.can_drive();
-        engine.layout.set_remote_enterable(enterable);
+        // Only the machines the agent drives, once it named them.
+        self.crossing.put_in_play(&mut engine.layout, enterable);
         self.enterable = enterable;
         {
             let pos = self.pos;
@@ -701,7 +702,7 @@ mod tests {
 
     use std::sync::atomic::Ordering;
 
-    use lbm_ipc::input::{decode, InputEvent as Wire};
+    use lbm_ipc::input::{by_host, decode, InputEvent as Wire};
 
     use crate::zones::ZonesLayout;
 
@@ -800,6 +801,9 @@ mod tests {
         connected: bool,
         client: u64,
         sent: Vec<Wire>,
+        /// Every event sent, with the machine the last `Host` marker named.
+        routed: Vec<(Option<String>, Wire)>,
+        marked: Option<String>,
     }
 
     impl Link for FakeLink {
@@ -811,8 +815,15 @@ mod tests {
             if !self.connected {
                 return false;
             }
-            self.sent
-                .extend(decode(&batch).expect("a batch that decodes"));
+            for (host, run) in by_host(&batch).expect("a batch that walks") {
+                if let Some(host) = host {
+                    self.marked = Some(host.to_owned());
+                }
+                for event in decode(run).expect("a batch that decodes") {
+                    self.sent.push(event);
+                    self.routed.push((self.marked.clone(), event));
+                }
+            }
             true
         }
     }
@@ -824,12 +835,16 @@ mod tests {
 
     impl Rig {
         fn new(connected: bool) -> Rig {
+            Rig::with(connected, LAYOUT)
+        }
+
+        fn with(connected: bool, layout: &str) -> Rig {
             let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
             shared
                 .engine
                 .lock()
                 .unwrap()
-                .load(ZonesLayout::from_xml(LAYOUT).unwrap());
+                .load(ZonesLayout::from_xml(layout).unwrap());
             shared.want_hook.store(true, Ordering::SeqCst);
             let desk = FakeDesk {
                 cursor: (1900, 500),
@@ -838,7 +853,7 @@ mod tests {
             let link = FakeLink {
                 connected,
                 client: 1,
-                sent: Vec::new(),
+                ..FakeLink::default()
             };
             let mut master = LlMaster::new(desk, link);
             // The engine starts tracking where the cursor is.
@@ -1197,5 +1212,103 @@ mod tests {
                 .on_key(rig.shared, None, 0xFF, true, Instant::now()),
             Verdict::Pass
         );
+    }
+
+    /// Here (0..1920), then A (abcd, 3000..4920), then B (efgh, 6000..7920), each
+    /// border linked both ways.
+    const THREE_MACHINES: &str = concat!(
+        r#"<ZonesLayout Algorithm="Strait"><MainZones>"#,
+        r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="1" Name="A" Host="abcd" HostX="3000" HostY="0"><PixelsBounds><Rect Left="3000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="0"></ZoneLink></LeftLinks>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="2"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="2" Name="B" Host="efgh" HostX="6000" HostY="0"><PixelsBounds><Rect Left="6000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="1054" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></LeftLinks></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    fn three_machines(drivable: Option<&[&str]>) -> Rig {
+        let rig = Rig::with(true, THREE_MACHINES);
+        *rig.shared.drivable.lock().unwrap() =
+            drivable.map(|hosts| hosts.iter().map(|h| (*h).to_owned()).collect());
+        rig.shared.drivable_revision.fetch_add(1, Ordering::SeqCst);
+        rig
+    }
+
+    fn hosts_of(routed: &[(Option<String>, Wire)], wanted: fn(&Wire) -> bool) -> Vec<String> {
+        routed
+            .iter()
+            .filter(|(_, e)| wanted(e))
+            .map(|(h, _)| h.clone().unwrap_or_default())
+            .collect()
+    }
+
+    #[test]
+    fn the_pointer_goes_from_one_remote_straight_to_the_next_and_back_home() {
+        let mut rig = three_machines(Some(&["abcd", "efgh"]));
+        assert_eq!(rig.nudge(40, 0), Some(Verdict::Swallow));
+        assert!(rig.master.is_remote());
+        for _ in 0..6 {
+            rig.nudge(500, 0);
+        }
+        let enters = hosts_of(&rig.master.link.routed, |e| matches!(e, Wire::Enter { .. }));
+        let leaves = hosts_of(&rig.master.link.routed, |e| matches!(e, Wire::Leave));
+        assert_eq!(enters, ["abcd", "efgh"], "{:?}", rig.master.link.routed);
+        assert_eq!(leaves, ["abcd"]);
+        assert_eq!(rig.master.desk.shows, 0, "still hidden on the way");
+        assert_eq!(rig.master.desk.hides, 1);
+        // Motion over B is in B's pixels.
+        let last = rig.master.link.routed.last().unwrap().clone();
+        assert_eq!(last.0.as_deref(), Some("efgh"));
+        assert!(
+            matches!(last.1, Wire::Motion { x, .. } if (0..1920).contains(&x)),
+            "{last:?}"
+        );
+
+        rig.master.link.routed.clear();
+        for _ in 0..12 {
+            rig.nudge(-500, 0);
+        }
+        assert!(!rig.master.is_remote(), "home");
+        let enters = hosts_of(&rig.master.link.routed, |e| matches!(e, Wire::Enter { .. }));
+        let leaves = hosts_of(&rig.master.link.routed, |e| matches!(e, Wire::Leave));
+        assert_eq!(enters, ["abcd"]);
+        assert_eq!(leaves, ["efgh", "abcd"]);
+        assert_eq!(rig.master.desk.shows, 1);
+    }
+
+    #[test]
+    fn a_machine_the_agent_does_not_drive_is_behind_a_wall() {
+        let mut rig = three_machines(Some(&["abcd"]));
+        rig.nudge(40, 0);
+        for _ in 0..6 {
+            rig.nudge(500, 0);
+        }
+        assert!(rig.master.is_remote());
+        let enters = hosts_of(&rig.master.link.routed, |e| matches!(e, Wire::Enter { .. }));
+        assert_eq!(
+            enters,
+            ["abcd"],
+            "B is a wall: {:?}",
+            rig.master.link.routed
+        );
+        assert!(!rig
+            .master
+            .link
+            .routed
+            .iter()
+            .any(|(_, e)| *e == Wire::Leave));
+    }
+
+    #[test]
+    fn named_by_no_agent_the_next_remote_brings_the_pointer_home() {
+        let mut rig = three_machines(None);
+        rig.nudge(40, 0);
+        for _ in 0..6 {
+            rig.nudge(500, 0);
+        }
+        assert!(!rig.master.is_remote(), "an older agent drives one: home");
+        assert!(rig.master.link.routed.iter().all(|(h, _)| h.is_none()));
     }
 }

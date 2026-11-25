@@ -85,18 +85,15 @@ the Windows secure desktop (UAC, lock screen), the portal and X11 backends as ma
     its latest choice for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
-<<<<<<< HEAD
   - `ClipboardOffer { Serial, Formats }`, `ClipboardRequest { Serial, Format, Transfer }`,
     `ClipboardAbort { Transfer, Reason }` — either way, between peers that both announced
     `Clipboard`: see "Shared clipboard"
-=======
   - `Overlay { Revision, Bands: [Band] }` — master → remote: the rulers to draw on the
     remote's screens, in place of any drawn before; empty takes them down (see "Rulers
     on a remote's screens"). Sent only to a remote whose `Hello` lists the capability
     `RemoteOverlay`; added after protocol 1 without a new version
   - `OverlayFailed { Revision, Error }` — remote → master: the rulers of `Revision`
     are not shown, refused or taken down, and why
->>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -135,8 +132,10 @@ below):
   released on the machine that saw it pressed. A keyboard is grabbed once none of
   its keys is held.
 - The rescue shortcut is recognised in the grabbed key stream, with the same hold.
-- One remote: batches carry no destination; the agent merges and drives only the
-  selected remote (lot 5a).
+- Several remotes: a `Host` event before each `Enter` names the machine the events
+  after it are for, and the agent splits the batches; with an older agent or hook,
+  batches carry no destination and the agent merges and drives only the selected
+  remote (lot 5a). See "Several remotes at once".
 - The master's own cursor is hidden while the pointer is away
   (`lbm-hook/src/hook/linux/evdev/hider/`): once the `Enter` is queued, and shown
   again on every way home (crossing back, no client, a write the stream refused, a
@@ -311,7 +310,8 @@ On a remote (`lbm-hook/src/remote`):
   there, each crossing is answered by one `InputReset`.
 - **Master side**: the latest `Displays` per remote (highest revision) are kept and
   shown through the API; the hook's batches go to the selected remote with `try_input`.
-  **One remote at a time**: batches carry no destination, so exactly one linked remote
+  **One remote at a time** with a hook that does not say `InputHosts` (otherwise see
+  "Several remotes at once"): batches carry no destination, so exactly one linked remote
   is **selected** — the only one whose screens are merged (lot 5b) and the only one the
   stream goes to. It stays selected for as long as its link lives (another linking
   does not take the screens from under the pointer); when there is none, the linked
@@ -376,6 +376,9 @@ On a remote (`lbm-hook/src/remote`):
   - event `{ "Event": "Peers", "Peers": <state> }` to subscribers on every change.
 - `cargo run -p lbm-agent --example peer_drive -- ADDR ID_DIR [script]` is a master
   without a hook, for trying a remote by hand (see the example's header).
+- `cargo run -p lbm-agent --example multi_master -- pair|drive …` is a master of several
+  remotes without a hook: the manager, as the master of a hook that names its machines,
+  plays that hook itself across every remote (see the example's header).
 
 ## The master's layout (lot 5b)
 
@@ -417,6 +420,143 @@ On a remote (`lbm-hook/src/remote`):
   a known input value, which the switch is to bring there) on the panel, saves, and
   hands a running engine the new zones; answered `null` at once. The input switch it
   may ask for (below) runs afterwards and is never waited for.
+
+## Several remotes at once
+
+A master drives every remote linked to it, each with its screens placed in the
+master's layout. The pointer goes to the machine whose border it crosses, and from one
+remote straight to another when their screens touch in the layout. This section is
+the contract; it replaces "one remote at a time" wherever both ends support it, and
+leaves that rule in force wherever one of them does not (see "Older peers" below).
+
+### What the stream carries
+
+- **The destination is the master's business only.** It is said on the hook → agent
+  hop, and the master's agent strips it: what travels between agents, and what a
+  remote's hook reads, is unchanged. A remote never learns that other remotes exist,
+  so nothing is asked of it, and a remote of any version can be one of several.
+- **`InputEvent::Host { id }`** (tag 8; one length byte, then the machine id in UTF-8,
+  at most 255 bytes): *the events that follow, up to the next `Host`, are for the
+  machine `id`*. The hook writes it before every `Enter`, and only then: a crossing is
+  the only moment the destination changes. A batch may carry two, when the pointer
+  goes from one remote to another within one report: `Leave` for the first, then
+  `Host`, `Enter`, `Locks` and the rest for the second. The id is the zones' `Host`,
+  the remote's machine id.
+- **The master's agent splits** each batch at its `Host` events
+  (`lbm_ipc::input::by_host`, a walk over the tags with no decoding, borrowing every
+  run of events), and relays each run to its machine's link, without the `Host`, and
+  without the `Locks` for a remote that does not read them, as today. A run before any
+  `Host` on a connection goes nowhere: a hook that says destinations always starts with
+  one.
+- **The hook says what machines it may cross to**: `Command::Drivable { Hosts }`, sent
+  by the agent on every hook connection after `Hello`, and again whenever the set
+  changes. `Hosts` are the machine ids of the remotes linked now whose stream this
+  agent relays (its own link or the remote's service). A remote's zones are in play
+  only while it is in that set (`ZonesLayout` gains per-host enterability, still
+  rebuilt only on change): a border to any other machine is a wall, as without a
+  client. The pointer on a machine that leaves the set comes home, like a layout
+  without that machine.
+
+### Older peers
+
+Capabilities, as for `InputLocks`:
+
+| Hook | Agent | Result |
+|---|---|---|
+| says `InputHosts` in its `Hello` | sends `Drivable` | several remotes |
+| says `InputHosts` | older (never sends `Drivable`) | one remote: the hook writes no `Host`, any remote zone goes to the one client, and crossing from one remote to another comes home, as today |
+| older (no `InputHosts`) | newer | one remote: the agent keeps the selection below and never sends `Drivable`, which the older hook would ignore anyway (`Command::Unknown`) |
+
+The remote side needs nothing: the network `Hello` gains no capability for this,
+since nothing it carries changes. The two ends of the hook ↔ agent hop are normally
+the same version; the table is for an agent updated while an older hook keeps running,
+which a hook does (it outlives its agent).
+
+### The crossing rules (`hook::crossing`)
+
+- `locate` reports a zone of a machine other than the one being driven as an `Enter`
+  of that machine, no longer `Away`; `Away` is left for a position in no zone.
+- **Remote to remote**, with destinations: one batch `Leave` (for the machine left),
+  `Host` (the machine entered), `Enter`, `Locks`, then the frame's events. What the
+  first machine holds pressed is released there by its `Leave` (the remote's session
+  rule); a key released afterwards is the release of a press that went to the first
+  machine, and is not forwarded to the second, which never saw the press. The keyboards
+  stay grabbed and the local cursor stays hidden; the rescue's state and the lock
+  keys' alignment start afresh for the machine entered.
+- Without destinations, crossing from one remote to another still comes home.
+- **The pointer lock** holds the pointer on the machine it is on, as now: a report that
+  would take it to a third machine leaves it where it was.
+- **The rescue**, Stop, the end of the stream, the client changing and the master
+  going away bring the pointer home from whichever machine it is on, with a `Leave` to
+  that machine. Nothing else changes on those paths.
+
+### The master's agent
+
+- **No selected remote** once the hook says `InputHosts`: every paired machine linked
+  as a remote that has sent its `Displays` is merged, in machine-id order, and is
+  drivable. `SelectedRemote` is then absent from the `Peers` state: a frontend that
+  finds no `SelectedRemote` merges every linked remote in that order, which is what an
+  older frontend already does for an older agent, so both build the agent's layout.
+  The legacy selection, its numbered choices and the "zones fit for the choice" gate
+  stay for an older hook, and only for it.
+- **One connection** to the hook's input endpoint, kept while any remote is drivable.
+  Its batches are split; each machine's runs go to that machine's current target (its
+  link, or its service while one carries its stream, as `retarget` decides today, per
+  machine). The connection is no longer tied to one link: a remote linking or leaving
+  changes `Drivable` and the targets, not the connection.
+- **The machine the pointer is on** (`driven` in the state, the tray's dimmed icon, the
+  Machines page) is the `Host` of the last `Enter` relayed with no `Leave` since; the
+  end of the connection clears it.
+- **The end of a hop is per machine**, and brings the pointer home only from the
+  machine it is on:
+  - a run that finds its link's queue full, or no target (a race with the link's end):
+    that machine's stream is broken until its next `Enter` — its runs are dropped — and
+    it is sent `Leave` with a send that waits (it ends at the latest with the link). If
+    the pointer is on that machine, the connection is closed and made again, which
+    brings it home, as `restart` does today;
+  - `InputReset` from a remote, its service's reset, and `InjectionBlocked` (blocked)
+    while the pointer is on that remote: the same restart. From a remote the pointer
+    is not on, nothing: its next `Enter` starts a new session there anyway;
+  - a remote's link ending: it leaves `Drivable` and the targets. If the pointer is on
+    it, the hook brings it home when it reads the new set, and the restart above
+    covers the moment before; elsewhere nothing is felt.
+  - a remote **reached another way** under the same machine id — its Windows service
+    taking the stream from its agent, or giving it back: it stays in `Drivable`, only
+    its relay changes. If the pointer is on it, its session is the old relay's: the
+    master's agent closes the connection to the hook (the pointer comes home, the hook
+    ungrabs and releases nothing more over there) and tells the **old relay** `Leave`,
+    with a send that waits, before any new connection relays anything; a run read off
+    the hook meanwhile for that machine is refused rather than sent to the new relay.
+    The new relay hears of that machine only from the next crossing's `Enter`. So a key
+    held at that moment is released by the old relay and never reaches the new one. An
+    old relay already gone (the service's link ended) has its own end as `Leave`. If the
+    pointer is not on it, nothing is felt: no session is open there, and its next
+    `Enter` goes to the new relay;
+  - every `Leave` the agent owes a remote — a run it had no room for, a relay left
+    behind — is queued before anything of a later session to that remote: a new
+    `Enter` for it waits for that `Leave`, and a new connection to the hook waits for
+    all of them.
+- **Two masters driving one remote** (#816) are untouched: that is the remote's side,
+  which this changes in nothing. Each master still learns from the remote's
+  `InputReset` that its session ended, and brings its pointer home if it was there.
+
+### What follows the pointer, and what does not
+
+- **Lock keys**: sent after each `Enter`, so each remote entered is aligned on the
+  master's state, per remote capability as now.
+- **UIPI blocking** (Windows remotes): per remote, as now (`InjectionBlocked` on each
+  remote's entry). It ends the hop only for the remote the pointer is on.
+- **The indicator**: the master shows which remote has the input; each remote shows
+  that it is driven, as now.
+- **The clipboard** is per link and does not follow the pointer: every remote announces
+  its copies to the master, the master announces its own to every remote. A copy made on
+  one remote is pasted on the master, **not on another remote**: the master does not
+  pass on what it received (no echo), and relaying it would make the master the source
+  of a copy it does not hold. Re-announcing a remote's offer to the other remotes, the
+  master fetching on their behalf, is left for later.
+- **Rulers on a remote's screens**, wallpapers, input switching: already per remote.
+- **Profiles**: the set of monitors includes every merged remote, so a second remote
+  linking selects (or creates, off) another profile, as the first one did.
 
 ## Wallpapers
 
@@ -487,7 +627,6 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.
 
-<<<<<<< HEAD
 ## Shared clipboard
 
 Off by default, on each machine and each way (`ClipboardSend`, `ClipboardReceive` in
@@ -576,12 +715,13 @@ sees it.
   Wayland gives up after one second without data, so a large picture over a slow network
   may fail to paste. X11 and the
   primary selection are not shared.
-=======
 ## Rulers on a remote's screens
 
 "Rulers on screens" (Location mode) draws on every screen a ruler graduated in
 millimetres from the selected panel. The remote's screens get theirs too, each at its
-place and its physical size.
+place and its physical size. The selected panel may be a remote's as well as one of
+the master's: its millimetres are the layout's either way, and every screen, the
+master's and the remotes', measures it.
 
 - **Computed by the master**, from its layout: `lbm-app` takes, per remote machine on
   the map, the layout with every other machine's sources off their desktop
@@ -613,7 +753,6 @@ place and its physical size.
   rulers.
 - `examples/peer_drive` asks for them (`rulers N`, `norulers`); `examples/peer_remote`
   runs a remote's multi-PC node alone, with real rulers, beside a user's running agent.
->>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
 
 ## A panel both machines know
 

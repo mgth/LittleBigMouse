@@ -45,7 +45,7 @@ qui va le pointeur quand il y entre.
 | Raccourcis lus par le maître evdev (PR #826) | `hook/crossing/keys.rs` (`Letters`), `hook/linux/keymap.rs`, `hook/linux/rescue.rs`, `Shared::report_rescue_refused` | Les touches lues par evdev sont des positions : la lettre d'un raccourci (`M` de `Alt+Shift+M` ou du secours `Ctrl+Alt+Shift+M`) est cherchée sur la disposition du bureau, lue dans la keymap que `wl_keyboard` donne à tout client (xkbcommon chargé à l'exécution), suivie à chaque nouvelle keymap ; la disposition active est demandée à KDE (`org.kde.KeyboardLayouts`, suivie par `layoutChanged`, attendue sur le bus si le service arrive après le hook ou redémarre, redemandée à chaque keymap si `/Layouts` n'est pas encore publié) parce que le compositeur peut réserver `wl_keyboard.modifiers` au client qui a le focus, et une keymap à plusieurs dispositions sans réponse est lue dans la première (le journal le dit) ; table US sans Wayland ni xkbcommon. Sur un clavier AZERTY, le verrou et le secours attendaient jusque-là la touche marquée `,`. Le secours est aussi reconnu dans les touches des claviers non capturés, tenu le même temps, tant que le bureau ne l'a pas lié lui-même dans une session dont les signaux sont écoutés ; sa disponibilité suit la liste réelle des claviers (branchement tardif, retrait du dernier, routeur arrêté), et un portail qui ne répond plus le rend aux claviers. Le hook se déclare au portail sous l'app id `io.github.mgth.LittleBigMouse` (`org.freedesktop.host.portal.Registry`) avant de demander le raccourci global |
 | Machine pilotée, des deux côtés | `lbm-agent/src/peers/actor.rs` (`forward`), `icons.rs`, `tray`, `lbm-ui/src/machines.rs` | L'esclave sait qu'il est piloté : `PeersState::driven_by` / `Snapshot::DrivenBy` (additifs), tirés des `Enter`/`Leave` du flux du maître tels qu'ils atteignent le hook, la fin du flux (lien, session finie ici, `InputReset`) valant `Leave` ; sa page Machines dit « Driven by <maître> » et marque le maître « Drives this machine ». L'icône du tray change à la traversée, sans survol ni scrutation : **estompée** sur le maître dont le pointeur est parti, **pastille magenta** en bas à droite sur l'esclave piloté. La pastille est peinte dans les pixels de l'icône plutôt que confiée à l'`OverlayIconPixmap` du StatusNotifierItem (que tous les hôtes ne dessinent pas, et que la zone de notification Windows n'a pas) ; `NeedsAttention` a été écarté (sens d'alerte, clignotement selon l'hôte) |
 | Autres outils de partage | `lbm-ipc/src/sharing.rs`, `lbm-agent/src/input_sharing.rs`, `sharing_exits.rs`, tray, `lbm-app` | Deskflow (`deskflow-core`, `deskflow`, `deskflow-server`, `deskflow-client`), Synergy (`synergy-core`, `synergys`, `synergyc`), Barrier (`barriers`, `barrierc`) et Input Leap (`input-leaps`, `input-leapc`) sont cherchés quand le mode passe à actif, quand un lien avec une machine s'établit, au Start du moteur et à l'abonnement d'une fenêtre (le tray s'abonne au démarrage de l'agent). Le résultat est dans l'état de l'agent (`Snapshot::input_sharing`, `InputSharing`, absent quand il n'y en a pas), et l'outil est nommé dans le tray (« Deskflow is also running and can move the mouse to other machines »), sur la page Machines et dans la barre d'état. Une connexion établie vers une autre machine (pas la boucle locale) est attribuée au processus (Linux : sockets de `/proc/<pid>/fd` croisés avec `/proc/net/tcp{,6}` ; Windows : `GetExtendedTcpTable`, qui donne le pid) : « …, and it is connected to one now ». Une fenêtre Deskflow seule est dite « open » et non « running », y compris dans la barre d'état (pastille grise « Deskflow open », l'ambre « … also running » étant réservée à un processus qui route ou peut router). Chaque processus trouvé est attendu jusqu'à sa fin, sans scrutation (Linux : pidfd ; Windows : `RegisterWaitForSingleObject` sur un handle `SYNCHRONIZE`) : quitter Deskflow éteint aussitôt l'indication |
-| Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans |
+| Règles sur l'esclave (cette branche) | `lbm-app/src/remote_rulers.rs`, `lbm-agent/src/peers/overlay.rs`, `lbm-overlay/src/standalone.rs` | « Rulers on screens » dessine aussi les règles sur les écrans de l'esclave : calculées par le maître en mm et dans les pixels de l'esclave, envoyées par `Overlay` (capacité `RemoteOverlay`), contrôlées puis dessinées par l'esclave, inertes (le clic traverse), retirées à la chute du lien, à la fermeture de l'UI du maître, à la coupure du mode et au changement d'écrans ; activables aussi quand l'écran sélectionné est celui de l'esclave (elles le mesurent alors, partout) |
 
 Règle de sûreté visée : **quand un maillon du flux tombe, le pointeur est chez
 lui**. Le maître ramène son pointeur et relâche ses claviers ; l'esclave relâche toutes
@@ -135,8 +135,7 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   l'erreur de cette requête. L'interface elle-même n'a été vue que par les tests
   kittest, jamais à l'écran.
 - Règles sur l'esclave : elles ne se tirent pas (inertes là-bas, on aligne en tirant
-  celles des écrans du maître) ; « Rulers on screens » reste grisé quand l'écran
-  sélectionné est celui de l'esclave, comme avant ; sous Linux, l'esclave renouvelle le
+  celles des écrans du maître) ; sous Linux, l'esclave renouvelle le
   bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
   au-delà).
 - Deux maîtres liés au même esclave partagent sa connexion unique au hook (une session
@@ -222,7 +221,7 @@ Et par fonction annexe :
 | Lecture du fond d'écran | Plasma seulement | Oui |
 | Suivi du fond en direct | Plasma seulement | Oui, vérifié sur la vm124 |
 | Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Oui (fenêtre d'un pixel sous le curseur figé, au centre d'un écran), vérifié sur la vm124 |
-| Curseur rangé, côté esclave | Rien de visible | Oui |
+| Curseur rangé, côté esclave | Rien de visible. Un éclair du curseur au centre à la fin de session (signalé par le mainteneur) venait de l'ordre : le pointeur sautait avant que la fenêtre n'ait traité `WM_SETCURSOR` ; l'image est maintenant effacée avant le saut (`PARK_ORDER`), **raisonné, pas encore revu à l'écran** | Oui |
 | DDC/CI | `ddcutil` | dxva2 |
 | Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines **et unique parmi les écrans** (l'id du moniteur est alors cette clé). Sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil. Avec deux dalles annonçant le même numéro de série, celle que le KVM bascule est rattachée à sa jumelle restée sur le maître, et le profil change aussi | Oui, sur un maître Windows, depuis la PR #827 : l'écran distant prend l'id que Windows lui donne en local (`{pnp}{série}_{semaine}_{année}_{checksum}`), calculé sur l'EDID envoyé par l'esclave, celui que le KVM fait passer tel quel. Marche aussi sans numéro de série. Avec deux dalles d'EDID identiques, l'écran resté sur le maître garde l'id, la jumelle distante prend celui de sa source. Jamais essayé sur du vrai matériel (le maître Windows non plus), couvert par des tests |
 
@@ -380,8 +379,43 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 ### 6. Transversal
 
-- **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
-  un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
+- **Plusieurs esclaves à la fois.** Conception écrite : « Several remotes at once »
+  dans [`multi-pc.md`](multi-pc.md). La destination n'existe que sur le saut hook → agent
+  du maître (événement `Host` avant chaque `Enter`, l'agent découpe les lots et la
+  retire) ; rien ne change pour un esclave, quelle que soit sa version. Le hook annonce
+  `InputHosts`, l'agent lui dit quelles machines il peut joindre (`Drivable`) ; sans l'un
+  ou l'autre, la règle « un seul esclave sélectionné » reste en vigueur. Limite connue :
+  le presse-papiers ne passe pas d'un esclave à un autre (seulement esclave ↔ maître).
+  Code : PR #836 (hook, les deux maîtres) et #839 (agent), voir « Travaux en cours ».
+
+  **Essayé le 2026-11-25, en local seulement** (les deux PR fusionnées sur une branche
+  d'essai) : `examples/multi_master` en maître — le gestionnaire multi-PC de l'agent,
+  sans monde ni hook, qui joue lui-même un hook nommant ses machines — face à deux
+  esclaves jetables sur ce poste (`lbm-agent --fake-hook`, `XDG_RUNTIME_DIR` et
+  configuration à eux, ports 24901 et 24902, chacun avec `lbm-hook --example input_sink`
+  qui consigne au lieu d'injecter), en TLS sur la boucle locale. Maître → esclave 1
+  (mouvements, touche, clic) → directement l'esclave 2 → retour à l'esclave 1 → retour au
+  maître : chaque esclave n'a reçu que ses événements, l'esclave 1 rangé et l'esclave 2
+  sorti du même lot, `Driven` juste à chaque étape. Un premier passage, mal câblé (le
+  puits d'entrée écoutait à côté), a aussi montré le retour du pointeur sur `InputReset`
+  de l'esclave où il était.
+
+  **Puis avec la vm124** (même jour, accord du mainteneur) : le même maître face à un
+  esclave Linux jetable et à l'agent v6 e62dc15e de la vm124 tel qu'il tournait (rien de
+  remplacé ni relancé ; le maître jetable appairé par `PeerAccept` sur le canal de l'API,
+  puis oublié par `PeerForget`, la vm124 restant appairée au seul maître réel). Esclave
+  Linux → directement la vm124 → directement l'esclave Linux → retour : le curseur de la
+  vm124, relevé par `GetCursorPos`, est allé à (1920,1080) à l'`Enter`, a suivi le
+  mouvement jusqu'à (1970,1080), puis a été rangé au `Leave`. Le script a aussi envoyé à
+  la vm124 une touche A et un clic gauche au centre de son écran 4K, sur ce qui s'y
+  trouvait.
+
+  **Jamais tourné sur du vrai matériel** : le vrai hook maître (evdev ou Windows) pilotant
+  deux esclaves — couvert par des tests avec le vrai moteur, des deux maîtres, mais pas
+  par une souris ; deux esclaves physiques ; un esclave Windows passant par son service
+  parmi plusieurs ; l'interface (carte et page Machines) avec deux esclaves fusionnés ;
+  le retour au pointeur quand un lien tombe pendant qu'il est sur une autre machine,
+  ailleurs que dans les tests.
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
   dans les deux sens ; les fichiers (PR #822) passent aussi ;
   glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
@@ -781,6 +815,11 @@ La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; 
 décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les
 écrans de l'esclave (PR #817) le sont aussi, voir « Rulers on a remote's screens » dans
 [`multi-pc.md`](multi-pc.md).
+
+Plusieurs esclaves à la fois : conception dans `multi-pc.md` (« Several remotes at
+once », PR #835) ; code en deux PR indépendantes vers `v6`, #836 (hook) et #839 (agent),
+chacune sans effet seule. Celle qui est fusionnée en second a un conflit d'une ligne dans
+`lbm-hook/src/daemon/mod.rs` (garder le bras `Drivable` de #836).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

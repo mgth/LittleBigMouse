@@ -83,6 +83,15 @@ pub fn rescue_shortcut_changed(shared: &Shared) {
     linux::rescue::shortcut_changed();
 }
 
+/// The machines a multi-PC master may drive changed (`Command::Drivable`). The Windows
+/// master looks at once; the evdev backend at the next report, which is when it routes.
+pub fn drivable_changed(shared: &Shared) {
+    #[cfg(windows)]
+    windows::post_drivable_changed(shared);
+    #[cfg(not(windows))]
+    let _ = shared;
+}
+
 /// Count of deduped mouse-move events the active backend has processed.
 /// Lightweight instrumentation (one relaxed increment) to observe the hook
 /// staying alive; also feeds the Windows watchdog.

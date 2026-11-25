@@ -1756,6 +1756,495 @@ async fn with_two_remotes_linked_only_the_selected_ones_screens_are_merged_and_i
     assert_eq!(next_input(&mut beta_link).await, entering);
 }
 
+//=========================//
+// Several remotes at once //
+//=========================//
+
+/// The events of `events`, for the machine `host`: a `Host` marker, then them.
+#[cfg(unix)]
+fn for_host(host: &str, events: &[lbm_ipc::input::InputEvent]) -> Vec<u8> {
+    let mut batch = Vec::new();
+    assert!(lbm_ipc::input::encode_host(&mut batch, host));
+    batch.extend_from_slice(&lbm_ipc::input::encode(events));
+    batch
+}
+
+/// A desk whose hook names its machines, with two remotes linked and their screens
+/// reported, and the hook's listener.
+#[cfg(unix)]
+struct TwoRemotes {
+    _dirs: (tempfile::TempDir, tempfile::TempDir, tempfile::TempDir),
+    alpha: Identity,
+    beta: Identity,
+    alpha_link: Link,
+    beta_link: Link,
+    desk: Node,
+    hook_listener: tokio::net::UnixListener,
+}
+
+#[cfg(unix)]
+async fn two_remotes(names_hosts: bool) -> TwoRemotes {
+    let (a_dir, alpha, mut alpha_listener) = a_remote("alpha", link::Options::default()).await;
+    let (b_dir, beta, mut beta_listener) = a_remote("beta", link::Options::default()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    for (identity, listener) in [(&alpha, &alpha_listener), (&beta, &beta_listener)] {
+        pair(
+            desk_dir.path(),
+            identity.fingerprint(),
+            &listener.local_addr().to_string(),
+            Role::Remote,
+        );
+    }
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::new(
+        desk_dir.path(),
+        Some(hook_path.to_string_lossy().into_owned()),
+    );
+    desk.service.hook_names_hosts(names_hosts);
+    desk.turn_on(0, "desk").await;
+    let (alpha_link, beta_link) = tokio::join!(
+        linked_from(&mut alpha_listener),
+        linked_from(&mut beta_listener)
+    );
+    for (link, id) in [(&alpha_link, "A1"), (&beta_link, "B1")] {
+        link.sender()
+            .control(&Control::Displays {
+                revision: 1,
+                displays: vec![display(id, 0)],
+            })
+            .await
+            .unwrap();
+    }
+    desk.until(|s| {
+        [alpha.fingerprint(), beta.fingerprint()]
+            .iter()
+            .all(|id| peer(s, id).is_some_and(|p| p.peer.connected && !p.peer.displays.is_empty()))
+    })
+    .await;
+    TwoRemotes {
+        _dirs: (a_dir, b_dir, desk_dir),
+        alpha,
+        beta,
+        alpha_link,
+        beta_link,
+        desk,
+        hook_listener,
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn with_a_hook_that_names_machines_every_remote_is_merged_and_each_gets_its_own_input() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let mut t = two_remotes(true).await;
+    let (alpha, beta) = (t.alpha.fingerprint(), t.beta.fingerprint());
+    // The notices, not the API: what is not in the API is in them.
+    let state = t.desk.until(|s| s.drivable.len() == 2).await;
+    assert!(state.drives_all);
+    assert_eq!(state.selected_remote, None, "none selected");
+    let mut both = vec![alpha.to_owned(), beta.to_owned()];
+    both.sort();
+    assert_eq!(state.drivable, both);
+    let merged: Vec<String> = state
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, both);
+    // Absent from the API, which is how a frontend knows to merge every one.
+    let json = serde_json::to_value(&state).unwrap();
+    assert!(json.get("SelectedRemote").is_none(), "{json}");
+
+    // Nothing waits on the hook's zones: the connection comes at once.
+    let mut hook = hook_client(&t.hook_listener).await;
+    let onto_alpha = [
+        InputEvent::Enter { x: 5, y: 5 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &for_host(alpha, &onto_alpha))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut t.alpha_link).await, onto_alpha);
+    assert!(silent(&mut t.beta_link).await, "beta hears nothing");
+    t.desk.until(|s| s.driven.as_deref() == Some(alpha)).await;
+
+    // Straight from alpha to beta, in one batch: alpha's Leave, then beta's Enter.
+    let mut batch = lbm_ipc::input::encode(&[InputEvent::Leave]);
+    batch.extend_from_slice(&for_host(beta, &[InputEvent::Enter { x: 0, y: 9 }]));
+    write_batch(&mut hook, &batch).await.unwrap();
+    assert_eq!(next_input(&mut t.alpha_link).await, [InputEvent::Leave]);
+    assert_eq!(
+        next_input(&mut t.beta_link).await,
+        [InputEvent::Enter { x: 0, y: 9 }]
+    );
+    t.desk.until(|s| s.driven.as_deref() == Some(beta)).await;
+    let motion = [InputEvent::Motion { x: 1, y: 9 }];
+    write_batch(&mut hook, &lbm_ipc::input::encode(&motion))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut t.beta_link).await, motion);
+
+    // Alpha goes while the pointer is on beta: nothing is felt, the connection stays.
+    drop(t.alpha_link);
+    let now = t.desk.until(|s| s.drivable == [beta.to_owned()]).await;
+    assert_eq!(now.driven.as_deref(), Some(beta));
+    let motion = [InputEvent::Motion { x: 2, y: 9 }];
+    write_batch(&mut hook, &lbm_ipc::input::encode(&motion))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut t.beta_link).await, motion);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), read_batch(&mut hook))
+            .await
+            .is_err(),
+        "the connection to the hook goes on"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_reset_ends_the_hop_only_from_the_remote_the_pointer_is_on() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let mut t = two_remotes(true).await;
+    let (alpha, beta) = (
+        t.alpha.fingerprint().to_owned(),
+        t.beta.fingerprint().to_owned(),
+    );
+    let mut hook = hook_client(&t.hook_listener).await;
+    write_batch(
+        &mut hook,
+        &for_host(&beta, &[InputEvent::Enter { x: 1, y: 1 }]),
+    )
+    .await
+    .unwrap();
+    next_input(&mut t.beta_link).await;
+    t.desk
+        .until(|s| s.driven.as_deref() == Some(beta.as_str()))
+        .await;
+
+    // Alpha, which the pointer is not on, ended a session: nothing to bring home.
+    t.alpha_link
+        .sender()
+        .control(&Control::InputReset)
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(400), read_batch(&mut hook))
+            .await
+            .is_err(),
+        "the connection goes on"
+    );
+
+    // Beta, which it is on: the hook comes home (its connection ends), beta is told
+    // Leave, and a new connection is made at once for the next crossing.
+    t.beta_link
+        .sender()
+        .control(&Control::InputReset)
+        .await
+        .unwrap();
+    assert!(tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+        .await
+        .expect("the connection ends")
+        .is_err());
+    assert_eq!(next_input(&mut t.beta_link).await, [InputEvent::Leave]);
+    let mut successor = hook_client(&t.hook_listener).await;
+    t.desk.until(|s| s.driven.is_none()).await;
+    write_batch(
+        &mut successor,
+        &for_host(&alpha, &[InputEvent::Enter { x: 3, y: 3 }]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        next_input(&mut t.alpha_link).await,
+        [InputEvent::Enter { x: 3, y: 3 }]
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_crossing_to_a_remote_that_left_brings_the_pointer_home_at_once() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let mut t = two_remotes(true).await;
+    let alpha = t.alpha.fingerprint().to_owned();
+    let beta = t.beta.fingerprint().to_owned();
+    let mut hook = hook_client(&t.hook_listener).await;
+    drop(t.alpha_link);
+    t.desk.until(|s| s.drivable == [beta.clone()]).await;
+    // A hook that had not heard yet crosses into alpha's zone.
+    write_batch(
+        &mut hook,
+        &for_host(&alpha, &[InputEvent::Enter { x: 1, y: 1 }]),
+    )
+    .await
+    .unwrap();
+    assert!(
+        tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+            .await
+            .expect("the connection ends")
+            .is_err(),
+        "the hook comes home"
+    );
+    // And the next connection is there at once, for beta.
+    let mut successor = hook_client(&t.hook_listener).await;
+    write_batch(
+        &mut successor,
+        &for_host(&beta, &[InputEvent::Enter { x: 2, y: 2 }]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        next_input(&mut t.beta_link).await,
+        [InputEvent::Enter { x: 2, y: 2 }]
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn with_several_remotes_a_queue_full_leave_comes_before_the_next_sessions_enter() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let stalling = link::Options {
+        keepalive: Duration::from_secs(60),
+        queue: 1,
+        ..link::Options::default()
+    };
+    let (_laptop_dir, laptop, mut listener) = a_remote("laptop", stalling.clone()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    pair(
+        desk_dir.path(),
+        laptop.fingerprint(),
+        &listener.local_addr().to_string(),
+        Role::Remote,
+    );
+    let hook_path = desk_dir.path().join("desk-input.sock");
+    let hook_listener = tokio::net::UnixListener::bind(&hook_path).unwrap();
+    let mut desk = Node::with_setup(
+        desk_dir.path(),
+        setup_with(Some(hook_path.to_string_lossy().into_owned()), stalling),
+    );
+    desk.service.hook_names_hosts(true);
+    desk.turn_on(0, "desk").await;
+    let mut laptop_link = linked_from(&mut listener).await;
+    let id = laptop.fingerprint().to_owned();
+    desk.until(|s| s.drivable == [id.clone()]).await;
+    let mut hook = hook_client(&hook_listener).await;
+
+    // Ctrl goes down on the laptop, which then reads nothing while the stream grows.
+    let crossing = [
+        InputEvent::Enter { x: 0, y: 0 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &for_host(&id, &crossing))
+        .await
+        .unwrap();
+    let flooded = tokio::time::timeout(PATIENCE, async {
+        loop {
+            if write_batch(&mut hook, &flood()).await.is_err() {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(flooded.is_ok(), "the agent lets go of the hook");
+    assert!(tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+        .await
+        .expect("the connection ends")
+        .is_err());
+
+    // The laptop reads again: its Leave, and only then the next session's Enter.
+    let reading =
+        tokio::spawn(async move {
+            let mut seen = Vec::new();
+            tokio::time::timeout(PATIENCE, async {
+                loop {
+                    match laptop_link.next().await {
+                        Some(Event::Input(batch)) => {
+                            let events = lbm_ipc::input::decode(&batch).unwrap();
+                            let done = events.contains(&InputEvent::Enter { x: 9, y: 9 });
+                            seen.extend(events.into_iter().filter(|e| {
+                                matches!(e, InputEvent::Leave | InputEvent::Enter { .. })
+                            }));
+                            if done {
+                                return;
+                            }
+                        }
+                        Some(Event::Control(_)) => {}
+                        other => panic!("the link ended: {other:?}"),
+                    }
+                }
+            })
+            .await
+            .expect("the next Enter in time");
+            seen
+        });
+    let mut successor = hook_client(&hook_listener).await;
+    write_batch(
+        &mut successor,
+        &for_host(&id, &[InputEvent::Enter { x: 9, y: 9 }]),
+    )
+    .await
+    .unwrap();
+    let seen = reading.await.unwrap();
+    assert_eq!(
+        seen[seen.len() - 2..],
+        [InputEvent::Leave, InputEvent::Enter { x: 9, y: 9 }],
+        "{seen:?}"
+    );
+}
+
+/// A desk whose hook names its machines, master of a tower whose service is announced
+/// but not linked yet, and the service's listener.
+#[cfg(unix)]
+struct TowerAndService {
+    _dirs: Vec<tempfile::TempDir>,
+    desk: Node,
+    tower: Identity,
+    tower_link: Link,
+    service_listener: link::Listener,
+    hook_listener: tokio::net::UnixListener,
+}
+
+#[cfg(unix)]
+async fn tower_and_service() -> TowerAndService {
+    let (service_dir, service, service_listener) =
+        a_remote("tower-service", link::Options::default()).await;
+    let (tower_dir, tower, mut tower_listener) =
+        a_remote_with_service("tower", &service_listener, service.fingerprint()).await;
+    let (desk_dir, hook_listener, endpoint) = a_master_of(&tower, &tower_listener);
+    let mut desk = Node::new(desk_dir.path(), Some(endpoint));
+    desk.service.hook_names_hosts(true);
+    desk.turn_on(0, "desk").await;
+    let tower_link = linked_from(&mut tower_listener).await;
+    let id = tower.fingerprint().to_owned();
+    desk.until(|s| s.drivable == [id.clone()]).await;
+    TowerAndService {
+        _dirs: vec![service_dir, tower_dir, desk_dir],
+        desk,
+        tower,
+        tower_link,
+        service_listener,
+        hook_listener,
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_service_taking_over_the_machine_the_pointer_is_on_ends_the_agents_session() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let mut t = tower_and_service().await;
+    let id = t.tower.fingerprint().to_owned();
+    // On the tower through its agent, Ctrl held.
+    let mut hook = hook_client(&t.hook_listener).await;
+    let crossing = [
+        InputEvent::Enter { x: 1, y: 1 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &for_host(&id, &crossing))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut t.tower_link).await, crossing);
+
+    // The service links: the agent's session ends there, the pointer comes home...
+    let mut service_link = linked_from(&mut t.service_listener).await;
+    assert_eq!(next_input(&mut t.tower_link).await, [InputEvent::Leave]);
+    assert!(tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+        .await
+        .expect("the connection ends")
+        .is_err());
+    // ...and the service gets nothing before the next crossing's Enter.
+    let mut successor = hook_client(&t.hook_listener).await;
+    let release = [InputEvent::Key {
+        code: CTRL,
+        pressed: false,
+    }];
+    write_batch(&mut successor, &lbm_ipc::input::encode(&release))
+        .await
+        .unwrap();
+    let enter = [InputEvent::Enter { x: 2, y: 2 }];
+    write_batch(&mut successor, &for_host(&id, &enter))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut service_link).await, enter);
+    assert!(
+        silent(&mut t.tower_link).await,
+        "the agent hears nothing more"
+    );
+    let _ = &t.desk;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_service_going_from_the_machine_the_pointer_is_on_starts_afresh_with_the_agent() {
+    use lbm_ipc::input::{read_batch, write_batch, InputEvent};
+    let mut t = tower_and_service().await;
+    let id = t.tower.fingerprint().to_owned();
+    let mut service_link = linked_from(&mut t.service_listener).await;
+    t.desk.until(|s| s.drivable == [id.clone()]).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut hook = hook_client(&t.hook_listener).await;
+    let crossing = [
+        InputEvent::Enter { x: 1, y: 1 },
+        InputEvent::Key {
+            code: CTRL,
+            pressed: true,
+        },
+    ];
+    write_batch(&mut hook, &for_host(&id, &crossing))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut service_link).await, crossing);
+
+    // The service goes: the pointer comes home, and the agent gets nothing of the
+    // session the service had — not the release — before the next crossing's Enter.
+    service_link.sender().close("stopped").await;
+    drop(service_link);
+    assert!(tokio::time::timeout(PATIENCE, read_batch(&mut hook))
+        .await
+        .expect("the connection ends")
+        .is_err());
+    let _ = write_batch(
+        &mut hook,
+        &lbm_ipc::input::encode(&[InputEvent::Key {
+            code: CTRL,
+            pressed: false,
+        }]),
+    )
+    .await;
+    let mut successor = hook_client(&t.hook_listener).await;
+    let enter = [InputEvent::Enter { x: 3, y: 3 }];
+    write_batch(&mut successor, &for_host(&id, &enter))
+        .await
+        .unwrap();
+    assert_eq!(next_input(&mut t.tower_link).await, enter);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn with_a_hook_that_names_no_machine_one_remote_is_still_selected() {
+    let mut t = two_remotes(false).await;
+    let state = t.desk.until(|s| s.selected_remote.is_some()).await;
+    assert!(!state.drives_all);
+    assert!(state.drivable.is_empty());
+    let selected = state.selected_remote.clone().expect("one selected");
+    let merged: Vec<String> = state
+        .remote_screens()
+        .into_iter()
+        .map(|r| r.machine_id)
+        .collect();
+    assert_eq!(merged, [selected]);
+    let _ = (&t.alpha, &t.beta);
+}
+
 //========================//
 // The remote's hook goes  //
 //========================//

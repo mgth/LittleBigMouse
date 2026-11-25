@@ -3,7 +3,7 @@
 //! touches them; the agent's loop talks to it through [`Command`]s and hears from it
 //! through [`Notice`]s, so that nothing the network does can hold that loop up.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -82,6 +82,9 @@ pub(super) enum Command {
     PointerLocked(bool),
     /// Whether this machine's hook reads the lock keys' state (`Service::hook_reads_locks`).
     HookReadsLocks(bool),
+    /// Whether this machine's hook names the machine of every crossing
+    /// (`Service::hook_names_hosts`).
+    HookNamesHosts(bool),
     /// This machine's hook says Windows drops what it injects, or no longer does.
     InjectionBlocked(Option<InjectionBlock>),
     /// `SelectInput` to a remote of this machine.
@@ -191,6 +194,9 @@ pub(super) struct Start {
     pub options: link::Options,
     pub input_endpoint: Option<String>,
     pub hook_reads_locks: bool,
+    /// Whether this machine's hook names the machine of every crossing
+    /// (`Service::hook_names_hosts`): every linked remote is then driven at once.
+    pub hook_names_hosts: bool,
     pub pointer_lock_shortcut: String,
     pub displays: Vec<PeerDisplay>,
     pub notices: mpsc::UnboundedSender<Notice>,
@@ -254,6 +260,15 @@ struct Overlaid {
     shown: Box<dyn Shown>,
 }
 
+/// How the hook's stream reaches a remote, with several remotes: the relay's id (its
+/// agent's link, or its service's — `Target::route`), and the service's when that is the
+/// relay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Way {
+    route: u64,
+    service: Option<u64>,
+}
+
 struct Actor {
     identity: Identity,
     store: PeerStore,
@@ -302,6 +317,12 @@ struct Actor {
     relaying: Option<(String, u64)>,
     /// The service link the stream is relayed through, when it is not the agent's.
     relaying_via: Option<u64>,
+    /// This machine's hook names the machine of every crossing: no remote is selected,
+    /// every linked remote is merged and driven (docs/multi-pc.md, "Several remotes at
+    /// once"), and `selected`, `relaying` and `relaying_via` stay empty.
+    names_hosts: bool,
+    /// While [`Self::names_hosts`]: the remotes the stream is relayed to, and how.
+    drivable: BTreeMap<String, Way>,
     /// What the state says of the pointer lock ([`PeersState::pointer_lock_shortcut`],
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
@@ -447,6 +468,8 @@ pub(super) async fn run(
         hook_ready: None,
         relaying: None,
         relaying_via: None,
+        names_hosts: start.hook_names_hosts,
+        drivable: BTreeMap::new(),
         pointer_lock_shortcut: start.pointer_lock_shortcut,
         pointer_locked: false,
         block_sent: None,
@@ -624,12 +647,17 @@ impl Actor {
                 .selected
                 .as_ref()
                 .map(|(machine_id, _)| machine_id.clone()),
+            drives_all: self.names_hosts,
+            drivable: self.drivable.keys().cloned().collect(),
             selection: self.selection,
-            driven: self
-                .relaying
-                .as_ref()
-                .filter(|_| self.hook.driven())
-                .map(|(machine_id, _)| machine_id.clone()),
+            driven: match self.names_hosts {
+                true => self.hook.driving_host(),
+                false => self
+                    .relaying
+                    .as_ref()
+                    .filter(|_| self.hook.driven())
+                    .map(|(machine_id, _)| machine_id.clone()),
+            },
             pointer_lock_shortcut: self.pointer_lock_shortcut.clone(),
             pointer_locked: self.pointer_locked,
             clipboard: self.sharing.state(),
@@ -683,6 +711,28 @@ impl Actor {
             }
             Command::PointerLocked(locked) => self.pointer_locked = locked,
             Command::HookReadsLocks(reads) => self.hook.set_reads_locks(reads),
+            Command::HookNamesHosts(names) if names != self.names_hosts => {
+                eprintln!(
+                    "[lbm-agent] multi-PC: {}",
+                    if names {
+                        "the hook names its machines: every linked remote is driven"
+                    } else {
+                        "the hook names no machine: one remote at a time"
+                    }
+                );
+                self.names_hosts = names;
+                // From one way of relaying to the other is the end of a hop, whatever
+                // the targets were.
+                self.hook.set_target(None);
+                self.relaying = None;
+                self.relaying_via = None;
+                self.drivable.clear();
+                self.selected = None;
+                self.selection = SELECTIONS.fetch_add(1, Ordering::Relaxed) + 1;
+                self.select();
+                self.retarget();
+            }
+            Command::HookNamesHosts(_) => {}
             Command::InjectionBlocked(block) => self.tell_masters_blocked(block),
             Command::HookReady(selection) => {
                 self.hook_ready = selection;
@@ -762,7 +812,14 @@ impl Actor {
                 result,
             } => self.service_dialed(machine_id, link_id, result),
             Internal::ServiceReset { machine_id, id } => {
-                if self.relaying_via == Some(id) {
+                let through = match self.names_hosts {
+                    true => {
+                        self.drivable.get(&machine_id).and_then(|w| w.service) == Some(id)
+                            && self.hook.driving_host().as_deref() == Some(machine_id.as_str())
+                    }
+                    false => self.relaying_via == Some(id),
+                };
+                if through {
                     eprintln!(
                         "[lbm-agent] multi-PC: the service of {machine_id} ended the session: \
                          the pointer comes home for a fresh crossing"
@@ -1202,6 +1259,8 @@ impl Actor {
             }
             return;
         }
+        // Asked before the link is borrowed: about the stream this link takes now.
+        let through_agent = self.relays_through_agent(machine_id, id);
         let Some(live) = self.links.get_mut(machine_id).filter(|l| l.id == id) else {
             return;
         };
@@ -1245,11 +1304,7 @@ impl Actor {
             // the pointer comes home and the next crossing starts a session afresh.
             // Only from the path the stream takes now: while it goes through the
             // remote's service, its agent's word on a session is about none of ours.
-            Control::InputReset
-                if live.info.hello.role == Role::Remote
-                    && self.relaying_via.is_none()
-                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id)) =>
-            {
+            Control::InputReset if live.info.hello.role == Role::Remote && through_agent => {
                 eprintln!(
                     "[lbm-agent] multi-PC: {} ended the input session: the pointer comes home",
                     live.info.hello.name
@@ -1278,11 +1333,7 @@ impl Actor {
                 }
                 let blocked = block.is_some();
                 live.blocked = block;
-                if blocked
-                    && self.hook.driven()
-                    && self.relaying_via.is_none()
-                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
-                {
+                if blocked && self.hook.driven() && through_agent {
                     eprintln!("[lbm-agent] multi-PC: the pointer comes home");
                     self.hook.restart();
                 }
@@ -1559,6 +1610,11 @@ impl Actor {
     /// link is told `Leave`, and nothing is relayed to the new one before the hook has
     /// zones fit for it ([`Actor::retarget`]).
     fn select(&mut self) {
+        if self.names_hosts {
+            // None selected: every linked remote is driven (see `retarget`).
+            self.retarget();
+            return;
+        }
         let is_remote = |live: &Live| live.info.hello.role == Role::Remote;
         let kept = self.selected.as_ref().and_then(|(machine_id, _)| {
             self.links
@@ -1599,6 +1655,10 @@ impl Actor {
     /// this choice, not merely this machine: a choice gone and come back may have left a
     /// load for the other one on its way to the hook.
     fn retarget(&mut self) {
+        if self.names_hosts {
+            self.retarget_hosts();
+            return;
+        }
         let ready = self.hook_ready == Some(self.selection);
         let next = self.selected.clone().filter(|_| ready);
         // The remote's service takes the stream when there is a link with it, made for
@@ -1617,12 +1677,14 @@ impl Actor {
             Some(service) => Some(Target {
                 link: service.sender.clone(),
                 reads_locks: true,
+                route: service.id,
             }),
             None => next
                 .as_ref()
                 .and_then(|(machine_id, _)| self.links.get(machine_id))
                 .map(|live| Target {
                     link: live.sender.clone(),
+                    route: live.id,
                     reads_locks: live
                         .info
                         .hello
@@ -1639,6 +1701,109 @@ impl Actor {
         self.relaying = next;
         self.relaying_via = via;
         self.hook.set_target(sender);
+    }
+
+    /// Every paired machine linked as a remote of this one, as the target of the hook's
+    /// stream: its service when there is a link with it made for this very link with its
+    /// agent, else that link. Nothing waits on the hook's zones: a batch names its
+    /// machine, and the hook walls every machine it is not told of
+    /// (`PeersState::drivable`, `Command::Drivable`). Only the targets change; the
+    /// connection to the hook goes on.
+    fn retarget_hosts(&mut self) {
+        let mut targets = BTreeMap::new();
+        let mut drivable = BTreeMap::new();
+        for (machine_id, live) in &self.links {
+            if live.info.hello.role != Role::Remote {
+                continue;
+            }
+            let service = self
+                .services
+                .get(machine_id)
+                .filter(|service| service.link_id == live.id);
+            let target = match service {
+                Some(service) => Target {
+                    link: service.sender.clone(),
+                    reads_locks: true,
+                    route: service.id,
+                },
+                None => Target {
+                    link: live.sender.clone(),
+                    route: live.id,
+                    reads_locks: live
+                        .info
+                        .hello
+                        .capabilities
+                        .iter()
+                        .any(|c| c == LOCKS_CAPABILITY),
+                },
+            };
+            drivable.insert(
+                machine_id.clone(),
+                Way {
+                    route: target.route,
+                    service: service.map(|service| service.id),
+                },
+            );
+            targets.insert(machine_id.clone(), target);
+        }
+        if drivable == self.drivable {
+            return;
+        }
+        // The machine the pointer is on, reached another way now or not at all: its
+        // session is the old relay's. The hop ends — Leave to the old relay, the pointer
+        // home — and the new relay gets the next crossing's Enter, not what follows it.
+        let driven = self.hook.driving_host();
+        let rerouted = driven.as_ref().is_some_and(|machine_id| {
+            self.drivable.get(machine_id).map(|w| w.route)
+                != drivable.get(machine_id).map(|w| w.route)
+        });
+        for (machine_id, way) in &drivable {
+            let via = &way.service;
+            if self.drivable.get(machine_id).map(|w| &w.service) != Some(via) {
+                eprintln!(
+                    "[lbm-agent] multi-PC: the input stream to {machine_id} goes {}",
+                    if via.is_some() {
+                        "through its service"
+                    } else {
+                        "to its agent"
+                    }
+                );
+            }
+        }
+        for machine_id in self.drivable.keys() {
+            if !drivable.contains_key(machine_id) {
+                eprintln!("[lbm-agent] multi-PC: the input stream no longer goes to {machine_id}");
+            }
+        }
+        self.drivable = drivable;
+        self.hook.set_hosts(targets);
+        if rerouted {
+            eprintln!(
+                "[lbm-agent] multi-PC: the pointer's machine is reached another way: it comes home"
+            );
+            self.hook.restart();
+        }
+    }
+
+    /// Whether the stream to `machine_id` goes to its agent on the link `id` now, and
+    /// the pointer is there: what a word of that agent on the session (`InputReset`) or
+    /// on its injection is about. While it goes through the remote's service, the
+    /// agent's word on a session is about none of ours.
+    fn relays_through_agent(&self, machine_id: &str, id: u64) -> bool {
+        match self.names_hosts {
+            true => {
+                self.links.get(machine_id).is_some_and(|live| live.id == id)
+                    && self
+                        .drivable
+                        .get(machine_id)
+                        .is_some_and(|w| w.service.is_none())
+                    && self.hook.driving_host().as_deref() == Some(machine_id)
+            }
+            false => {
+                self.relaying_via.is_none()
+                    && self.relaying.as_ref() == Some(&(machine_id.to_owned(), id))
+            }
+        }
     }
 
     fn forget(&mut self, machine_id: &str) -> Result<Value, String> {

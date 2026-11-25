@@ -37,6 +37,7 @@ fn greeting_holding_nothing() -> HookSignal {
     HookSignal::Greeted {
         layout: String::new(),
         reads_locks: false,
+        names_hosts: false,
     }
 }
 
@@ -341,6 +342,7 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
         HookSignal::Greeted {
             layout: String::new(),
             reads_locks: false,
+            names_hosts: false,
         }
     );
     assert_eq!(event(&mut signals).await, Event::Stopped);
@@ -365,6 +367,7 @@ async fn the_greeting_reaches_the_runtime_with_the_layout_the_hook_holds() {
         HookSignal::Greeted {
             layout: protocol::fingerprint(ZONES),
             reads_locks: false,
+            names_hosts: false,
         }
     );
 

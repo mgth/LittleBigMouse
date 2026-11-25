@@ -294,6 +294,7 @@ fn reconcile(window: HWND) {
             // pointer onto the window (arriving there is a move over it, which asks it
             // for its cursor). Moving first flashed an arrow in the middle of the
             // screen until this handler returned and `WM_SETCURSOR` was handled.
+            let mut previous = HCURSOR::default();
             for step in PARK_ORDER {
                 match step {
                     ParkStep::ShowWindow => {
@@ -314,32 +315,47 @@ fn reconcile(window: HWND) {
                         SHOWN.store(window.0 as isize, Ordering::Release);
                     }
                     ParkStep::BlankCursor => {
-                        SetCursor(HCURSOR::default());
+                        previous = SetCursor(HCURSOR::default());
                     }
                     // SetCursorPos rather than SendInput: exact to the pixel, which a
                     // normalised absolute move is not guaranteed to be, and the window
                     // is one pixel wide. Should it ever reach the low-level hook, it
                     // does so at SPOT, which is not taken for a person.
                     ParkStep::MovePointer => {
-                        let _ = SetCursorPos(spot.0, spot.1);
+                        if SetCursorPos(spot.0, spot.1).is_err() {
+                            // The pointer did not reach the window (the input desktop
+                            // changed, say): give the image back, take the window
+                            // away and forget the parking, so that nothing believes
+                            // it is done and a next attempt starts clean.
+                            SetCursor(previous);
+                            hide(window);
+                            return;
+                        }
                     }
                 }
             }
         } else if !wanted && shown {
-            SHOWN.store(0, Ordering::Release);
-            SPOT.store(u64::MAX, Ordering::Release);
-            // Hidden, not moved: an Enter puts the pointer where the master says next,
-            // and a person's mouse already took it elsewhere.
-            let _ = SetWindowPos(
-                window,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
-            );
+            hide(window);
         }
+    }
+}
+
+/// Takes the window away and forgets where the pointer was parked.
+fn hide(window: HWND) {
+    SHOWN.store(0, Ordering::Release);
+    SPOT.store(u64::MAX, Ordering::Release);
+    // Hidden, not moved: an Enter puts the pointer where the master says next, and a
+    // person's mouse already took it elsewhere.
+    unsafe {
+        let _ = SetWindowPos(
+            window,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
+        );
     }
 }
 

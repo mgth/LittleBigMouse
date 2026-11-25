@@ -52,6 +52,16 @@ pub fn input_endpoint_beside(command_endpoint: &str) -> String {
 /// sends it only to a remote that says this ([`without_locks`]).
 pub const LOCKS_CAPABILITY: &str = "InputLocks";
 
+/// The capability (`lbm_ipc::protocol::Event::Hello`) of a master's hook that names
+/// the machine its batches are for ([`encode_host`]) once its agent says which machines
+/// it can reach (`lbm_ipc::protocol::Command::Drivable`). Without it on either side,
+/// batches carry no destination and the agent drives one remote (docs/multi-pc.md,
+/// "Several remotes at once").
+pub const HOSTS_CAPABILITY: &str = "InputHosts";
+
+/// The longest machine id a `Host` marker carries: its length is one byte.
+pub const MAX_HOST_LENGTH: usize = 255;
+
 /// The lock keys of the sender, each `None` when it cannot tell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Locks {
@@ -124,6 +134,10 @@ const BUTTON: u8 = 4;
 const WHEEL: u8 = 5;
 const KEY: u8 = 6;
 const LOCKS: u8 = 7;
+/// Not an [`InputEvent`]: the destination of the events that follow it, on a master's
+/// hook → agent hop only ([`encode_host`], [`by_host`]). Never relayed further, so a
+/// remote's hook never reads one, and [`decode`] refuses it like any unknown tag.
+const HOST: u8 = 8;
 
 /// The bytes after an event's tag; `None` for a tag that is not one.
 fn payload_length(tag: u8) -> Option<usize> {
@@ -287,6 +301,53 @@ pub fn without_locks(batch: &[u8]) -> Cow<'_, [u8]> {
         Some(cut) => Cow::Owned(cut),
         None => Cow::Borrowed(batch),
     }
+}
+
+/// Appends a `Host` marker to a batch: the events after it, up to the next marker, are
+/// for the machine `id` (a remote's machine id, as the zones' `Host` names it). An id
+/// longer than [`MAX_HOST_LENGTH`] is not one: `false`, and nothing is appended.
+pub fn encode_host(batch: &mut Vec<u8>, id: &str) -> bool {
+    let Ok(length) = u8::try_from(id.len()) else {
+        return false;
+    };
+    batch.push(HOST);
+    batch.push(length);
+    batch.extend_from_slice(id.as_bytes());
+    true
+}
+
+/// A batch of a master's hook cut at its `Host` markers: each run of events, without
+/// the markers, with the machine it is for — `None` for the events before the first
+/// marker, which say no destination. Runs are borrowed from the batch, never decoded;
+/// an empty run is left out. `None` when the batch does not walk (an unknown tag, an
+/// event or a marker cut off, an id that is not UTF-8): what it says cannot be known,
+/// so none of it may be relayed.
+pub fn by_host(batch: &[u8]) -> Option<Vec<(Option<&str>, &[u8])>> {
+    let mut runs = Vec::new();
+    let mut host = None;
+    let mut start = 0;
+    let mut at = 0;
+    while let Some(&tag) = batch.get(at) {
+        if tag == HOST {
+            if at > start {
+                runs.push((host, &batch[start..at]));
+            }
+            let length = *batch.get(at + 1)? as usize;
+            let id = batch.get(at + 2..at + 2 + length)?;
+            host = Some(std::str::from_utf8(id).ok()?);
+            at += 2 + length;
+            start = at;
+        } else {
+            at += 1 + payload_length(tag)?;
+            if at > batch.len() {
+                return None;
+            }
+        }
+    }
+    if at > start {
+        runs.push((host, &batch[start..at]));
+    }
+    Some(runs)
 }
 
 /// Reads one batch's bytes, still encoded: an agent relays them as they are.
@@ -477,6 +538,68 @@ mod tests {
         // Not a batch: left for the receiver to refuse.
         assert!(matches!(without_locks(&[LOCKS, 1]), Cow::Borrowed(_)));
         assert!(matches!(without_locks(&[200]), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn a_batch_is_cut_at_its_host_markers_and_the_markers_are_dropped() {
+        let leave = encode(&[InputEvent::Leave]);
+        let enter = encode(&[
+            InputEvent::Enter { x: 1, y: 2 },
+            InputEvent::Locks(LOCKED),
+            InputEvent::Key {
+                code: 30,
+                pressed: true,
+            },
+        ]);
+        let mut batch = Vec::new();
+        assert!(encode_host(&mut batch, "aaaa"));
+        let a = batch.len();
+        batch.extend_from_slice(&leave);
+        assert!(encode_host(&mut batch, "bbbb"));
+        let b = batch.len();
+        batch.extend_from_slice(&enter);
+        let runs = by_host(&batch).unwrap();
+        assert_eq!(
+            runs,
+            [
+                (Some("aaaa"), &batch[a..a + leave.len()]),
+                (Some("bbbb"), &batch[b..]),
+            ]
+        );
+        assert_eq!(
+            decode(runs[1].1).unwrap()[0],
+            InputEvent::Enter { x: 1, y: 2 }
+        );
+        // What comes before any marker says no destination; empty runs are left out.
+        let mut lead = leave.clone();
+        encode_host(&mut lead, "aaaa");
+        encode_host(&mut lead, "bbbb");
+        assert_eq!(by_host(&lead).unwrap(), [(None, &leave[..])]);
+        assert_eq!(by_host(&[]).unwrap(), []);
+        // A plain batch is one run, borrowed whole.
+        let plain = encode(&EVERY);
+        assert_eq!(by_host(&plain).unwrap(), [(None, &plain[..])]);
+    }
+
+    #[test]
+    fn a_batch_whose_markers_do_not_walk_says_nothing() {
+        let mut batch = Vec::new();
+        encode_host(&mut batch, "aaaa");
+        batch.extend_from_slice(&encode(&[InputEvent::Leave]));
+        for cut in 1..6 {
+            assert_eq!(by_host(&batch[..cut]), None, "cut at {cut}");
+        }
+        assert_eq!(by_host(&[HOST, 2, 0xff, 0xfe]), None, "not UTF-8");
+        assert_eq!(by_host(&[MOTION, 1, 2]), None, "an event cut off");
+        assert_eq!(by_host(&[200]), None);
+        // The hook's own reader never takes one.
+        assert!(decode(&batch).is_err());
+        // An id too long to be said is not written.
+        let mut long = Vec::new();
+        assert!(!encode_host(&mut long, &"x".repeat(MAX_HOST_LENGTH + 1)));
+        assert!(long.is_empty());
+        assert!(encode_host(&mut long, &"x".repeat(MAX_HOST_LENGTH)));
+        assert_eq!(by_host(&long).unwrap(), []);
     }
 
     #[tokio::test]

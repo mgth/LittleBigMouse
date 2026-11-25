@@ -373,10 +373,20 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
   puits d'entrée écoutait à côté), a aussi montré le retour du pointeur sur `InputReset`
   de l'esclave où il était.
 
+  **Puis avec la vm124** (même jour, accord du mainteneur) : le même maître face à un
+  esclave Linux jetable et à l'agent v6 e62dc15e de la vm124 tel qu'il tournait (rien de
+  remplacé ni relancé ; le maître jetable appairé par `PeerAccept` sur le canal de l'API,
+  puis oublié par `PeerForget`, la vm124 restant appairée au seul maître réel). Esclave
+  Linux → directement la vm124 → directement l'esclave Linux → retour : le curseur de la
+  vm124, relevé par `GetCursorPos`, est allé à (1920,1080) à l'`Enter`, a suivi le
+  mouvement jusqu'à (1970,1080), puis a été rangé au `Leave`. Le script a aussi envoyé à
+  la vm124 une touche A et un clic gauche au centre de son écran 4K, sur ce qui s'y
+  trouvait.
+
   **Jamais tourné sur du vrai matériel** : le vrai hook maître (evdev ou Windows) pilotant
   deux esclaves — couvert par des tests avec le vrai moteur, des deux maîtres, mais pas
-  par une souris ; deux esclaves physiques ; un esclave Windows parmi plusieurs (vm124),
-  son service compris ; l'interface (carte et page Machines) avec deux esclaves fusionnés ;
+  par une souris ; deux esclaves physiques ; un esclave Windows passant par son service
+  parmi plusieurs ; l'interface (carte et page Machines) avec deux esclaves fusionnés ;
   le retour au pointeur quand un lien tombe pendant qu'il est sur une autre machine,
   ailleurs que dans les tests.
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent

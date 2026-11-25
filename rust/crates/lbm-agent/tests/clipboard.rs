@@ -41,6 +41,7 @@ impl Node {
                 input_endpoint: None,
                 options: link::Options::default(),
                 clipboard: clipboard.factory(),
+                discovery: None,
             },
         );
         let notices = service.take_notices().unwrap();

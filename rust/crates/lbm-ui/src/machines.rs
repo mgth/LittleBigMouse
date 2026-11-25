@@ -101,6 +101,34 @@ pub struct State {
     /// The shared clipboard.
     pub clipboard: Clipboard,
     pub peers: Vec<Peer>,
+    /// The machines of the local network that said who they are, paired or not;
+    /// `None` while discovery does not run (or the agent has none).
+    pub discovered: Option<Vec<Discovered>>,
+    /// Why discovery does not run, when it was meant to.
+    pub discovery_error: Option<String>,
+}
+
+/// A machine of the local network that said who it is (`Discovered` in the state).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Discovered {
+    pub machine_id: String,
+    pub name: String,
+    /// Where its node listens: what pairing with it connects to.
+    pub address: String,
+    /// Its fingerprint is one of the paired machines'.
+    pub paired: bool,
+}
+
+/// The machines the page proposes to pair with: heard on the network, neither paired
+/// nor already waiting on this page.
+pub fn proposals(state: &State) -> Vec<&Discovered> {
+    state
+        .discovered
+        .iter()
+        .flatten()
+        .filter(|seen| !seen.paired)
+        .filter(|seen| !state.peers.iter().any(|p| p.machine_id == seen.machine_id))
+        .collect()
 }
 
 /// What the agent says of the shared clipboard.
@@ -152,6 +180,8 @@ pub enum Did {
     Refuse(String),
     /// `PeerForget { MachineId }`.
     Forget(String),
+    /// `PeerDiscover`: ask the network again who is there.
+    Discover,
 }
 
 /// A fingerprint as people compare it: upper case, in groups of four, eight groups to a
@@ -479,6 +509,14 @@ pub fn panel(
             }
         });
 
+        if state.enabled && (state.discovered.is_some() || state.discovery_error.is_some()) {
+            crate::options::group(ui, "On the network", |ui| {
+                if let Some(chosen) = on_the_network(ui, state) {
+                    did = Some(chosen);
+                }
+            });
+        }
+
         crate::options::group(ui, "Machines", |ui| {
             if state.peers.is_empty() {
                 crate::options::note(ui, "No machine yet.");
@@ -495,6 +533,57 @@ pub fn panel(
     });
     if let Some(why) = error {
         ui.colored_label(ui.visuals().error_fg_color, why);
+    }
+    did
+}
+
+/// The machines heard on the network, each with a button that pairs with it: the
+/// connection to its address, as if typed, then the usual confirmation on both sides.
+fn on_the_network(ui: &mut egui::Ui, state: &State) -> Option<Did> {
+    let mut did = None;
+    if let Some(why) = &state.discovery_error {
+        ui.colored_label(ui.visuals().error_fg_color, why);
+    }
+    state.discovered.as_ref()?;
+    let proposals = proposals(state);
+    if proposals.is_empty() {
+        crate::options::note(
+            ui,
+            "No other machine found. LittleBigMouse must run there, with the multi-PC mode \
+             on, on this same network.",
+        );
+    }
+    for seen in proposals {
+        let name = if seen.name.is_empty() {
+            seen.address.as_str()
+        } else {
+            seen.name.as_str()
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(name).strong());
+            crate::options::note(ui, &seen.address);
+            let pair = ui.add(egui::Button::new("Pair"));
+            pair.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    ui.is_enabled(),
+                    format!("Pair with {name}"),
+                )
+            });
+            if pair
+                .on_hover_text("Connect to it: both machines then ask to compare fingerprints")
+                .clicked()
+            {
+                did = Some(Did::Connect(seen.address.clone()));
+            }
+        });
+    }
+    if ui
+        .button("Look again")
+        .on_hover_text("Ask the network who is there")
+        .clicked()
+    {
+        did = Some(Did::Discover);
     }
     did
 }

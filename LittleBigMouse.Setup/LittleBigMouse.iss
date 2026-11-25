@@ -327,9 +327,15 @@ end;
   on the same subnet gets a refused handshake, not the input stream.
   netsh rather than New-NetFirewallRule: it answers the same on every supported
   Windows, with no PowerShell execution policy in the way. The rule is named so
-  that uninstall, and a reinstall over an older version, find exactly this one. }
+  that uninstall, and a reinstall over an older version, find exactly this one.
+  A second rule lets in the discovery datagrams (lbm-net/src/discovery.rs): the
+  agents of the local network say who they are on UDP 24817, a name, a fingerprint
+  and a port, and pairing stays the TLS one above. Same scope, UDP instead of TCP:
+  without it, a query broadcast by another machine never reaches this one, which is
+  then only seen when it asks itself. }
 const
   FirewallRuleName = 'Little Big Mouse (multi-PC)';
+  DiscoveryRuleName = 'Little Big Mouse (multi-PC discovery)';
   MultiPcPort = '24817';
 
 function RunNetsh(const Params: String): Boolean;
@@ -346,6 +352,7 @@ procedure RemoveFirewallRule;
 begin
   { netsh exits 1 when no rule matches: a no-op, not an error worth reporting. }
   RunNetsh('advfirewall firewall delete rule name="' + FirewallRuleName + '"');
+  RunNetsh('advfirewall firewall delete rule name="' + DiscoveryRuleName + '"');
 end;
 
 procedure AddFirewallRule;
@@ -354,6 +361,10 @@ begin
   RemoveFirewallRule;
   RunNetsh('advfirewall firewall add rule name="' + FirewallRuleName + '"' +
            ' dir=in action=allow protocol=TCP localport=' + MultiPcPort +
+           ' program="' + ExpandConstant('{app}\lbm-agent.exe') + '"' +
+           ' remoteip=localsubnet profile=any enable=yes');
+  RunNetsh('advfirewall firewall add rule name="' + DiscoveryRuleName + '"' +
+           ' dir=in action=allow protocol=UDP localport=' + MultiPcPort +
            ' program="' + ExpandConstant('{app}\lbm-agent.exe') + '"' +
            ' remoteip=localsubnet profile=any enable=yes');
 end;

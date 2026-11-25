@@ -42,7 +42,8 @@ use lbm_net::peers::{PairedPeer, PeerStore};
 use lbm_net::wire::Role;
 
 #[cfg(unix)]
-const PATIENCE: Duration = Duration::from_secs(30);
+// Long enough for a pairing to be accepted on the other machine.
+const PATIENCE: Duration = Duration::from_secs(120);
 #[cfg(unix)]
 const KEY_A: u16 = 30;
 #[cfg(unix)]

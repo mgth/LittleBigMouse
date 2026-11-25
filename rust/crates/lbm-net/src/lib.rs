@@ -9,11 +9,14 @@
 //! - [`wire`]: the frames and the control vocabulary.
 //! - [`peers`]: the machines the user paired, on disk.
 //! - [`link`]: a connection, from the handshake to the keepalive.
+//! - [`discovery`]: the datagrams by which the machines of a local network propose
+//!   themselves, before any pairing.
 //!
 //! The crate decides nothing about pairing itself: it shows the caller a fingerprint
 //! and waits to be told. That decision belongs to the agent, which has the store and
 //! the user.
 
+pub mod discovery;
 pub mod identity;
 pub mod link;
 pub mod peers;

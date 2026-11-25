@@ -74,6 +74,10 @@
 //!     comes back to that frontend alone, in order:
 //! <- {"Event": "PeerOverlayInput", "MachineId": "…",
 //!     "Input": {… lbm_overlay::input::Input, its band as the remote shows it …}}
+//! -> {"Id": 16, "Method": "PeerDiscover"}                     // capability PeerDiscovery
+//! <- {"Id": 16, "Result": null}       // the answers come as `Discovered` in the state:
+//!                                     // [{"MachineId": "…", "Name": "tower",
+//!                                     //   "Address": "192.168.1.30:24817", "Paired": false}]
 //! ```
 //!
 //! The rulers on a remote are the frontend's that wrote them last: only its empty
@@ -112,12 +116,16 @@ pub const PROTOCOL: u32 = 3;
 /// - `PeerOverlayInput`: `Interactive` on `PeerOverlay`, and the `PeerOverlayInput`
 ///   event: the rulers on a remote are dragged there, the frontend that showed them
 ///   acting on what is done (docs/multi-pc.md, "Rulers on a remote's screens").
+/// - `PeerDiscovery`: `Discovered` and `DiscoveryError` in the `Peers` state — the
+///   machines of the local network that said who they are — and the `PeerDiscover`
+///   request.
 pub const CAPABILITIES: &[&str] = &[
     "IntrinsicSize",
     "MultiPc",
     "PeerWallpapers",
     "PeerOverlay",
     "PeerOverlayInput",
+    "PeerDiscovery",
 ];
 
 //==================//
@@ -372,6 +380,10 @@ pub enum Request {
         #[serde(rename = "MachineId")]
         machine_id: String,
     },
+    /// Asks the local network again who is there (capability `PeerDiscovery`): the
+    /// machines that are not paired are listed anew in `Discovered` from the answers.
+    /// Refused while discovery does not run.
+    PeerDiscover,
     /// Which machine a panel two machines know shows (`MultiPc`): `Source` is one of
     /// the sources of `Monitor` in the current layout, on its machine's desktop. Saved,
     /// and handed to a running engine. Refused for another layout than the current one,

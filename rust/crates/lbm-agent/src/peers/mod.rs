@@ -259,7 +259,30 @@ pub struct PeersState {
     /// `Leave`. Absent from the state of an older agent, which means "nobody".
     #[serde(default)]
     pub driven_by: Option<String>,
+    /// The machines of the local network that said who they are (`lbm_net::discovery`),
+    /// paired or not, in the order they were first heard; `None` while discovery does
+    /// not run (the mode is off, or it could not start). Absent from the state of an
+    /// older agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discovered: Option<Vec<DiscoveredPeer>>,
+    /// Why discovery does not run, when it was meant to. Absent when it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discovery_error: Option<String>,
     pub peers: Vec<PeerEntry>,
+}
+
+/// A machine of the local network that said who it is. Only proposed: pairing with it
+/// is `PeerConnect` to its address, confirmed on both machines as any other.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DiscoveredPeer {
+    /// The fingerprint it says it has: what the pairing will check.
+    pub machine_id: String,
+    pub name: String,
+    /// Where its node listens, `ip:port`.
+    pub address: String,
+    /// Its fingerprint is one of the paired machines'.
+    pub paired: bool,
 }
 
 /// A machine this one is the master of, and the screens it reported: what the layout
@@ -370,6 +393,8 @@ pub enum PeerRequest {
     Forget(String),
     /// What a remote of this machine's screens show (`PeerWallpapers`).
     Wallpapers(String),
+    /// Ask the local network again who is there (`PeerDiscover`).
+    Discover,
 }
 
 /// What `SetMultiPc` changes of the shared clipboard; `None` leaves a field as it is.
@@ -400,6 +425,9 @@ pub struct Setup {
     pub options: link::Options,
     /// How the shared clipboard reaches this machine's: the system's, or a test's.
     pub clipboard: crate::clipboard::Factory,
+    /// Where discovery listens and sends while the mode is on; `None` runs none (the
+    /// tests that have no business on the network).
+    pub discovery: Option<lbm_net::discovery::Config>,
 }
 
 impl Setup {
@@ -409,6 +437,7 @@ impl Setup {
             input_endpoint,
             options: link::Options::default(),
             clipboard: crate::clipboard::Factory::system(),
+            discovery: Some(lbm_net::discovery::Config::lan()),
         }
     }
 }
@@ -705,6 +734,7 @@ impl Service {
                     PeerRequest::Wallpapers(machine_id) => {
                         Command::Wallpapers { machine_id, reply }
                     }
+                    PeerRequest::Discover => Command::Discover(reply),
                     PeerRequest::State | PeerRequest::Set { .. } => unreachable!("handled above"),
                 };
                 let sent = running.commands.send(command).is_ok();
@@ -855,6 +885,7 @@ impl Service {
             clipboard: self.settings.clipboard(),
             clipboard_factory: self.setup.clipboard.clone(),
             secure_input: self.secure_input.clone(),
+            discovery: self.setup.discovery.clone(),
         };
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (started, started_rx) = oneshot::channel();
@@ -886,6 +917,8 @@ impl Service {
             selection: 0,
             driven: None,
             driven_by: None,
+            discovered: None,
+            discovery_error: None,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut
@@ -985,6 +1018,8 @@ mod tests {
             pointer_lock_shortcut: String::new(),
             pointer_locked: false,
             clipboard: Default::default(),
+            discovered: None,
+            discovery_error: None,
             peers,
         }
     }

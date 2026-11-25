@@ -1764,6 +1764,7 @@ async fn a_remote_sends_its_wallpapers_at_link_up_and_after_a_display_change_and
             input_endpoint: None,
             options: lbm_net::link::Options::default(),
             clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+            discovery: None,
         },
     );
     tokio::spawn(async move {
@@ -1879,6 +1880,7 @@ async fn a_wallpaper_changed_in_the_system_is_sent_once_per_burst_and_only_a_lin
             input_endpoint: None,
             options: lbm_net::link::Options::default(),
             clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+            discovery: None,
         },
     );
     tokio::spawn(async move {
@@ -2419,6 +2421,7 @@ async fn a_frontend_drives_the_multi_pc_mode_and_a_master_sees_the_screens_follo
             input_endpoint: None,
             options: lbm_net::link::Options::default(),
             clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+            discovery: None,
         },
     );
     tokio::spawn(async move {
@@ -2727,6 +2730,7 @@ impl Master {
                 input_endpoint,
                 options: lbm_net::link::Options::default(),
                 clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+                discovery: None,
             },
         );
         let world = lbm_agent::world::SystemWorld::new(discovery, persistence(dir));
@@ -3548,6 +3552,7 @@ async fn a_remote_tells_its_master_what_selects_it_and_switches_when_its_master_
             input_endpoint: None,
             options: lbm_net::link::Options::default(),
             clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+            discovery: None,
         },
     );
     let world = lbm_agent::world::SystemWorld::new(
@@ -3721,6 +3726,7 @@ async fn the_hook_watches_for_the_pointer_lock_only_while_the_mode_is_on() {
             input_endpoint: None,
             options: lbm_net::link::Options::default(),
             clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+            discovery: None,
         },
     );
     tokio::spawn(async move {

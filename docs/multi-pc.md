@@ -520,6 +520,22 @@ which a hook does (it outlives its agent).
   - a remote's link ending: it leaves `Drivable` and the targets. If the pointer is on
     it, the hook brings it home when it reads the new set, and the restart above
     covers the moment before; elsewhere nothing is felt.
+  - a remote **reached another way** under the same machine id — its Windows service
+    taking the stream from its agent, or giving it back: it stays in `Drivable`, only
+    its relay changes. If the pointer is on it, its session is the old relay's: the
+    master's agent closes the connection to the hook (the pointer comes home, the hook
+    ungrabs and releases nothing more over there) and tells the **old relay** `Leave`,
+    with a send that waits, before any new connection relays anything; a run read off
+    the hook meanwhile for that machine is refused rather than sent to the new relay.
+    The new relay hears of that machine only from the next crossing's `Enter`. So a key
+    held at that moment is released by the old relay and never reaches the new one. An
+    old relay already gone (the service's link ended) has its own end as `Leave`. If the
+    pointer is not on it, nothing is felt: no session is open there, and its next
+    `Enter` goes to the new relay;
+  - every `Leave` the agent owes a remote — a run it had no room for, a relay left
+    behind — is queued before anything of a later session to that remote: a new
+    `Enter` for it waits for that `Leave`, and a new connection to the hook waits for
+    all of them.
 - **Two masters driving one remote** (#816) are untouched: that is the remote's side,
   which this changes in nothing. Each master still learns from the remote's
   `InputReset` that its session ended, and brings its pointer home if it was there.

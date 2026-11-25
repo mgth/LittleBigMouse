@@ -335,18 +335,15 @@ impl ZonesLayout {
     /// Which other machines' zones may be in play: `None` for every one, as before an
     /// agent named any; `Some` for those only — the machines the agent can relay to
     /// now (`Command::Drivable`). A zone of any other machine is out of play, and a
-    /// border to it a wall, even while [`Self::remote_enterable`]. Rebuilds only on a
-    /// change, like [`Self::set_remote_enterable`]; the order of `hosts` does not count.
+    /// border to it a wall, even while [`Self::remote_enterable`]. On the routing path:
+    /// compared as given, borrowed, and copied only when it changed, so the caller
+    /// hands the same normalised list every time (the hook sorts it on arrival). The
+    /// zones are rebuilt only then, like [`Self::set_remote_enterable`].
     pub fn set_drivable_hosts(&mut self, hosts: Option<&[String]>) {
-        let mut hosts = hosts.map(<[String]>::to_vec);
-        if let Some(hosts) = &mut hosts {
-            hosts.sort();
-            hosts.dedup();
-        }
-        if self.drivable == hosts {
+        if self.drivable.as_deref() == hosts {
             return;
         }
-        self.drivable = hosts;
+        self.drivable = hosts.map(<[String]>::to_vec);
         self.init();
     }
 
@@ -689,12 +686,17 @@ mod tests {
         // Named by nobody: every machine, as before.
         assert_eq!(layout.main_zones, vec![here, a, b]);
 
-        layout.set_drivable_hosts(Some(&["aaaa".to_owned()]));
+        let only_a = ["aaaa".to_owned()];
+        layout.set_drivable_hosts(Some(&only_a));
         assert_eq!(layout.main_zones, vec![here, a]);
+        // The same list again, as at every report: kept as it is, nothing copied.
+        let kept = layout.drivable.as_ref().unwrap().as_ptr();
+        layout.set_drivable_hosts(Some(&only_a));
+        assert_eq!(layout.drivable.as_ref().unwrap().as_ptr(), kept);
         assert_eq!(layout.arena[a].right[0].target, None, "B is a wall");
         assert_eq!(layout.host_point(Point::new(6010, 0)), None);
 
-        layout.set_drivable_hosts(Some(&["bbbb".to_owned(), "aaaa".to_owned()]));
+        layout.set_drivable_hosts(Some(&["aaaa".to_owned(), "bbbb".to_owned()]));
         assert_eq!(layout.main_zones, vec![here, a, b]);
         assert_eq!(layout.arena[a].right[0].target, Some(b));
 

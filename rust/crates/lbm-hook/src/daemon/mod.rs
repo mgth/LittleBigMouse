@@ -174,9 +174,15 @@ fn adopt_pointer_lock(shared: &Shared, wanted: String) {
     }
 }
 
-/// Adopt the machines the agent drives; the routing thread picks them up at its next
-/// cycle (`hook::crossing`).
-fn adopt_drivable(shared: &Shared, hosts: Option<Vec<String>>) {
+/// Adopt the machines the agent drives, sorted and without duplicates; the routing
+/// thread picks them up at its next cycle (`hook::crossing`).
+fn adopt_drivable(shared: &Shared, mut hosts: Option<Vec<String>>) {
+    // Normalised here, once: the routing thread compares what it hands the zones
+    // with what they hold, borrowed, at every report.
+    if let Some(hosts) = &mut hosts {
+        hosts.sort();
+        hosts.dedup();
+    }
     let mut current = shared.drivable.lock().unwrap_or_else(|p| p.into_inner());
     if *current != hosts {
         if let Some(hosts) = &hosts {
@@ -442,6 +448,22 @@ mod tests {
             run(shared);
         }
         loaded
+    }
+
+    #[test]
+    fn the_drivable_machines_are_kept_sorted_once_and_said_on_a_change_only() {
+        let shared = Shared::new();
+        let names = |v: &[&str]| v.iter().map(|h| (*h).to_owned()).collect::<Vec<_>>();
+        adopt_drivable(&shared, Some(names(&["bbbb", "aaaa", "bbbb"])));
+        assert_eq!(
+            *shared.drivable.lock().unwrap(),
+            Some(names(&["aaaa", "bbbb"]))
+        );
+        let revision = shared.drivable_revision.load(Ordering::SeqCst);
+        adopt_drivable(&shared, Some(names(&["aaaa", "bbbb"])));
+        assert_eq!(shared.drivable_revision.load(Ordering::SeqCst), revision);
+        adopt_drivable(&shared, None);
+        assert_eq!(*shared.drivable.lock().unwrap(), None);
     }
 
     #[test]

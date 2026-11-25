@@ -222,7 +222,7 @@ Et par fonction annexe :
 | Lecture du fond d'écran | Plasma seulement | Oui |
 | Suivi du fond en direct | Plasma seulement | Oui, vérifié sur la vm124 |
 | Curseur masqué, côté maître | Wayland avec layer-shell (KWin vérifié), X11 par XFixes ; rien sous GNOME, qui n'a pas layer-shell | Oui (fenêtre d'un pixel sous le curseur figé, au centre d'un écran), vérifié sur la vm124 |
-| Curseur rangé, côté esclave | Rien de visible | Oui |
+| Curseur rangé, côté esclave | Rien de visible. Un éclair du curseur au centre à la fin de session (signalé par le mainteneur) venait de l'ordre : le pointeur sautait avant que la fenêtre n'ait traité `WM_SETCURSOR` ; l'image est maintenant effacée avant le saut (`PARK_ORDER`), **raisonné, pas encore revu à l'écran** | Oui |
 | DDC/CI | `ddcutil` | dxva2 |
 | Profil conservé à travers un KVM | Oui si la dalle a une clé commune aux deux machines **et unique parmi les écrans** (l'id du moniteur est alors cette clé). Sans numéro de série dans l'EDID, ou si le KVM le masque, l'écran distant prend un id propre à sa source et la bascule sélectionne un autre profil. Avec deux dalles annonçant le même numéro de série, celle que le KVM bascule est rattachée à sa jumelle restée sur le maître, et le profil change aussi | Oui, sur un maître Windows, depuis la PR #827 : l'écran distant prend l'id que Windows lui donne en local (`{pnp}{série}_{semaine}_{année}_{checksum}`), calculé sur l'EDID envoyé par l'esclave, celui que le KVM fait passer tel quel. Marche aussi sans numéro de série. Avec deux dalles d'EDID identiques, l'écran resté sur le maître garde l'id, la jumelle distante prend celui de sa source. Jamais essayé sur du vrai matériel (le maître Windows non plus), couvert par des tests |
 

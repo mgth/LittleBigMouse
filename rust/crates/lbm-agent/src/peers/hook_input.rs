@@ -99,6 +99,10 @@ enum Message {
 pub struct Target {
     pub link: LinkSender,
     pub reads_locks: bool,
+    /// Which relay this is: the id of the link with the remote's agent, or of the link
+    /// with its service. A machine whose relay changes while the pointer is on it ends
+    /// that session on the old relay, and the new one gets only a fresh `Enter`.
+    pub route: u64,
 }
 
 /// Where a master's hook stream goes: one remote, as with a hook that names no machine,
@@ -317,9 +321,14 @@ struct Connection {
     /// one remote. With several, the target of the machine the pointer is on now, kept
     /// by the relay: the one told `Leave` when the connection ends.
     relaying_to: Arc<Mutex<Option<Target>>>,
+    /// With several remotes: the `Leave`s still on their way to machines whose run had no
+    /// room. Each new session there waits for its own, and the next connection for all.
+    pending_leaves: PendingLeaves,
     /// The number of the last batch written to it (0: none).
     written: u64,
 }
+
+type PendingLeaves = Arc<Mutex<Vec<(String, JoinHandle<()>)>>>;
 
 impl Drop for Connection {
     fn drop(&mut self) {
@@ -502,20 +511,39 @@ fn close(
             std::mem::replace(&mut now.driven, false)
         });
     }
-    let Some(Target { link, .. }) = connection.take().and_then(|c| {
-        c.relaying_to
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .take()
-    }) else {
+    let Some(open) = connection.take() else {
         return;
     };
+    let target = open
+        .relaying_to
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    let pending: Vec<JoinHandle<()>> = std::mem::take(
+        &mut *open
+            .pending_leaves
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()),
+    )
+    .into_iter()
+    .map(|(_, leave)| leave)
+    .collect();
+    if target.is_none() && pending.is_empty() {
+        return;
+    }
     let before = leaving.take();
     *leaving = Some(tokio::spawn(async move {
         if let Some(before) = before {
             let _ = before.await;
         }
-        let _ = link.input(&encode(&[InputEvent::Leave])).await;
+        // Leaves of machines other than the one the pointer was on, already on their
+        // way: the next connection relays nothing before they are queued either.
+        for leave in pending {
+            let _ = leave.await;
+        }
+        if let Some(Target { link, .. }) = target {
+            let _ = link.input(&encode(&[InputEvent::Leave])).await;
+        }
     }));
 }
 
@@ -543,11 +571,12 @@ async fn open(
                 Some(Relaying::One(target)) => Some(target.clone()),
                 _ => None,
             }));
+            let pending_leaves = PendingLeaves::default();
             let reading = match target {
                 Some(Relaying::Hosts(targets)) => tokio::spawn(relay_hosts(
                     reader,
                     targets,
-                    relaying_to.clone(),
+                    (relaying_to.clone(), pending_leaves.clone()),
                     lost,
                     (driving.clone(), number),
                 )),
@@ -566,6 +595,7 @@ async fn open(
                 reading,
                 lost: lost_rx,
                 relaying_to,
+                pending_leaves,
                 written: 0,
             })
         }
@@ -587,7 +617,10 @@ async fn relay(
     (driving, connection): (DrivingSender, u64),
 ) {
     while let Ok(batch) = read_batch(&mut reader).await {
-        if let Some(Target { link, reads_locks }) = &target {
+        if let Some(Target {
+            link, reads_locks, ..
+        }) = &target
+        {
             let batch = match reads_locks {
                 true => std::borrow::Cow::Borrowed(batch.as_slice()),
                 false => without_locks(&batch),
@@ -609,11 +642,17 @@ async fn relay(
 /// run no more (no room, or no target: its link went) — then asking for a new
 /// connection at once, which brings the pointer home. A run for any other machine that
 /// cannot be taken breaks that machine's stream until its next `Enter`: dropped, and
-/// the machine is told `Leave` with a send that waits.
+/// the machine is told `Leave` with a send that waits — which that `Enter` waits for,
+/// and the next connection too ([`close`]). The machine the pointer is on is told its
+/// `Leave` by [`close`], after everything already on its way.
+///
+/// The machine the pointer is on changing relay (its service taking the stream from its
+/// agent, or giving it back) ends the hop the same way: the old relay is told `Leave`,
+/// the pointer comes home, and the new relay gets only the next crossing's `Enter`.
 async fn relay_hosts(
     mut reader: impl AsyncRead + Unpin,
     targets: watch::Receiver<Targets>,
-    relaying_to: Arc<Mutex<Option<Target>>>,
+    (relaying_to, pending_leaves): (Arc<Mutex<Option<Target>>>, PendingLeaves),
     lost: oneshot::Sender<bool>,
     (driving, connection): (DrivingSender, u64),
 ) {
@@ -648,8 +687,40 @@ async fn relay_hosts(
                 Relay::Hosts(hosts) => hosts.get(host).cloned(),
                 Relay::One(_) => None,
             };
+            if on_it {
+                let entered_by = relaying_to
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                    .map(|t| t.route);
+                if target.as_ref().is_some_and(|t| Some(t.route) != entered_by) {
+                    // The session is the old relay's: it is told Leave by `close`.
+                    eprintln!(
+                        "[lbm-agent] multi-PC: the input stream to {host} changed its way \
+                         there: the pointer comes home for a fresh crossing"
+                    );
+                    again = true;
+                    break 'batches;
+                }
+            }
+            if edge == Some(true) {
+                // A new session there starts after the Leave of its last one is queued.
+                let waiting: Vec<JoinHandle<()>> = {
+                    let mut pending = pending_leaves.lock().unwrap_or_else(|p| p.into_inner());
+                    let (mine, others) = std::mem::take(&mut *pending)
+                        .into_iter()
+                        .partition(|(machine, _)| machine == host);
+                    *pending = others;
+                    mine.into_iter().map(|(_, leave)| leave).collect()
+                };
+                for leave in waiting {
+                    let _ = leave.await;
+                }
+            }
             let taken = match &target {
-                Some(Target { link, reads_locks }) => {
+                Some(Target {
+                    link, reads_locks, ..
+                }) => {
                     let run = match reads_locks {
                         true => std::borrow::Cow::Borrowed(run),
                         false => without_locks(run),
@@ -660,24 +731,31 @@ async fn relay_hosts(
             };
             if !taken {
                 broken.insert(host.to_owned());
-                if let Some(Target { link, .. }) = &target {
-                    // What it holds is released by a Leave that is not lost.
-                    let link = link.clone();
-                    tokio::spawn(async move {
-                        let _ = link.input(&encode(&[InputEvent::Leave])).await;
-                    });
-                }
                 if on_it || edge == Some(true) {
                     eprintln!(
                         "[lbm-agent] multi-PC: {host} takes the input stream no more: \
                          the pointer comes home"
                     );
-                    if on_it && target.is_some() {
-                        // Already told above.
-                        *relaying_to.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                    if !on_it {
+                        // An Enter refused: that machine holds nothing of this session,
+                        // but a Leave tells it so if the Enter half went.
+                        *relaying_to.lock().unwrap_or_else(|p| p.into_inner()) = target;
                     }
+                    // `close` tells it Leave, in order, before any new connection.
                     again = true;
                     break 'batches;
+                }
+                if let Some(Target { link, .. }) = &target {
+                    // What it holds is released by a Leave that is not lost, and that
+                    // nothing of a later session there overtakes.
+                    let link = link.clone();
+                    let leave = tokio::spawn(async move {
+                        let _ = link.input(&encode(&[InputEvent::Leave])).await;
+                    });
+                    pending_leaves
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .push((host.to_owned(), leave));
                 }
                 continue;
             }

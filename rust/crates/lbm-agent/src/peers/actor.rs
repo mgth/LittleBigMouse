@@ -260,6 +260,15 @@ struct Overlaid {
     shown: Box<dyn Shown>,
 }
 
+/// How the hook's stream reaches a remote, with several remotes: the relay's id (its
+/// agent's link, or its service's — `Target::route`), and the service's when that is the
+/// relay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Way {
+    route: u64,
+    service: Option<u64>,
+}
+
 struct Actor {
     identity: Identity,
     store: PeerStore,
@@ -312,9 +321,8 @@ struct Actor {
     /// every linked remote is merged and driven (docs/multi-pc.md, "Several remotes at
     /// once"), and `selected`, `relaying` and `relaying_via` stay empty.
     names_hosts: bool,
-    /// While [`Self::names_hosts`]: the remotes the stream is relayed to, each with the
-    /// id of its service link when its stream goes through the service.
-    drivable: BTreeMap<String, Option<u64>>,
+    /// While [`Self::names_hosts`]: the remotes the stream is relayed to, and how.
+    drivable: BTreeMap<String, Way>,
     /// What the state says of the pointer lock ([`PeersState::pointer_lock_shortcut`],
     /// [`PeersState::pointer_locked`]).
     pointer_lock_shortcut: String,
@@ -806,7 +814,7 @@ impl Actor {
             Internal::ServiceReset { machine_id, id } => {
                 let through = match self.names_hosts {
                     true => {
-                        self.drivable.get(&machine_id) == Some(&Some(id))
+                        self.drivable.get(&machine_id).and_then(|w| w.service) == Some(id)
                             && self.hook.driving_host().as_deref() == Some(machine_id.as_str())
                     }
                     false => self.relaying_via == Some(id),
@@ -1669,12 +1677,14 @@ impl Actor {
             Some(service) => Some(Target {
                 link: service.sender.clone(),
                 reads_locks: true,
+                route: service.id,
             }),
             None => next
                 .as_ref()
                 .and_then(|(machine_id, _)| self.links.get(machine_id))
                 .map(|live| Target {
                     link: live.sender.clone(),
+                    route: live.id,
                     reads_locks: live
                         .info
                         .hello
@@ -1714,9 +1724,11 @@ impl Actor {
                 Some(service) => Target {
                     link: service.sender.clone(),
                     reads_locks: true,
+                    route: service.id,
                 },
                 None => Target {
                     link: live.sender.clone(),
+                    route: live.id,
                     reads_locks: live
                         .info
                         .hello
@@ -1725,14 +1737,29 @@ impl Actor {
                         .any(|c| c == LOCKS_CAPABILITY),
                 },
             };
+            drivable.insert(
+                machine_id.clone(),
+                Way {
+                    route: target.route,
+                    service: service.map(|service| service.id),
+                },
+            );
             targets.insert(machine_id.clone(), target);
-            drivable.insert(machine_id.clone(), service.map(|service| service.id));
         }
         if drivable == self.drivable {
             return;
         }
-        for (machine_id, via) in &drivable {
-            if self.drivable.get(machine_id) != Some(via) {
+        // The machine the pointer is on, reached another way now or not at all: its
+        // session is the old relay's. The hop ends — Leave to the old relay, the pointer
+        // home — and the new relay gets the next crossing's Enter, not what follows it.
+        let driven = self.hook.driving_host();
+        let rerouted = driven.as_ref().is_some_and(|machine_id| {
+            self.drivable.get(machine_id).map(|w| w.route)
+                != drivable.get(machine_id).map(|w| w.route)
+        });
+        for (machine_id, way) in &drivable {
+            let via = &way.service;
+            if self.drivable.get(machine_id).map(|w| &w.service) != Some(via) {
                 eprintln!(
                     "[lbm-agent] multi-PC: the input stream to {machine_id} goes {}",
                     if via.is_some() {
@@ -1750,6 +1777,12 @@ impl Actor {
         }
         self.drivable = drivable;
         self.hook.set_hosts(targets);
+        if rerouted {
+            eprintln!(
+                "[lbm-agent] multi-PC: the pointer's machine is reached another way: it comes home"
+            );
+            self.hook.restart();
+        }
     }
 
     /// Whether the stream to `machine_id` goes to its agent on the link `id` now, and
@@ -1760,7 +1793,10 @@ impl Actor {
         match self.names_hosts {
             true => {
                 self.links.get(machine_id).is_some_and(|live| live.id == id)
-                    && self.drivable.get(machine_id) == Some(&None)
+                    && self
+                        .drivable
+                        .get(machine_id)
+                        .is_some_and(|w| w.service.is_none())
                     && self.hook.driving_host().as_deref() == Some(machine_id)
             }
             false => {

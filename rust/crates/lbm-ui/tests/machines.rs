@@ -10,7 +10,7 @@ use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::Harness;
 use lbm_layout::geo::Rect;
 use lbm_ui::frame::{self, Host};
-use lbm_ui::machines::{self, Did, Panel, Peer, Role, Source, State};
+use lbm_ui::machines::{self, Did, Discovered, Panel, Peer, Role, Source, State};
 use lbm_ui::map::{self, MapMonitor};
 use lbm_ui::options::{self, Page};
 
@@ -29,6 +29,8 @@ fn state(peers: Vec<Peer>) -> State {
         pointer_locked: false,
         clipboard: Default::default(),
         peers,
+        discovered: None,
+        discovery_error: None,
     }
 }
 
@@ -637,4 +639,80 @@ fn the_rescue_combination_is_not_taken_for_the_pointer_lock() {
     assert!(h
         .query_by_label("This is the rescue shortcut: it stays the rescue's, and locks nothing.")
         .is_some());
+}
+
+const TOWER: &str = "7777777777777777777777777777777777777777777777777777777777777777";
+
+fn heard(machine_id: &str, name: &str, paired: bool) -> Discovered {
+    Discovered {
+        machine_id: machine_id.into(),
+        name: name.into(),
+        address: format!("192.168.4.{}:24817", name.len()),
+        paired,
+    }
+}
+
+/// Discovery only proposes: a machine heard on the network gets a button that connects
+/// to it, as an address typed would, and the pairing that follows is the usual one.
+#[test]
+fn a_machine_heard_on_the_network_is_proposed_with_a_button_that_pairs_with_it() {
+    let mut shown = state(Vec::new());
+    shown.discovered = Some(vec![heard(TOWER, "tower", false)]);
+    let mut h = page(Some(shown));
+    h.run();
+    assert!(h.query_by_label("tower").is_some());
+    assert!(h.query_by_label("192.168.4.5:24817").is_some());
+    h.get_by_label("Pair with tower").click();
+    h.run();
+    assert_eq!(
+        h.state().did,
+        Some(Did::Connect("192.168.4.5:24817".into()))
+    );
+
+    h.get_by_label("Look again").click();
+    h.run();
+    assert_eq!(h.state().did, Some(Did::Discover));
+}
+
+#[test]
+fn a_machine_paired_or_waiting_is_not_proposed_again() {
+    let mut shown = state(vec![laptop(true)]);
+    shown.discovered = Some(vec![
+        heard(LAPTOP, "laptop", false),
+        heard(TOWER, "tower", true),
+    ]);
+    assert!(machines::proposals(&shown).is_empty());
+    let mut h = page(Some(shown));
+    h.run();
+    assert!(h.query_by_label("Pair with laptop").is_none());
+    assert!(h.query_by_label("Pair with tower").is_none());
+    assert!(h
+        .query_by_label_contains("No other machine found")
+        .is_some());
+}
+
+#[test]
+fn the_network_section_is_there_only_while_discovery_runs_and_says_why_not() {
+    let mut h = page(Some(state(Vec::new())));
+    h.run();
+    assert!(
+        h.query_by_label("On the network").is_none(),
+        "an older agent says nothing"
+    );
+
+    let mut failing = state(Vec::new());
+    failing.discovery_error = Some("cannot listen for the other machines on UDP 24817".into());
+    let mut h = page(Some(failing.clone()));
+    h.run();
+    assert!(h.query_by_label("On the network").is_some());
+    assert!(h
+        .query_by_label("cannot listen for the other machines on UDP 24817")
+        .is_some());
+    assert!(h.query_by_label("Look again").is_none());
+
+    // Off, nothing about the network.
+    failing.enabled = false;
+    let mut h = page(Some(failing));
+    h.run();
+    assert!(h.query_by_label("On the network").is_none());
 }

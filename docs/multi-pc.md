@@ -37,6 +37,16 @@ the Windows secure desktop (UAC, lock screen), the portal and X11 backends as ma
   fingerprint of that certificate.
 - Every node with the mode enabled listens. The master connects to the address the
   user typed; roles are per link and are stated in `Hello`.
+- Discovery (`lbm-net/src/discovery.rs`): with the mode on, a node also keeps a UDP
+  socket on **24817**. It broadcasts a `Query` on each of its IPv4 networks when the
+  mode starts (again after 1 s and 3 s), answers every `Query` heard with an `Announce`
+  to the sender, and says `Bye` when the mode stops; no other datagram, no timer. A
+  datagram is `{ Lbm: "LittleBigMouse", V: 1, Kind, MachineId, Name, Port }`, at most
+  1 KiB. What is heard is only proposed (`Discovered` in the state); pairing is still
+  `PeerConnect` and the fingerprint check on both machines. A paired remote heard at a
+  new IP address is dialled there as its fingerprint, and the new address is stored only
+  once that link is up. Choice and limits: `multi-pc-etat.md`, "Découverte
+  automatique".
 - Pairing is trust on first use, confirmed by the user **on both machines** against
   the displayed fingerprint. Known peers are stored in `peers.json`
   (`{ MachineId, Name, Address, Role }`). An unknown fingerprint gets `Hello` and
@@ -359,6 +369,10 @@ On a remote (`lbm-hook/src/remote`):
   - `PeerConnect { Address }` (`host`, `host:port`, `[v6]:port`) → that machine's entry
     once it said `Hello`;
   - `PeerAccept`, `PeerRefuse`, `PeerForget` `{ MachineId }` → `null`;
+  - `PeerDiscover` (capability `PeerDiscovery`) → `null`: the machines that are not
+    paired are dropped from `Discovered` and the network is asked again; the state
+    carries `Discovered: [{ MachineId, Name, Address, Paired }]` while discovery runs
+    (absent otherwise) and `DiscoveryError` when it could not start or stopped;
   - event `{ "Event": "Peers", "Peers": <state> }` to subscribers on every change.
 - `cargo run -p lbm-agent --example peer_drive -- ADDR ID_DIR [script]` is a master
   without a hook, for trying a remote by hand (see the example's header).

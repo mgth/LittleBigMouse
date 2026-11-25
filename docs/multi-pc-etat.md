@@ -314,17 +314,45 @@ dans l'interface qu'une fenêtre élevée a ramené le pointeur.
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
   le développement : la machine était verrouillée.
 
-Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
-couvrirait aussi les fenêtres élevées pour un utilisateur standard. Conception :
+**Le service Windows est livré dans `v6`** (conception :
 [`multi-pc-service-windows.md`](multi-pc-service-windows.md), option B validée le
-2026-11-24 ; injecteur (#824) et service (#825) en revue. Essayé sur la vm124 sans le
-service (même lancement, depuis la session 0) : invite UAC annulée par Échap injecté,
-fenêtre élevée au premier plan pilotée, session verrouillée atteinte (`Winlogon`, effet
-non vu à l'œil). Jamais tournés : le service sous le SCM, un compte standard, le réseau
-du service (étape 4), l'installeur (étape 5).
-Son point principal : un canal agent → service limité à l'utilisateur ne suffit pas (tout
-processus de l'utilisateur peut se faire passer pour l'agent, donc valider une invite
-UAC) ; le service reçoit lui-même le flux d'un maître approuvé par un administrateur.
+2026-11-24 ; #823 à #832). Il couvre les deux trous, y compris pour un utilisateur
+standard. Son point principal : un canal agent → service limité à l'utilisateur ne
+suffit pas (tout processus de l'utilisateur peut se faire passer pour l'agent, donc
+valider une invite UAC) ; le service reçoit lui-même le flux, en TLS mutuel, des seuls
+maîtres qu'un administrateur a approuvés.
+
+- **Pièces** : `lbm-inject` (#824), l'injecteur lancé en SYSTEM dans la session console,
+  qui suit le bureau d'entrée ; `lbm-service` (#825), le service, son magasin de maîtres
+  approuvés (`lbm-service trust | untrust | list`, en administrateur) et `lbm-admin-only` ;
+  son écoute sur 24818 et l'offre publiée sous `HKLM\SOFTWARE\LittleBigMouse\InputService`
+  (#830) ; le maître qui y envoie le flux (#829) ; l'agent qui annonce l'offre (#831) ;
+  une tâche décochée de l'installeur, la CI et SignPath (#832).
+- **Essayé pour de bon sur la vm124** (compte administrateur), voir « Essai… » dans la
+  conception : depuis la session 0, invite UAC annulée par Échap injecté et fenêtre
+  élevée au premier plan pilotée ; sous le SCM, avec un maître de test Linux
+  (`examples/master_trial`), pointeur au pixel près, invite UAC annulée, maître non
+  approuvé refusé ; révocation par vidage du magasin et rechargement (contrôle SCM 128,
+  pas la commande `lbm-service untrust` de bout en bout), qui coupe aussitôt et relâche
+  Ctrl ; l'installeur réel : installation, mise à jour avec et sans la tâche,
+  désinstallation — la mise à jour essayée supprimait puis recréait le service, la
+  version livrée le reconfigure en place (`sc config`, #832), dont seule la commande a été
+  essayée, sur un service factice.
+- **Jamais tourné sur du vrai matériel** : la chaîne complète avec un vrai agent maître,
+  un vrai agent esclave qui annonce l'offre et le service (le routage du maître, #829,
+  n'est testé que sur sockets locaux ; la lecture et la notification de l'offre, #831,
+  sous une clé `HKCU` isolée, aussi sous Wine) ; `lbm-service trust` / `untrust` de bout
+  en bout (dialogue de confirmation, notification du service en marche) ; la mise à jour
+  par l'installeur livré (`sc config`) ; l'écran de verrouillage *via le service* (atteint sans lui, effet
+  jamais vu à l'œil) ; un compte standard (aucun sur la vm124) ; Ctrl+Alt+Suppr (non
+  codé, option `SendSAS` proposée) ; l'écran de connexion avant toute session (hors de
+  cette série) ; changement rapide d'utilisateur, veille ; deux maîtres approuvés à la
+  fois (testé sur boucle locale) ; l'installeur interactif et son code de sortie 100.
+- **À faire par le mainteneur** : ajouter `lbm-service.exe` et `lbm-inject.exe` à la
+  configuration d'artefact SignPath si elle liste les exécutables par nom.
+- **Reste** : épingler côté maître l'empreinte du service (aujourd'hui vérifiée contre
+  l'annonce de l'agent à chaque liaison) ; l'état « piloté par » côté esclave quand le
+  service porte le flux ; une interface pour `trust` (aujourd'hui en ligne de commande).
 
 ### 4. Maîtres Linux sans evdev
 
@@ -573,7 +601,8 @@ essayés sur matériel ; les autres ne sont pas commencés. Dans l'ordre d'utili
 
 Moins prioritaires :
 
-- **Découverte automatique** des machines sur le réseau local.
+- ~~**Découverte automatique** des machines sur le réseau local~~ *(livrée, voir
+  « Découverte automatique » ci-dessous)*.
 - **Suivre l'entrée du moniteur** : quand un écran partagé change d'entrée par ses
   propres boutons, basculer la source active. Seulement si le moniteur le signale par
   un événement, le projet excluant la scrutation.
@@ -582,6 +611,113 @@ Moins prioritaires :
 
 Écartés : le partage audio et le transfert de fichiers autonome, hors du sujet de
 LittleBigMouse.
+
+## Découverte automatique
+
+Les agents d'un même réseau local se signalent les uns aux autres ; la page Machines de
+`lbm-app` les liste dans « On the network », chacun avec un bouton **Pair** qui fait
+exactement ce que fait une adresse tapée (`PeerConnect`). La découverte ne fait que
+proposer : l'appairage reste celui de `lbm-net`, TLS mutuel, empreinte confirmée sur les
+deux machines.
+
+### Le mécanisme choisi : un datagramme UDP à nous
+
+Trois candidats : mDNS/DNS-SD (`_littlebigmouse._tcp`), une diffusion UDP propre, ou
+rien de plus que l'adresse tapée. Critère par critère :
+
+| Critère | mDNS/DNS-SD | Diffusion UDP propre |
+|---|---|---|
+| Linux à côté d'Avahi | soit passer par Avahi (D-Bus, un démon de plus à exiger), soit un répondeur embarqué qui partage le port 5353 avec Avahi | port à nous, aucun voisin |
+| Windows | soit `DnsServiceRegister`/`DnsServiceBrowse` (Windows 10 1809+, un second code), soit le répondeur embarqué qui partage 5353 avec le service DNS Client | le même code que sous Linux |
+| Aucune scrutation | un répondeur conforme réannonce et rafraîchit son cache à 80 % du TTL (RFC 6762 § 5.2) : des minuteries tant que le mode tourne | une requête au démarrage, des réponses aux requêtes, un adieu à l'arrêt, rien d'autre |
+| Pare-feu Windows | la règle « mDNS (UDP-In) » fournie vise le service DNS Client, pas notre exe : il faut quand même une règle | une règle UDP 24817, posée comme la règle TCP |
+| Ce qui est annoncé | nom d'instance, cible, port, enregistrements TXT : à cadrer, et visible de tout navigateur Bonjour | nom, empreinte, port, et rien d'autre (vérifié par un test) |
+| Coût | une dépendance lourde ou deux backends | ~250 lignes dans `lbm-net` et `if-addrs` |
+
+mDNS n'apporte rien que la diffusion n'apporte aussi entre deux agents LittleBigMouse —
+personne d'autre n'a à les voir — et coûte soit deux backends, soit une cohabitation
+délicate sur 5353 plus des minuteries. D'où le datagramme à nous
+(`rust/crates/lbm-net/src/discovery.rs`).
+
+### Comment ça marche
+
+- Une socket UDP sur **24817** (le même numéro que le TCP des liens, pour une seule
+  chose à retenir dans le pare-feu ; fixe, quel que soit le port TCP choisi, puisqu'il
+  faut savoir où demander avant de rien savoir des autres). `SO_REUSEADDR` : un second
+  agent sur la même machine (une seconde session Windows) écoute aussi. IPv4 seulement.
+- Datagramme JSON d'au plus 1 Kio :
+  `{"Lbm": "LittleBigMouse", "V": 1, "Kind": "Query" | "Announce" | "Bye",
+  "MachineId": "<sha-256 hex>", "Name": "tower", "Port": 24817}`. Un datagramme qui ne
+  se lit pas ainsi (autre en-tête, empreinte mal formée, port nul hors `Bye`) est ignoré.
+  Le nom est coupé à 64 caractères, sans caractères de contrôle.
+- Au démarrage du mode, une fois le port TCP ouvert : un `Query` envoyé à l'adresse de
+  diffusion de **chaque** réseau IPv4 de la machine (la diffusion limitée
+  255.255.255.255 ne sort que par l'interface de la route par défaut), répété à 1 s et
+  3 s au cas où un datagramme se perde. Chaque `Query` entendu reçoit un `Announce` en
+  retour, à l'envoyeur seul. À l'arrêt du mode, un `Bye`. **Aucune minuterie** au-delà
+  des deux répétitions ; mode coupé, aucune socket.
+- L'état `Peers` gagne `Discovered: [{ MachineId, Name, Address, Paired }]` (absent tant
+  que la découverte ne tourne pas) et `DiscoveryError` ; la requête `PeerDiscover`
+  (capacité `PeerDiscovery`) vide la liste des machines non appairées et redemande.
+  C'est le bouton **Look again** : une machine partie sans `Bye` (coupure, veille) reste
+  listée jusque-là, faute de scrutation.
+- Une machine **appairée** entendue est reconnue par son empreinte. Si c'est un esclave
+  non relié, l'agent l'appelle aussitôt : à l'adresse entendue quand celle enregistrée
+  est une adresse IP différente (bail DHCP changé), à celle enregistrée sinon (un nom
+  tapé par l'utilisateur survit aux baux). L'adresse enregistrée ne change qu'une fois
+  le lien établi **avec la bonne empreinte** (`admit`) : un datagramme menteur fait
+  tenter une connexion, qui échoue sur `UnknownFingerprint`, et rien n'est réécrit
+  (test `a_datagram_that_lies_about_a_paired_fingerprint_changes_nothing_stored`).
+- Une machine sur plusieurs réseaux (un LAN et un pont de conteneurs, filaire et Wi-Fi)
+  est entendue sur chacun : l'adresse affichée ne change que pour une source jamais
+  entendue d'elle (un bail qui change), pas à chaque datagramme.
+- Au plus 64 machines listées : un réseau inondé de fausses empreintes remplit la liste,
+  pas la mémoire.
+
+### Pare-feu
+
+- Windows : l'installeur pose une seconde règle, `Little Big Mouse (multi-PC
+  discovery)`, UDP 24817 entrant, même portée que la règle TCP (exe de l'agent,
+  sous-réseau local, tous profils). Sans elle, un `Query` diffusé par une autre machine
+  n'arrive pas ; la machine n'est vue que lorsqu'elle demande elle-même (Windows laisse
+  passer les réponses unicast à une diffusion pendant 3 s).
+- Linux : rien n'est posé. Un pare-feu local (firewalld, ufw) doit laisser entrer UDP
+  24817 depuis le réseau local, comme il doit déjà laisser entrer TCP 24817.
+
+### Essai réel
+
+- **2026-11-25, deux agents jetables sur le poste Linux** (`--fake-hook`, config à part,
+  TCP 24900 et 24901, UDP 24817 partagé), par la vraie diffusion du LAN 192.168.4.0/24 :
+  chacun voit l'autre dans `Discovered` sans adresse tapée, et le `Quit` de l'un le
+  retire de la liste de l'autre (`Bye`). Deux défauts trouvés et corrigés avant la PR :
+  le tout premier `Query` ne partait pas (une socket Tokio neuve refuse `try_send_to`
+  tant qu'elle n'a pas reçu son premier événement d'écriture ; seule la répétition à
+  1 s passait), et l'adresse basculait à chaque datagramme entre le LAN et le pont
+  docker (172.17.0.1).
+- **2026-11-25, poste Linux ↔ vm124** (Windows 11, agent jetable compilé en croisé
+  `x86_64-pc-windows-gnu`, lancé en SYSTEM, TCP 24901, `C:\LittleBigMouse\v6` intact) :
+  la VM démarrée après le poste, chacun voit l'autre (`192.168.4.100:24901` d'un côté,
+  `192.168.4.99:24900` de l'autre) ; le `Quit` de l'agent Linux le retire de la liste de
+  la VM, et sa relance le fait réapparaître des deux côtés. Un `PeerConnect` vers
+  l'adresse lue dans `Discovered` mène chaque côté à `Pending`, avec la bonne empreinte
+  (refusé ensuite, rien n'a été appairé). **Le pare-feu de la vm124 était désactivé sur
+  les trois profils** pendant l'essai : la règle UDP n'a pas pu être éprouvée en effet.
+  Sa commande `netsh`, celle de l'installeur, a été posée puis retirée et se lit
+  conforme (entrante, UDP 24817, `LocalSubnet`, programme, tous profils). Reste à voir,
+  pare-feu actif, qu'une requête diffusée par une autre machine passe avec la règle et
+  pas sans.
+
+### Limites
+
+- IPv4 seulement ; pas de traversée de routeur (la diffusion reste dans le sous-réseau,
+  et c'est voulu).
+- Le `Bye` part quand le mode est coupé ou l'agent quitté (`Quit`, tray) ; un agent tué
+  par un signal (fermeture de session sous Linux) ne le dit pas, et reste listé chez les
+  autres jusqu'à « Look again » ou à son prochain démarrage.
+- Un agent plus ancien n'annonce rien et ignore les datagrammes : il ne se voit pas et
+  ne voit personne. Les deux machines doivent avoir la découverte.
+- Les agents jetables d'essai annoncent aussi (port UDP fixe) : ils sont vus des agents
+  du réseau qui ont la découverte, pas d'un agent plus ancien.
 
 ## macOS
 
@@ -625,8 +761,8 @@ macOS n'a de sens qu'après.
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
-   Windows ») ; reste le service Windows pour le bureau sécurisé et l'utilisateur
-   standard (conception : [`multi-pc-service-windows.md`](multi-pc-service-windows.md)).
+   Windows ») ; ~~service Windows pour le bureau sécurisé et l'utilisateur standard~~
+   (#823 à #832) ; reste l'essai de la chaîne complète avec de vrais agents.
 6. Presse-papiers : texte, image et fichiers passent sur la paire réelle ; suivent
    `FILEDESCRIPTOR`/`FILECONTENTS` sous Windows, puis le palier 2.
 7. Plusieurs esclaves.

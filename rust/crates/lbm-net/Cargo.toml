@@ -15,6 +15,8 @@ sha2 = "0.11"
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 # The send buffer of a link kept small (`link::SEND_BUFFER`); already in the graph via tokio.
 socket2 = "0.6"
+# The broadcast address of each local network, for discovery (discovery.rs).
+if-addrs = "0.15"
 # The crypto provider is ring, chosen explicitly everywhere, rather than rustls's
 # default aws-lc-rs: aws-lc needs CMake and NASM to build for Windows, ring only a C
 # compiler. Default features are off so that aws-lc never comes back through one of

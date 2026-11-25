@@ -62,7 +62,7 @@ pub fn set_process_priority(priority: Priority) {
             continue;
         };
         let base = *bases.entry(tid).or_insert(current);
-        let nice = reachable_nice(target, base, lowest);
+        let nice = next_nice(target, base, current, lowest);
         if nice != current {
             unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, nice) };
         }
@@ -81,6 +81,18 @@ fn reachable_nice(target: i32, base: i32, lowest: i32) -> i32 {
         return base;
     }
     target.max(lowest.min(base))
+}
+
+/// The nice to set on a thread now at `current`: [`reachable_nice`], unless
+/// that would raise a nice the thread could not get back — `current` already
+/// below what is allowed, because `RLIMIT_NICE` was lowered while running.
+fn next_nice(target: i32, base: i32, current: i32, lowest: i32) -> i32 {
+    let nice = reachable_nice(target, base, lowest);
+    if nice > current && current < lowest {
+        current
+    } else {
+        nice
+    }
 }
 
 /// The nice of one thread, `None` if it cannot be read (gone already).
@@ -167,6 +179,20 @@ mod tests {
         // Started at nice 5 by its launcher, unprivileged: Normal cannot go below 5.
         assert_eq!(reachable_nice(nice_of(Priority::Normal), 5, 20), 5);
         assert_eq!(reachable_nice(nice_of(Priority::Below), 5, 20), 5);
+    }
+
+    #[test]
+    fn a_limit_lowered_while_running_keeps_what_the_thread_holds() {
+        // The review's cycle: started at 10 with RLIMIT_NICE 20, Normal reached 0.
+        assert_eq!(next_nice(nice_of(Priority::Normal), 10, 10, 0), 0);
+        // The limit then drops to 0 (lowest 20): neither Below nor Normal may
+        // raise 0, which could not be set again.
+        assert_eq!(next_nice(nice_of(Priority::Below), 10, 0, 20), 0);
+        assert_eq!(next_nice(nice_of(Priority::Normal), 10, 0, 20), 0);
+        // Without a limit change, next_nice is reachable_nice.
+        assert_eq!(next_nice(nice_of(Priority::Below), 0, 0, 0), 10);
+        assert_eq!(next_nice(nice_of(Priority::Normal), 0, 10, 0), 0);
+        assert_eq!(next_nice(nice_of(Priority::Below), 0, 0, 20), 0);
     }
 
     #[test]

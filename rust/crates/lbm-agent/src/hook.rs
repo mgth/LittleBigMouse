@@ -51,8 +51,14 @@ pub enum HookSignal {
     /// before the state that follows it: the opening frame asks `Hello` then
     /// `Listen`, and the hook answers a frame's commands in the order they are in it.
     /// `reads_locks`: it reads the lock keys' state in the input stream
-    /// (`lbm_ipc::input::LOCKS_CAPABILITY`).
-    Greeted { layout: String, reads_locks: bool },
+    /// (`lbm_ipc::input::LOCKS_CAPABILITY`). `names_hosts`: as a master it names the
+    /// machine of every crossing once told which ones it may drive
+    /// (`lbm_ipc::input::HOSTS_CAPABILITY`).
+    Greeted {
+        layout: String,
+        reads_locks: bool,
+        names_hosts: bool,
+    },
     /// An event from the hook (unknown ones are dropped, as C# does).
     Message(Event),
     /// The connection dropped; it is being re-established.
@@ -305,7 +311,16 @@ where
                             let reads_locks = capabilities
                                 .iter()
                                 .any(|c| c == lbm_ipc::input::LOCKS_CAPABILITY);
-                            if signal(HookSignal::Greeted { layout, reads_locks }).is_err() {
+                            let names_hosts = capabilities
+                                .iter()
+                                .any(|c| c == lbm_ipc::input::HOSTS_CAPABILITY);
+                            if signal(HookSignal::Greeted {
+                                layout,
+                                reads_locks,
+                                names_hosts,
+                            })
+                            .is_err()
+                            {
                                 break Served::Closed;
                             }
                         }

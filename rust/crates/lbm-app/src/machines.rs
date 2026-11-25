@@ -38,8 +38,9 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
     let text = |v: &Value, key: &str| v[key].as_str().unwrap_or_default().to_owned();
     let mut peers = Vec::new();
     let mut remotes = Vec::new();
-    // The agent drives one remote at a time and merges its screens only; an agent older
-    // than that rule says nothing and merged every linked remote.
+    // An agent whose hook names no machine drives one remote at a time and merges its
+    // screens only. One whose hook does drives every linked remote and says nothing, as
+    // an agent older than that rule did: every linked remote is merged, in this order.
     let selected = object
         .get("SelectedRemote")
         .map(|selected| selected.as_str().unwrap_or_default());
@@ -617,6 +618,28 @@ mod tests {
         let mut none = state(peers);
         none["SelectedRemote"] = Value::Null;
         assert!(read(&none).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn with_no_remote_selected_at_all_every_linked_remote_is_merged_in_id_order() {
+        // An agent whose hook names its machines drives them all and selects none.
+        let peers = json!([
+            {"MachineId": "ff", "Name": "late", "Connected": true, "Role": "Remote",
+             "State": "Paired", "Displays": [display("eDP-1")]},
+            {"MachineId": "0a", "Name": "early", "Connected": true, "Role": "Remote",
+             "State": "Paired", "Displays": [display("HDMI-1")]},
+            {"MachineId": "11", "Name": "gone", "Connected": false, "Role": "Remote",
+             "State": "Paired", "Displays": [display("DP-1")]},
+        ]);
+        let all = state(peers);
+        assert!(all.get("SelectedRemote").is_none());
+        let ids: Vec<String> = read(&all)
+            .unwrap()
+            .1
+            .into_iter()
+            .map(|r| r.machine_id)
+            .collect();
+        assert_eq!(ids, ["0a", "ff"]);
     }
 
     #[test]

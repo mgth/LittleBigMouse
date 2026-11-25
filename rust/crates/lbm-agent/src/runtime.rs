@@ -184,6 +184,16 @@ pub struct Agent<W> {
     /// choice (`PeersState::selection`); `None` before any. The zones this agent hands
     /// the hook never lead to another remote ([`Agent::zones_fit`]).
     selection_seen: Option<(u64, Option<String>)>,
+    /// The last `Peers` state drives every linked remote (`PeersState::drives_all`): the
+    /// zones may then lead to any of them, the hook walling those it is not told of.
+    drives_all_seen: bool,
+    /// The hook names the machine of every crossing once told which ones it may drive
+    /// (`lbm_ipc::input::HOSTS_CAPABILITY`), as it said in its greeting.
+    hook_names_hosts: bool,
+    /// The remotes the multi-PC manager relays to now (`PeersState::drivable`), and what
+    /// the hook was last told of them on this connection (`Command::Drivable`).
+    drivable: Vec<String>,
+    drivable_sent: Option<Vec<String>>,
     /// The other machines the zones the hook holds lead to, and the same for every
     /// `Load` sent and not yet answered, each by the id its answer names.
     hook_zones: crate::hook_zones::HookZones,
@@ -264,6 +274,10 @@ impl<W: AgentWorld> Agent<W> {
             pointer_lock: String::new(),
             pointer_lock_sent: None,
             selection_seen: None,
+            drives_all_seen: false,
+            hook_names_hosts: false,
+            drivable: Vec::new(),
+            drivable_sent: None,
             hook_zones: crate::hook_zones::HookZones::new(),
             told_hook_ready: None,
             input_sharing: Vec::new(),
@@ -1290,10 +1304,17 @@ impl<W: AgentWorld> Agent<W> {
             String::new()
         };
         self.tell_pointer_lock();
+        self.drivable = if state.enabled {
+            state.drivable.clone()
+        } else {
+            Vec::new()
+        };
+        self.tell_drivable();
         self.selection_seen = Some((
             state.selection,
             state.selected_remote.clone().filter(|_| state.enabled),
         ));
+        self.drives_all_seen = state.enabled && state.drives_all;
         if self.world.set_remote_screens(state.remote_screens()) {
             eprintln!("[lbm-agent] the remote machines' screens changed");
             self.handle(Input::DisplayChanged);
@@ -1333,6 +1354,11 @@ impl<W: AgentWorld> Agent<W> {
     /// put that remote's zones back under a connection relaying to another. The rebuild
     /// that is on its way sends the right ones.
     fn zones_fit(&self, hosts: &std::collections::BTreeSet<String>) -> bool {
+        // Every linked remote is driven: the batches name their machine, and the hook
+        // walls every one it is not told of (`Command::Drivable`).
+        if self.drives_all_seen {
+            return true;
+        }
         let selected = self
             .selection_seen
             .as_ref()
@@ -1633,6 +1659,24 @@ impl<W: AgentWorld> Agent<W> {
         self.pointer_lock_sent = Some(self.pointer_lock.clone());
     }
 
+    /// Tells a hook that names the machine of every crossing which remotes it may drive
+    /// (`Command::Drivable`), when it is not what it was last told. Said to every such
+    /// hook after its greeting — the hook forgets it at every `Hello` — and again at
+    /// every change; never to a hook that would not read it.
+    fn tell_drivable(&mut self) {
+        if !self.hook_greeted
+            || !self.hook_names_hosts
+            || self.drivable_sent.as_ref() == Some(&self.drivable)
+        {
+            return;
+        }
+        eprintln!("[lbm-agent] -> Drivable({:?})", self.drivable);
+        self.hook.send(protocol::frame(&[Command::Drivable {
+            hosts: self.drivable.clone(),
+        }]));
+        self.drivable_sent = Some(self.drivable.clone());
+    }
+
     /// The hook locked the pointer or let it go — or is down, which lets it go.
     fn hook_locked(&mut self, locked: bool) {
         if let Some(peers) = &mut self.peers {
@@ -1853,6 +1897,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.on_the_wire = None;
                         self.bound = None;
                         self.pointer_lock_sent = None;
+                        self.drivable_sent = None;
                         self.excluded = None;
                         self.desktop_told = None;
                         self.hook_greeted = false;
@@ -1865,10 +1910,14 @@ impl<W: AgentWorld> Agent<W> {
                     Some(HookSignal::Greeted {
                         layout,
                         reads_locks,
+                        names_hosts,
                     }) => {
-                        // What a master's input relayed to it may carry.
+                        // What a master's input relayed to it may carry, and whether
+                        // it can drive several remotes.
+                        self.hook_names_hosts = names_hosts;
                         if let Some(peers) = &mut self.peers {
                             peers.hook_reads_locks(reads_locks);
+                            peers.hook_names_hosts(names_hosts);
                         }
                         eprintln!(
                             "[lbm-agent] hook greeting: layout {}",
@@ -1882,6 +1931,7 @@ impl<W: AgentWorld> Agent<W> {
                         self.hook_greeted = true;
                         self.tell_desktop();
                         self.tell_pointer_lock();
+                        self.tell_drivable();
                         self.hook_greeted_with(&layout);
                         Input::Hook(HookEvent::Greeted(layout))
                     }
@@ -1932,11 +1982,14 @@ impl<W: AgentWorld> Agent<W> {
                         self.shortcut_unavailable = None;
                         self.on_the_wire = None;
                         self.pointer_lock_sent = None;
+                        self.drivable_sent = None;
+                        self.hook_names_hosts = false;
                         self.hook_locked(false);
                         // The next hook says again what it reads, and what it cannot
                         // inject: this one's word died with it.
                         if let Some(peers) = &mut self.peers {
                             peers.hook_reads_locks(false);
+                            peers.hook_names_hosts(false);
                             peers.injection_blocked(None);
                         }
                         self.hook_zones_unknown();

@@ -260,20 +260,46 @@ Liste de contrôle pour la relecture de chaque PR :
 - **Installeur seulement** (`LittleBigMouse.Setup/LittleBigMouse.iss`) : une tâche
   **décochée** « Autoriser le pilotage du bureau sécurisé par un autre PC (service
   Windows) ». Cochée, elle crée le service (`sc create`, démarrage automatique différé,
-  actions de récupération), le dossier `%ProgramData%\LittleBigMouse\service` avec sa
-  DACL, et la règle de pare-feu du port 24818 (même forme que celle de 24817, PR #811).
+  deux relances après plantage par jour), la règle de pare-feu du port 24818 (même forme
+  que celle de 24817, PR #811, liée à `lbm-service.exe`) et le démarre. Le dossier
+  `%ProgramData%\LittleBigMouse\service` n'est pas créé par l'installeur : le service et
+  `lbm-service trust` le créent eux-mêmes avec sa DACL protégée, et le vérifient. Une
+  tâche décochée lors d'une mise à jour retire le service et sa règle, pas le dossier.
+  Un échec du service (création, règle de pare-feu, démarrage) est dit dans une boîte de
+  message, dans le journal, et par le **code de sortie 100** de l'installeur
+  (`GetCustomSetupExitCode`), pour une installation silencieuse ; les fichiers restent
+  installés.
   Mise à jour : arrêt du service avant la copie, puis redémarrage ; **le dossier est
   gardé**, avec l'identité du service et le magasin, sans quoi les maîtres approuvés
   seraient oubliés et refuseraient la nouvelle empreinte qu'ils n'ont pas épinglée.
-  Désinstallation : suppression du service et de la règle ; le dossier n'est purgé qu'en
-  `usPostUninstall`, qu'Inno n'exécute pas lors d'une mise à jour par-dessus.
-- Le portable ne l'installe jamais ; ni l'agent ni l'UI ne savent installer le service.
+  Désinstallation : suppression du service et de la règle ; le dossier et l'offre
+  (`HKLM\SOFTWARE\LittleBigMouse\InputService`) ne sont purgés qu'en `usPostUninstall`,
+  qu'Inno n'exécute pas lors d'une mise à jour par-dessus.
+- Le portable embarque `lbm-service.exe` et `lbm-inject.exe` mais ne les installe jamais ;
+  ni l'agent ni l'UI ne savent installer le service.
 - Le dossier d'installation doit être sous Program Files pour que la vérification
-  `admin_only` passe : un choix de dossier ailleurs désactive la tâche (ou le service
-  refuse de démarrer, avec un message dans le journal d'événements).
+  `admin_only` passe : ailleurs, l'installeur ne crée pas le service et le dit (et le
+  service, s'il était créé à la main, refuserait de démarrer).
 - **SignPath** : `lbm-service.exe` et `lbm-inject.exe` ajoutés aux binaires signés et au
   contrôle « Verify signed binaries » de la release ; `SIGNING.md` les liste. Côté SignPath,
   la configuration d'artefact est à compléter par le mainteneur (comme pour `lbm-agent.exe`).
+
+### Essai de l'installeur (2026-11-24, vm124, compte administrateur)
+
+Installeur compilé avec ISCC 6 (sous Wine) depuis l'artefact portable de la CI de #832,
+lancé en SYSTEM en mode silencieux (`/VERYSILENT /TASKS=...`). Il arrête d'abord tous les
+processus LittleBigMouse : le v6 du mainteneur a été relancé après par ses tâches.
+
+| Étape | Résultat |
+|---|---|
+| Installation, tâche cochée | **marche** : service `LittleBigMouseInput` en marche, LocalSystem, démarrage automatique différé, deux relances (5 s, 30 s) remises à zéro par jour, description ; règles 24817 (agent) et 24818 (service) limitées au sous-réseau local |
+| Mise à jour, tâche cochée | **marche** : service arrêté avant la copie (fichier remplacé sur place, aucun renommage au redémarrage), recréé, relancé ; dossier `ProgramData` gardé |
+| Mise à jour, tâche décochée | **marche** : service et règle 24818 retirés, dossier `ProgramData` et application gardés |
+| Désinstallation | **marche** : service, deux règles, `Program Files\LittleBigMouse`, `ProgramData\LittleBigMouse\service`, clé de l'offre et clé parente vide, entrée de désinstallation : tout retiré |
+
+Trouvé : le dossier parent `ProgramData\LittleBigMouse` restait vide ; il est maintenant
+retiré s'il est vide. Pas essayé : l'installeur interactif (case à cocher, message hors
+Program Files), une mise à jour depuis une version publiée sans service.
 
 ## 5. Étapes de code (PR vers `v6`, jamais empilées)
 

@@ -332,11 +332,18 @@ maîtres qu'un administrateur a approuvés.
   conception : depuis la session 0, invite UAC annulée par Échap injecté et fenêtre
   élevée au premier plan pilotée ; sous le SCM, avec un maître de test Linux
   (`examples/master_trial`), pointeur au pixel près, invite UAC annulée, maître non
-  approuvé refusé, `untrust` qui coupe aussitôt et relâche Ctrl ; l'installeur réel :
-  installation, mise à jour avec et sans la tâche, désinstallation.
-- **Jamais tourné sur du vrai matériel** : la chaîne complète avec un vrai agent maître
-  et un vrai agent esclave qui annonce l'offre (#829 et #831 seulement en tests sur
-  boucle locale) ; l'écran de verrouillage *via le service* (atteint sans lui, effet
+  approuvé refusé ; révocation par vidage du magasin et rechargement (contrôle SCM 128,
+  pas la commande `lbm-service untrust` de bout en bout), qui coupe aussitôt et relâche
+  Ctrl ; l'installeur réel : installation, mise à jour avec et sans la tâche,
+  désinstallation — la mise à jour essayée supprimait puis recréait le service, la
+  version livrée le reconfigure en place (`sc config`, #832), dont seule la commande a été
+  essayée, sur un service factice.
+- **Jamais tourné sur du vrai matériel** : la chaîne complète avec un vrai agent maître,
+  un vrai agent esclave qui annonce l'offre et le service (le routage du maître, #829,
+  n'est testé que sur sockets locaux ; la lecture et la notification de l'offre, #831,
+  sous une clé `HKCU` isolée, aussi sous Wine) ; `lbm-service trust` / `untrust` de bout
+  en bout (dialogue de confirmation, notification du service en marche) ; la mise à jour
+  par l'installeur livré (`sc config`) ; l'écran de verrouillage *via le service* (atteint sans lui, effet
   jamais vu à l'œil) ; un compte standard (aucun sur la vm124) ; Ctrl+Alt+Suppr (non
   codé, option `SendSAS` proposée) ; l'écran de connexion avant toute session (hors de
   cette série) ; changement rapide d'utilisateur, veille ; deux maîtres approuvés à la

@@ -99,12 +99,23 @@
 //! * The shortcut grammar (`lbm_ipc::shortcut`) has no lock key, so the shortcut never
 //!   toggles a lock key the crossing aligns.
 //!
-//! ## One remote
+//! ## Several remotes
 //!
-//! Batches carry no destination: the agent relays them to the one remote it drives. A
-//! layout with zones of two machines is routed over both by the engine, but crossing
-//! from one to the other is treated as leaving the one being driven, and the pointer
-//! comes home.
+//! Once the agent names the machines it relays to (`Command::Drivable`, read from
+//! [`Shared::drivable`]), every `Enter` is preceded by a `Host` marker naming its
+//! machine (`lbm_ipc::input::encode_host`), and only those machines' zones are in play
+//! ([`Crossing::put_in_play`]): a border to any other is a wall. The pointer on a
+//! machine that leaves the set comes home.
+//!
+//! From one remote straight to another, one batch: `Leave` for the machine left, then
+//! the marker, `Enter`, the lock keys and the rest of the frame for the machine entered.
+//! What the first machine held pressed, its `Leave` released there; a release that
+//! comes later went with its press and is not forwarded to the second, which never saw
+//! the press. The keyboards stay grabbed and this machine's cursor hidden.
+//!
+//! Until the agent names any — an older agent — batches carry no destination: the
+//! agent relays them to the one remote it drives, and crossing from one remote to
+//! another is treated as leaving the one being driven: the pointer comes home.
 
 // The masters are the evdev backend and the Windows hooks (`hook::ll_master`), which do
 // not use all of it; compiled on every system all the same, so that it stays
@@ -114,7 +125,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use lbm_ipc::input::{InputEvent as Wire, Locks};
+use lbm_ipc::input::{encode_host, InputEvent as Wire, Locks};
 use lbm_ipc::protocol::Event;
 
 use crate::geometry::Point;
@@ -154,14 +165,15 @@ impl Press {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Place {
     Local,
-    /// On another machine, the pointer coming from here.
+    /// On another machine than the one the pointer was on: from here, or from the
+    /// machine being driven.
     Enter {
         pixel: Point<i32>,
         host: String,
     },
     /// On the machine being driven.
     Remote(Point<i32>),
-    /// Neither here nor on the machine being driven.
+    /// While the pointer is away: in no zone at all.
     Away,
 }
 
@@ -187,8 +199,8 @@ pub(crate) fn locate(
             pixel,
         }) => match driving {
             Some(host) if there == host => Place::Remote(pixel),
-            Some(_) => Place::Away,
-            None => Place::Enter {
+            // Another machine's, whether the pointer comes from here or from a third.
+            _ => Place::Enter {
                 pixel,
                 host: there.to_owned(),
             },
@@ -311,6 +323,11 @@ pub(crate) struct Crossing {
     remote_pos: Point<i32>,
     /// The batch being composed; reused.
     wire: Vec<Wire>,
+    /// The machines the agent relays to, as last read from [`Shared::drivable`]:
+    /// `None` until it names any, and batches then carry no destination.
+    drivable: Option<Vec<String>>,
+    /// The revision of [`Shared::drivable`] it was read at.
+    drivable_revision: Option<u32>,
 }
 
 impl Crossing {
@@ -332,6 +349,8 @@ impl Crossing {
             toggle_revision: None,
             remote_pos: home,
             wire: Vec::with_capacity(16),
+            drivable: None,
+            drivable_revision: None,
         }
     }
 
@@ -364,6 +383,19 @@ impl Crossing {
     /// here: the routing is to treat them as it does without a client.
     pub(crate) fn walled_in(&self) -> bool {
         self.locked && !self.is_remote()
+    }
+
+    /// Whether batches name their machine: the agent named the machines it drives.
+    pub(crate) fn names_hosts(&self) -> bool {
+        self.drivable.is_some()
+    }
+
+    /// Puts the other machines' zones in play — those the agent can relay to, once it
+    /// named them — or takes them out (`enterable` false: no client, or walls for
+    /// another reason of the platform's). A comparison unless something changed.
+    pub(crate) fn put_in_play(&self, layout: &mut ZonesLayout, enterable: bool) {
+        layout.set_drivable_hosts(self.drivable.as_deref());
+        layout.set_remote_enterable(enterable && !self.walled_in());
     }
 
     /// The pointer moved here without being routed — the engine was busy.
@@ -410,6 +442,23 @@ impl Crossing {
                 "[LittleBigMouse.Hook] multi-PC: the input stream's client changed, the pointer lock is let go"
             );
             self.locked = false;
+        }
+        let drivable = shared.drivable_revision.load(Ordering::SeqCst);
+        if self.drivable_revision != Some(drivable) {
+            // Never waited for, like the shortcuts below.
+            if let Ok(hosts) = shared.drivable.try_lock() {
+                self.drivable = hosts.clone();
+                self.drivable_revision = Some(drivable);
+            }
+        }
+        if let (true, Some(hosts)) = (self.is_remote(), &self.drivable) {
+            if !hosts.contains(&self.host) {
+                eprintln!(
+                    "[LittleBigMouse.Hook] multi-PC: the agent no longer drives {}, the pointer comes home",
+                    self.host
+                );
+                self.go_home(m);
+            }
         }
         let revision = shared.shortcuts_revision.load(Ordering::SeqCst);
         if self.toggle_revision != Some(revision) {
@@ -538,6 +587,10 @@ impl Crossing {
                 self.send(m);
                 self.leave(m);
                 self.local_frame(m);
+            }
+            // Straight to another machine, when batches say which.
+            (Side::Remote, Some(Place::Enter { pixel, host })) if self.names_hosts() => {
+                self.switch(pixel, host, m)
             }
             (Side::Remote, Some(Place::Enter { .. } | Place::Away)) => {
                 self.go_home(m);
@@ -689,23 +742,17 @@ impl Crossing {
             self.toggle.avoid(&text);
         }
         self.rescue.reset();
+        let mut batch = Vec::new();
+        if self.names_hosts() && !encode_host(&mut batch, &host) {
+            // Not a machine id the agent could have named: nobody to take it.
+            return false;
+        }
         self.side = Side::Remote;
         self.host = host;
         self.client = m.remote_client();
-        self.sent = pixel;
-        self.remote_pos = m.pointer();
-        self.wire.clear();
-        self.wire.push(Wire::Enter {
-            x: pixel.x(),
-            y: pixel.y(),
-        });
         // Read before the keyboards are grabbed: the compositor still lights them.
-        let locks = m.locks();
-        if locks != Locks::default() {
-            self.wire.push(Wire::Locks(locks));
-        }
-        self.take_remote_events(Instant::now(), m);
-        if !self.send(m) {
+        self.compose_enter(pixel, m);
+        if !self.send_after(batch, m) {
             self.side = Side::Local;
             self.remote_held.clear();
             return false;
@@ -719,6 +766,58 @@ impl Crossing {
         m.grab_keyboards();
         self.local_leftovers(m);
         true
+    }
+
+    /// The `Enter` of the machine the pointer lands on at `pixel`, the lock keys, and
+    /// what of the frame goes there, into the batch being composed.
+    fn compose_enter(&mut self, pixel: Point<i32>, m: &mut impl Platform) {
+        self.sent = pixel;
+        self.remote_pos = m.pointer();
+        self.wire.clear();
+        self.wire.push(Wire::Enter {
+            x: pixel.x(),
+            y: pixel.y(),
+        });
+        let locks = m.locks();
+        if locks != Locks::default() {
+            self.wire.push(Wire::Locks(locks));
+        }
+        self.take_remote_events(Instant::now(), m);
+    }
+
+    /// From the machine being driven straight to `host`, at `pixel` of its desktop: one
+    /// batch, `Leave` for the one, then `host`'s marker and `Enter` (see "Several
+    /// remotes"). The keyboards stay grabbed and the cursor hidden. When the batch
+    /// cannot be queued the stream is closing: home.
+    fn switch(&mut self, pixel: Point<i32>, host: String, m: &mut impl Platform) {
+        let mut batch = Vec::with_capacity(16);
+        Wire::Leave.encode(&mut batch);
+        if !encode_host(&mut batch, &host) {
+            self.go_home(m);
+            self.local_leftovers(m);
+            return;
+        }
+        // Released over there by its `Leave`: the releases to come go nowhere.
+        self.remote_held.clear();
+        self.rescue.reset();
+        let from = std::mem::replace(&mut self.host, host);
+        self.compose_enter(pixel, m);
+        if !self.send_after(batch, m) {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the input stream took no more, the pointer comes home"
+            );
+            // Its `Leave` is the end of the connection.
+            self.leave(m);
+            m.return_pointer(self.home);
+            m.emit_pointer(self.home);
+            self.local_leftovers(m);
+            return;
+        }
+        eprintln!(
+            "[LittleBigMouse.Hook] multi-PC: the pointer goes from {from} to {}",
+            self.host
+        );
+        self.local_leftovers(m);
     }
 
     /// A frame while the pointer is away: its motion, and whatever it pressed or
@@ -788,7 +887,12 @@ impl Crossing {
         if self.wire.is_empty() {
             return true;
         }
-        let mut batch = Vec::with_capacity(self.wire.len() * 9);
+        self.send_after(Vec::with_capacity(self.wire.len() * 9), m)
+    }
+
+    /// Queues `batch` — what goes before the batch being composed, already encoded —
+    /// then the batch being composed.
+    fn send_after(&mut self, mut batch: Vec<u8>, m: &mut impl Platform) -> bool {
         for event in &self.wire {
             event.encode(&mut batch);
         }

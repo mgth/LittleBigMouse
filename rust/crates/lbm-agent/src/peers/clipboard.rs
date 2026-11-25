@@ -12,6 +12,14 @@
 //! into the reception folder the first time an application here reads them; it is handed
 //! the paths once they are all there (`clipboard_files`).
 //!
+//! A master relays between its remotes, which are linked to it and never to each other:
+//! the offer of one remote that it holds is announced in turn to the others, under its
+//! own number, never to the remote it came from; a read of it there is passed on to that
+//! remote, and its content streamed back piece by piece as it comes, an abort either way
+//! following it (`Relay`). The relay takes the master's own options, receiving to hold
+//! the offer, sending to pass it on, and its own bounds. A remote never relays: with two
+//! masters, each relays for itself, and nothing goes round.
+//!
 //! The system's clipboard is opened only while the user lets it go one way or the other
 //! and a machine that shares is linked, and closed as soon as either stops.
 
@@ -103,6 +111,14 @@ pub(super) struct Peer<'a> {
     pub machine_id: &'a str,
     pub id: u64,
     pub sender: &'a LinkSender,
+    /// It is a remote of this machine's: what another remote offers is relayed to it.
+    pub remote: bool,
+}
+
+impl Peer<'_> {
+    fn link(&self) -> (String, u64) {
+        (self.machine_id.to_owned(), self.id)
+    }
 }
 
 /// What was copied here, as announced.
@@ -123,10 +139,39 @@ struct Held {
     link: u64,
     /// Its number on that machine.
     serial: u64,
-    /// The number the clipboard here knows it by.
+    /// The number the clipboard here knows it by, and relays it under.
     local: u64,
+    formats: Vec<ClipFormat>,
     files: Vec<ClipFile>,
     fetch: FetchState,
+    /// The links it was relayed on (a master's, from a remote): only there is a read of it
+    /// passed on, and there it is withdrawn once let go of.
+    told: HashSet<(String, u64)>,
+    /// It came from a remote of this machine's: it may be relayed.
+    from_remote: bool,
+}
+
+/// A read of a relayed offer, passed on to the remote it came from: what it sends back
+/// goes to the asker as it comes, through a task of its own. Kept until that task has
+/// handed the asker's link the last piece, so that an abort can still stop it.
+struct Relay {
+    /// The link it is read from, by the transfer number given there.
+    source: (String, u64),
+    source_sender: LinkSender,
+    /// The link that asked, and its number for the transfer.
+    asker: (String, u64),
+    asker_sender: LinkSender,
+    asked: u64,
+    /// Bytes received so far, and the most that may come.
+    received: u64,
+    bound: u64,
+    pieces: mpsc::UnboundedSender<Bulk>,
+    /// Bytes received and not handed to the asker's link yet: all relays together stay
+    /// within [`Sharing::relay_budget`].
+    queued: Arc<AtomicU64>,
+    /// The source sent its last piece: only the sending to the asker is left.
+    complete: bool,
+    task: JoinHandle<()>,
 }
 
 /// Where the files of the offer held are.
@@ -190,6 +235,8 @@ pub(super) struct Sharing {
     incoming: HashMap<u64, Incoming>,
     /// Transfers this machine sends, by the asker and its number for them.
     outgoing: HashMap<(String, u64), JoinHandle<()>>,
+    /// Reads of a relayed offer under way, by the number this machine gave them upstream.
+    relays: HashMap<u64, Relay>,
     /// The last number given to a transfer this machine asked for; shared with the
     /// fetches, which ask for theirs.
     transfers: Arc<AtomicU64>,
@@ -228,6 +275,7 @@ impl Sharing {
             serial: 0,
             incoming: HashMap::new(),
             outgoing: HashMap::new(),
+            relays: HashMap::new(),
             transfers: Arc::new(AtomicU64::new(0)),
             routes: Routes::default(),
             listed_sender,
@@ -318,6 +366,60 @@ impl Sharing {
         for (_, task) in self.outgoing.drain() {
             task.abort();
         }
+        self.drop_relays(|_| true, "the clipboard is no longer shared");
+    }
+
+    /// Gives up the relayed reads `which` picks: the asker is told, and so is the remote
+    /// sending.
+    fn drop_relays(&mut self, which: impl Fn(&Relay) -> bool, reason: &str) {
+        let gone: Vec<u64> = self
+            .relays
+            .iter()
+            .filter(|(_, relay)| which(relay))
+            .map(|(transfer, _)| *transfer)
+            .collect();
+        for transfer in gone {
+            self.end_relay(transfer, reason, true, true);
+        }
+    }
+
+    /// Ends the relayed read `upstream` here and now: its sending stops, what waited
+    /// for the asker is dropped, and either end is told as asked — the source only while
+    /// it still owes pieces.
+    fn end_relay(&mut self, upstream: u64, reason: &str, tell_asker: bool, tell_source: bool) {
+        let Some(relay) = self.relays.remove(&upstream) else {
+            return;
+        };
+        relay.task.abort();
+        if tell_asker {
+            send(
+                &relay.asker_sender,
+                Control::ClipboardAbort {
+                    transfer: relay.asked,
+                    reason: reason.to_owned(),
+                },
+            );
+        }
+        if tell_source && !relay.complete {
+            send(
+                &relay.source_sender,
+                Control::ClipboardAbort {
+                    transfer: upstream,
+                    reason: reason.to_owned(),
+                },
+            );
+        }
+    }
+
+    /// The most the relays may hold for their askers, all together: a whole transfer
+    /// within this machine's bound, or a range of files, always fits alone.
+    fn relay_budget(&self) -> u64 {
+        self.options.max_bytes.max(files::RANGE)
+    }
+
+    /// Forgets the relayed reads whose sending ended.
+    fn prune_relays(&mut self) {
+        self.relays.retain(|_, relay| !relay.task.is_finished());
     }
 
     /// The user changed the options. Turning sending on offers what was copied last.
@@ -336,6 +438,7 @@ impl Sharing {
             for (_, task) in self.outgoing.drain() {
                 task.abort();
             }
+            self.drop_relays(|_| true, "the other machine stopped sharing its clipboard");
             for peer in peers {
                 self.tell(peer, self.serial, Vec::new());
             }
@@ -347,6 +450,11 @@ impl Sharing {
             {
                 for peer in peers {
                     self.tell(peer, serial, formats.clone());
+                }
+            }
+            for peer in peers {
+                if self.relayable_to(peer) {
+                    self.relay(peer);
                 }
             }
         }
@@ -362,6 +470,53 @@ impl Sharing {
         {
             self.tell(peer, serial, formats);
         }
+        // Or what another remote offered, which it is relayed.
+        if self.relayable_to(peer) {
+            self.relay(peer);
+        }
+    }
+
+    /// Whether the offer held is relayed to `peer`: another remote's, to a remote, while
+    /// this machine sends.
+    fn relayable_to(&self, peer: &Peer<'_>) -> bool {
+        self.options.send
+            && self.open.is_some()
+            && peer.remote
+            && self.held.as_ref().is_some_and(|held| {
+                held.from_remote
+                    && (held.machine_id.as_str(), held.link) != (peer.machine_id, peer.id)
+            })
+    }
+
+    /// Announces the offer held to `peer`, as this machine's own under its number here.
+    fn relay(&mut self, peer: &Peer<'_>) {
+        let link = peer.link();
+        let seen = self.seen.get(&link).copied().unwrap_or_default();
+        let receiving = self.options.receive;
+        let Some(held) = self.held.as_mut() else {
+            return;
+        };
+        held.told.insert(link);
+        let mut formats = held.formats.clone();
+        let mut files = if formats.contains(&ClipFormat::Files) {
+            held.files.clone()
+        } else {
+            Vec::new()
+        };
+        let offer = |formats: &[ClipFormat], files: &[ClipFile]| Control::ClipboardOffer {
+            serial: held.local,
+            formats: formats.to_vec(),
+            files: files.to_vec(),
+            seen,
+            receiving,
+        };
+        // It came in one message; the numbers said with it may have grown since.
+        if lbm_net::wire::encode_control(&offer(&formats, &files)).is_err() {
+            formats.retain(|f| *f != ClipFormat::Files);
+            files.clear();
+        }
+        let message = offer(&formats, &files);
+        send(peer.sender, message);
     }
 
     /// The link `id` with `machine_id` ended: what it owed is given up, and an offer of
@@ -386,6 +541,14 @@ impl Sharing {
             }
             !theirs
         });
+        let link = (machine_id.to_owned(), id);
+        self.drop_relays(
+            |relay| relay.source == link || relay.asker == link,
+            "the other machine left",
+        );
+        if let Some(held) = self.held.as_mut() {
+            held.told.remove(&link);
+        }
         if self
             .held
             .as_ref()
@@ -401,8 +564,26 @@ impl Sharing {
     /// Lets go of the offer held, if any: a fetch of its files under way stops, the
     /// machine sending them is told when it is still among `peers`, and what was fetched
     /// so far is removed. What a fetch finished stays: a paste may be copying from it.
+    /// The remotes it was relayed to among `peers` are told it is gone; one that holds a
+    /// newer offer of this machine's by then pays no heed (a lower serial).
     fn let_go(&mut self, peers: Option<&[Peer<'_>]>) -> Option<Held> {
         let mut held = self.held.take()?;
+        for peer in peers
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| held.told.contains(&p.link()))
+        {
+            send(
+                peer.sender,
+                Control::ClipboardOffer {
+                    serial: held.local,
+                    formats: Vec::new(),
+                    files: Vec::new(),
+                    seen: self.seen.get(&peer.link()).copied().unwrap_or_default(),
+                    receiving: self.options.receive,
+                },
+            );
+        }
         if let FetchState::Running {
             task,
             folder,
@@ -811,7 +992,7 @@ impl Sharing {
     }
 
     /// A clipboard message from a linked machine that shares.
-    pub fn control(&mut self, from: &Peer<'_>, message: Control) {
+    pub fn control(&mut self, from: &Peer<'_>, message: Control, peers: &[Peer<'_>]) {
         match message {
             Control::ClipboardOffer {
                 serial,
@@ -829,11 +1010,17 @@ impl Sharing {
                 // Copied there before that machine heard of what was copied here last:
                 // two copies made at once. Each side applies the same rule, so both end up
                 // with the same one — the copy of the machine with the lower id — rather
-                // than each taking the other's and neither able to serve its own.
-                let crossed = self
-                    .local
-                    .as_ref()
-                    .is_some_and(|l| receiving && l.told.contains(&link) && seen < l.serial);
+                // than each taking the other's and neither able to serve its own. An offer
+                // relayed there is this machine's as far as that one knows: the same rule.
+                let crossed = receiving
+                    && (self
+                        .local
+                        .as_ref()
+                        .is_some_and(|l| l.told.contains(&link) && seen < l.serial)
+                        || self
+                            .held
+                            .as_ref()
+                            .is_some_and(|h| h.told.contains(&link) && seen < h.local));
                 if crossed && !formats.is_empty() && self.machine_id.as_str() < from.machine_id {
                     return;
                 }
@@ -863,13 +1050,13 @@ impl Sharing {
                         .as_ref()
                         .is_some_and(|h| h.machine_id == from.machine_id)
                     {
-                        if let Some(held) = self.let_go(None) {
+                        if let Some(held) = self.let_go(Some(peers)) {
                             self.command(Command::Withdraw { serial: held.local });
                         }
                     }
                     return;
                 }
-                self.let_go(None);
+                self.let_go(Some(peers));
                 self.serial += 1;
                 self.local = None;
                 let files = if formats.contains(&ClipFormat::Files) {
@@ -883,13 +1070,35 @@ impl Sharing {
                     link: from.id,
                     serial,
                     local: self.serial,
+                    formats: formats.clone(),
                     files,
                     fetch: FetchState::None,
+                    told: HashSet::new(),
+                    from_remote: from.remote,
                 });
                 self.command(Command::Offer {
                     serial: self.serial,
                     formats,
                 });
+                for peer in peers {
+                    if self.relayable_to(peer) {
+                        self.relay(peer);
+                    }
+                }
+            }
+            Control::ClipboardRequest {
+                serial,
+                format,
+                transfer,
+                item,
+                offset,
+                length,
+            } if self
+                .held
+                .as_ref()
+                .is_some_and(|h| h.local == serial && h.told.contains(&from.link())) =>
+            {
+                self.forward(from, format, transfer, item, offset, length, peers)
             }
             Control::ClipboardRequest {
                 serial,
@@ -905,6 +1114,34 @@ impl Sharing {
                 _ => self.serve(from, serial, format, transfer),
             },
             Control::ClipboardAbort { transfer, reason } => {
+                let reason_or = |reason: &str| {
+                    if reason.is_empty() {
+                        "the other machine gave up".to_owned()
+                    } else {
+                        reason.to_owned()
+                    }
+                };
+                // A relayed read: the remote sending gave up, said to the asker at once,
+                // ahead of what still waited for it; or the asker did, which stops the
+                // sending to it even once the source sent everything.
+                self.prune_relays();
+                let link = from.link();
+                if self
+                    .relays
+                    .get(&transfer)
+                    .is_some_and(|r| r.source == link && !r.complete)
+                {
+                    self.end_relay(transfer, &reason_or(&reason), true, false);
+                }
+                let asked: Vec<u64> = self
+                    .relays
+                    .iter()
+                    .filter(|(_, r)| r.asker == link && r.asked == transfer)
+                    .map(|(upstream, _)| *upstream)
+                    .collect();
+                for upstream in asked {
+                    self.end_relay(upstream, &reason_or(&reason), false, true);
+                }
                 if let Some(route) = self.routes.lock().unwrap().get(&transfer) {
                     if route.machine_id == from.machine_id && route.link == from.id {
                         let _ = route.pieces.send(Piece::Abort(if reason.is_empty() {
@@ -1055,9 +1292,148 @@ impl Sharing {
             .insert((from.machine_id.to_owned(), transfer), task);
     }
 
+    /// A remote reads the offer of another that was relayed to it: the read is passed on
+    /// to that one under a number of this machine's, and what it sends goes back to the
+    /// asker piece by piece, as it comes.
+    #[allow(clippy::too_many_arguments)]
+    fn forward(
+        &mut self,
+        from: &Peer<'_>,
+        format: ClipFormat,
+        transfer: u64,
+        item: Option<u32>,
+        offset: u64,
+        length: Option<u64>,
+        peers: &[Peer<'_>],
+    ) {
+        let refuse = |reason: &str| {
+            send(
+                from.sender,
+                Control::ClipboardAbort {
+                    transfer,
+                    reason: reason.to_owned(),
+                },
+            )
+        };
+        if !self.options.send || self.open.is_none() {
+            return refuse("this machine does not share its clipboard");
+        }
+        self.prune_relays();
+        let held = self.held.as_ref().expect("checked by the caller");
+        if !held.formats.contains(&format) {
+            return refuse(CHANGED);
+        }
+        let (item, length, bound) = if format == ClipFormat::Files {
+            let Some(item) =
+                item.filter(|i| held.files.get(*i as usize).is_some_and(|file| !file.folder))
+            else {
+                return refuse(CHANGED);
+            };
+            let length = length.unwrap_or(files::RANGE).min(files::RANGE);
+            (Some(item), Some(length), length)
+        } else {
+            (None, None, self.options.max_bytes)
+        };
+        let Some(source) = peers
+            .iter()
+            .find(|p| p.machine_id == held.machine_id && p.id == held.link)
+        else {
+            return refuse("the machine it was copied on left");
+        };
+        let upstream = self.transfers.fetch_add(1, Ordering::Relaxed) + 1;
+        let (pieces, mut received) = mpsc::unbounded_channel::<Bulk>();
+        let queued = Arc::new(AtomicU64::new(0));
+        let asker = from.sender.clone();
+        let left = queued.clone();
+        let task = tokio::spawn(async move {
+            // In order, after the input the link carries, as any bulk transfer.
+            while let Some(piece) = received.recv().await {
+                let sent = asker.piece(transfer, piece.last, &piece.data).await;
+                left.fetch_sub(piece.data.len() as u64, Ordering::Relaxed);
+                if sent.is_err() || piece.last {
+                    return;
+                }
+            }
+        });
+        self.relays.insert(
+            upstream,
+            Relay {
+                source: source.link(),
+                source_sender: source.sender.clone(),
+                asker: from.link(),
+                asker_sender: from.sender.clone(),
+                asked: transfer,
+                received: 0,
+                bound,
+                pieces,
+                queued,
+                complete: false,
+                task,
+            },
+        );
+        send(
+            source.sender,
+            Control::ClipboardRequest {
+                serial: held.serial,
+                format,
+                transfer: upstream,
+                item,
+                offset,
+                length,
+            },
+        );
+    }
+
     /// A piece of a transfer this machine asked for.
     pub fn bulk(&mut self, from: &Peer<'_>, piece: Bulk, peers: &[Peer<'_>]) {
         let transfer = piece.transfer;
+        if self
+            .relays
+            .get(&transfer)
+            .is_some_and(|r| r.source == from.link())
+        {
+            // Whatever the asker's link takes, the loop never waits on it: what it has
+            // not taken yet is held here, within one budget for every relay together.
+            let held: u64 = self
+                .relays
+                .values()
+                .filter(|r| !r.task.is_finished())
+                .map(|r| r.queued.load(Ordering::Relaxed))
+                .sum();
+            let budget = self.relay_budget();
+            let relay = self.relays.get_mut(&transfer).expect("checked above");
+            if relay.task.is_finished() {
+                // The asker's link closed under it: the source need not go on.
+                self.end_relay(transfer, "the other machine left", false, true);
+                return;
+            }
+            if relay.complete {
+                return;
+            }
+            let length = piece.data.len() as u64;
+            relay.received += length;
+            let reason = if relay.received > relay.bound {
+                Some(too_large(
+                    usize::try_from(relay.bound).unwrap_or(usize::MAX),
+                ))
+            } else if held + length > budget {
+                Some(format!(
+                    "the clipboard came faster than the other machine takes it: more than {} MiB waited for it",
+                    budget.div_ceil(1024 * 1024)
+                ))
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                eprintln!("[lbm-agent] multi-PC: a relayed clipboard transfer failed: {reason}");
+                self.end_relay(transfer, &reason, true, true);
+                return;
+            }
+            relay.queued.fetch_add(length, Ordering::Relaxed);
+            relay.complete = piece.last;
+            let _ = relay.pieces.send(piece);
+            return;
+        }
         if let Some(route) = self.routes.lock().unwrap().get(&transfer) {
             if route.machine_id == from.machine_id && route.link == from.id {
                 let _ = route.pieces.send(Piece::Data(piece));

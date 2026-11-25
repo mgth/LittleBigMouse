@@ -592,3 +592,426 @@ async fn a_listing_cut_short_by_the_last_machine_leaving_is_not_offered_when_it_
         );
     }
 }
+
+/// A desk (master) linked to two towers (its remotes), each with the clipboard as the
+/// options say: the master relays between the remotes, linked to it only.
+async fn linked_three(
+    desk: ClipboardChange,
+    a: ClipboardChange,
+    b: ClipboardChange,
+) -> (Node, Node, Node) {
+    let (mut d, mut ta, mut tb) = (Node::new(), Node::new(), Node::new());
+    pair(ta.dir(), &d.machine_id, "", Role::Master);
+    pair(tb.dir(), &d.machine_id, "", Role::Master);
+    let address_a = ta.set(Some(0), a).await.listen_address.unwrap();
+    let address_b = tb.set(Some(0), b).await.listen_address.unwrap();
+    pair(d.dir(), &ta.machine_id, &address_a, Role::Remote);
+    pair(d.dir(), &tb.machine_id, &address_b, Role::Remote);
+    d.set(Some(0), desk).await;
+    let (dm, am, bm) = (
+        d.machine_id.clone(),
+        ta.machine_id.clone(),
+        tb.machine_id.clone(),
+    );
+    d.until(|s| linked(s, &am) && linked(s, &bm)).await;
+    ta.until(|s| linked(s, &dm)).await;
+    tb.until(|s| linked(s, &dm)).await;
+    (d, ta, tb)
+}
+
+/// The number of the offer `memory` holds, if it holds one.
+fn offer_serial(memory: &Memory) -> Option<u64> {
+    match memory.content() {
+        Some(Content::Offer { serial, .. }) => Some(serial),
+        _ => None,
+    }
+}
+
+/// Waits for `memory` to hold an offer other than `before`.
+async fn offered_anew(memory: &Memory, before: Option<u64>) -> Vec<ClipFormat> {
+    tokio::time::timeout(PATIENCE, async {
+        loop {
+            if let Some(Content::Offer { serial, formats }) = memory.content() {
+                if Some(serial) != before {
+                    return formats;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("a new offer in time")
+}
+
+/// Waits for `memory` to hold nothing.
+async fn emptied(memory: &Memory) {
+    tokio::time::timeout(PATIENCE, async {
+        while memory.content().is_some() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the offer let go of");
+}
+
+#[tokio::test]
+async fn text_and_a_picture_copied_on_one_remote_are_pasted_on_another_through_the_master() {
+    let (desk, a, b) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+
+    a.clipboard.copy(vec![
+        (ClipFormat::Text, "from tower A\n".as_bytes().to_vec()),
+        (ClipFormat::Png, png()),
+    ]);
+    assert_eq!(
+        offered(&b.clipboard).await,
+        [ClipFormat::Text, ClipFormat::Png]
+    );
+    assert_eq!(
+        b.clipboard.paste(ClipFormat::Text).await.unwrap(),
+        b"from tower A\n"
+    );
+    // Larger than a piece: relayed in several, as they come.
+    assert_eq!(b.clipboard.paste(ClipFormat::Png).await.unwrap(), png());
+    // The master holds it too, and the copier its own: never announced back to it.
+    assert_eq!(
+        desk.clipboard.paste(ClipFormat::Text).await.unwrap(),
+        b"from tower A\n"
+    );
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(matches!(a.clipboard.content(), Some(Content::Local(_))));
+
+    // And the other way.
+    let before = offer_serial(&a.clipboard);
+    b.clipboard
+        .copy(vec![(ClipFormat::Text, b"from tower B".to_vec())]);
+    assert_eq!(offered_anew(&a.clipboard, before).await, [ClipFormat::Text]);
+    assert_eq!(
+        a.clipboard.paste(ClipFormat::Text).await.unwrap(),
+        b"from tower B"
+    );
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(matches!(b.clipboard.content(), Some(Content::Local(_))));
+}
+
+#[tokio::test]
+async fn files_copied_on_one_remote_are_fetched_on_another_through_the_master_both_ways() {
+    let (_desk, a, b) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+    for (from, to) in [(&a, &b), (&b, &a)] {
+        let source = tempfile::tempdir().unwrap();
+        let (roots, large) = some_files(source.path());
+        let before = offer_serial(&to.clipboard);
+        from.clipboard.copy(vec![(ClipFormat::Files, pack(&roots))]);
+        assert_eq!(
+            offered_anew(&to.clipboard, before).await,
+            [ClipFormat::Files]
+        );
+        let pasted = to.clipboard.paste(ClipFormat::Files).await.unwrap();
+        let pasted = lbm_agent::peers::clipboard_files::unpack_paths(&pasted);
+        assert_eq!(pasted.len(), 2);
+        assert!(pasted.iter().all(|p| p.starts_with(to.reception())));
+        // Several ranges, each relayed.
+        assert_eq!(
+            std::fs::read(pasted[0].join("2026/été.raw")).unwrap(),
+            large
+        );
+        assert_eq!(std::fs::read(pasted[0].join("empty")).unwrap(), b"");
+        assert_eq!(std::fs::read(&pasted[1]).unwrap(), b"hello");
+    }
+}
+
+#[tokio::test]
+async fn a_copy_on_the_master_reaches_every_remote() {
+    let (desk, a, b) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+    desk.clipboard
+        .copy(vec![(ClipFormat::Text, b"from the desk".to_vec())]);
+    for remote in [&a, &b] {
+        assert_eq!(offered(&remote.clipboard).await, [ClipFormat::Text]);
+        assert_eq!(
+            remote.clipboard.paste(ClipFormat::Text).await.unwrap(),
+            b"from the desk"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_relayed_offer_is_withdrawn_when_its_remote_leaves_or_stops_sending() {
+    let (_desk, a, b) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+    a.clipboard
+        .copy(vec![(ClipFormat::Text, b"soon gone".to_vec())]);
+    offered(&b.clipboard).await;
+    drop(a);
+    emptied(&b.clipboard).await;
+
+    // Stops sending: what of it the master relayed goes too.
+    let (_desk, mut a, c) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+    a.clipboard
+        .copy(vec![(ClipFormat::Text, b"private".to_vec())]);
+    offered(&c.clipboard).await;
+    a.set(
+        None,
+        ClipboardChange {
+            send: Some(false),
+            ..ClipboardChange::default()
+        },
+    )
+    .await;
+    emptied(&c.clipboard).await;
+    drop(b);
+}
+
+#[tokio::test]
+async fn the_master_relays_only_while_it_sends_and_within_its_own_bound() {
+    // A master that does not send keeps what it receives to itself.
+    let receive_only = ClipboardChange {
+        send: Some(false),
+        receive: Some(true),
+        ..ClipboardChange::default()
+    };
+    let (desk, a, b) = linked_three(receive_only, both_ways(None), both_ways(None)).await;
+    a.clipboard
+        .copy(vec![(ClipFormat::Text, b"for the desk".to_vec())]);
+    offered(&desk.clipboard).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(b.clipboard.content().is_none());
+
+    // Its bound holds for what it relays, whatever the remotes allow.
+    let (_desk, a, b) = linked_three(both_ways(Some(1000)), both_ways(None), both_ways(None)).await;
+    a.clipboard.copy(vec![(ClipFormat::Png, png())]);
+    offered(&b.clipboard).await;
+    let error = b.clipboard.paste(ClipFormat::Png).await.unwrap_err();
+    assert!(error.contains("bound"), "{error}");
+    // The copier is still asked for the next one.
+    a.clipboard
+        .copy(vec![(ClipFormat::Text, b"small".to_vec())]);
+    let before = offer_serial(&b.clipboard);
+    offered_anew(&b.clipboard, before).await;
+    assert_eq!(b.clipboard.paste(ClipFormat::Text).await.unwrap(), b"small");
+}
+
+#[tokio::test]
+async fn two_remotes_copying_at_once_settle_on_one_copy_all_three_can_paste() {
+    for _ in 0..5 {
+        let (desk, a, b) = linked_three(both_ways(None), both_ways(None), both_ways(None)).await;
+        a.clipboard
+            .copy(vec![(ClipFormat::Text, b"from tower A".to_vec())]);
+        b.clipboard
+            .copy(vec![(ClipFormat::Text, b"from tower B".to_vec())]);
+        let kept = tokio::time::timeout(PATIENCE, async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                let local = |n: &Node| matches!(n.clipboard.content(), Some(Content::Local(_)));
+                let offer = |n: &Node| matches!(n.clipboard.content(), Some(Content::Offer { .. }));
+                if local(&a) && offer(&b) && offer(&desk) {
+                    return &a;
+                }
+                if local(&b) && offer(&a) && offer(&desk) {
+                    return &b;
+                }
+            }
+        })
+        .await
+        .expect("one copy kept, the others holding it");
+        // Settled for good, and every paste finds the same.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let theirs = kept.clipboard.paste(ClipFormat::Text).await.unwrap();
+        for node in [&desk, &a, &b] {
+            assert_eq!(
+                node.clipboard.paste(ClipFormat::Text).await.unwrap(),
+                theirs
+            );
+        }
+    }
+}
+
+/// A remote that is nothing but a link, to read the master's relay at its own pace.
+struct Raw {
+    link: lbm_net::link::Link,
+    _dir: tempfile::TempDir,
+}
+
+/// A desk (master) and a tower A (its remote, which copies) as the options say, and
+/// `raws` remotes of [`Raw`]'s, all linked.
+async fn master_with_raws(
+    desk: ClipboardChange,
+    a: ClipboardChange,
+    raws: usize,
+) -> (Node, Node, Vec<Raw>) {
+    let (mut d, mut ta) = (Node::new(), Node::new());
+    pair(ta.dir(), &d.machine_id, "", Role::Master);
+    let address_a = ta.set(Some(0), a).await.listen_address.unwrap();
+    pair(d.dir(), &ta.machine_id, &address_a, Role::Remote);
+    let mut listeners = Vec::new();
+    for i in 0..raws {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = Identity::load_or_create(dir.path()).unwrap();
+        let mut hello = lbm_net::wire::Hello::new(format!("raw{i}"), "0", Role::Remote);
+        hello
+            .capabilities
+            .push(lbm_net::wire::CLIPBOARD_CAPABILITY.to_owned());
+        // Few events held: what it does not read stays with the master.
+        let options = link::Options {
+            queue: 4,
+            ..link::Options::default()
+        };
+        let listener = link::listen("127.0.0.1:0", &identity, hello, options)
+            .await
+            .unwrap();
+        pair(
+            d.dir(),
+            identity.fingerprint(),
+            &listener.local_addr().to_string(),
+            Role::Remote,
+        );
+        listeners.push((listener, dir));
+    }
+    d.set(Some(0), desk).await;
+    let (am, dm) = (ta.machine_id.clone(), d.machine_id.clone());
+    d.until(|s| linked(s, &am)).await;
+    ta.until(|s| linked(s, &dm)).await;
+    let mut linked_raws = Vec::new();
+    for (mut listener, dir) in listeners {
+        let link = tokio::time::timeout(PATIENCE, listener.next())
+            .await
+            .expect("the desk calls its remote")
+            .unwrap()
+            .unwrap()
+            .accept()
+            .await
+            .unwrap();
+        linked_raws.push(Raw { link, _dir: dir });
+    }
+    (d, ta, linked_raws)
+}
+
+impl Raw {
+    /// Waits for the master to offer something, and says its number.
+    async fn offered(&mut self) -> u64 {
+        tokio::time::timeout(PATIENCE, async {
+            loop {
+                match self.link.next().await.expect("the link") {
+                    lbm_net::link::Event::Control(lbm_net::wire::Control::ClipboardOffer {
+                        serial,
+                        formats,
+                        ..
+                    }) if !formats.is_empty() => return serial,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("an offer in time")
+    }
+
+    async fn ask(&self, serial: u64, transfer: u64) {
+        self.link
+            .sender()
+            .control(&lbm_net::wire::Control::ClipboardRequest {
+                serial,
+                format: ClipFormat::Png,
+                transfer,
+                item: None,
+                offset: 0,
+                length: None,
+            })
+            .await
+            .unwrap();
+    }
+
+    /// Reads for `during` what comes of `transfer`, waiting `pace` after each piece: the
+    /// bytes, whether the last piece came, and the reason of an abort.
+    async fn take(
+        &mut self,
+        transfer: u64,
+        during: Duration,
+        pace: Duration,
+    ) -> (usize, bool, Option<String>) {
+        let deadline = tokio::time::Instant::now() + during;
+        let mut bytes = 0;
+        loop {
+            // A ready event wins over a deadline passed: said here instead.
+            if tokio::time::Instant::now() >= deadline {
+                return (bytes, false, None);
+            }
+            let Ok(event) = tokio::time::timeout_at(deadline, self.link.next()).await else {
+                return (bytes, false, None);
+            };
+            match event {
+                Some(lbm_net::link::Event::Bulk(piece)) if piece.transfer == transfer => {
+                    bytes += piece.data.len();
+                    if piece.last {
+                        return (bytes, true, None);
+                    }
+                    tokio::time::sleep(pace).await;
+                }
+                Some(lbm_net::link::Event::Control(lbm_net::wire::Control::ClipboardAbort {
+                    transfer: t,
+                    reason,
+                })) if t == transfer => return (bytes, false, Some(reason)),
+                Some(_) => {}
+                None => return (bytes, false, Some("closed".into())),
+            }
+        }
+    }
+}
+
+fn big_png(megabytes: usize) -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    bytes.extend((0..megabytes * 1024 * 1024).map(|i| (i % 251) as u8));
+    bytes
+}
+
+#[tokio::test]
+async fn a_relayed_read_given_up_by_its_asker_stops_even_once_the_source_sent_everything() {
+    let (_desk, a, mut raws) = master_with_raws(both_ways(None), both_ways(None), 1).await;
+    let raw = &mut raws[0];
+    a.clipboard.copy(vec![(ClipFormat::Png, big_png(16))]);
+    let serial = raw.offered().await;
+    raw.ask(serial, 7).await;
+    // Slower than the source: the master has it all long before the asker.
+    let (early, last, _) = raw
+        .take(7, Duration::from_millis(300), Duration::from_millis(20))
+        .await;
+    assert!(!last && early < 8 * 1024 * 1024, "{early}");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    raw.link
+        .sender()
+        .control(&lbm_net::wire::Control::ClipboardAbort {
+            transfer: 7,
+            reason: "pasted elsewhere".into(),
+        })
+        .await
+        .unwrap();
+    let (later, last, _) = raw.take(7, Duration::from_secs(2), Duration::ZERO).await;
+    assert!(!last, "the sending went on to the end");
+    assert!(early + later < 12 * 1024 * 1024, "{}", early + later);
+}
+
+#[tokio::test]
+async fn what_the_master_holds_for_slow_askers_stays_within_its_budget() {
+    // A bound of 6 MiB: two pastes of 5 MiB held at once do not fit.
+    let (_desk, a, mut raws) =
+        master_with_raws(both_ways(Some(6 * 1024 * 1024)), both_ways(None), 2).await;
+    a.clipboard.copy(vec![(ClipFormat::Png, big_png(5))]);
+    let first = raws[0].offered().await;
+    let second = raws[1].offered().await;
+    // The first reads nothing for a while: what it has not taken waits on the master.
+    raws[0].ask(first, 1).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    // The second too: together, more than the master may hold.
+    raws[1].ask(second, 2).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let (_, last, reason) = raws[1]
+        .take(2, Duration::from_secs(2), Duration::ZERO)
+        .await;
+    assert!(!last);
+    let reason = reason.expect("the second given up");
+    assert!(
+        reason.contains("faster than the other machine takes it"),
+        "{reason}"
+    );
+    // The first is whole.
+    let (bytes, last, reason) = raws[0]
+        .take(1, Duration::from_secs(5), Duration::ZERO)
+        .await;
+    assert_eq!((bytes, last, reason), (big_png(5).len(), true, None));
+}

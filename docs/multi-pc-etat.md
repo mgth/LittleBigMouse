@@ -615,7 +615,46 @@ partiel (Windows → Windows seulement) serait possible, au prix de la bande cib
   l'annonce) : l'annonce est faite, c'est le collage qui échoue, et l'état le dit
   (`Clipboard.Problem`).
 - Pas de réannonce de ce qu'on vient de recevoir (propriétaire sous Windows, type privé
-  sous Wayland).
+  sous Wayland). Le relais d'un esclave à l'autre ne passe pas par le presse-papiers
+  système du maître : il est fait par la gestion des pairs, jamais vers l'auteur.
+
+### D'un esclave à l'autre
+
+Signalé à l'essai : « le presse-papiers ne passe toujours pas d'un esclave à l'autre ».
+Les esclaves ne sont liés qu'au maître. Avant le relais, le maître prenait l'offre de
+l'esclave A pour lui seul (`Sharing::control`, `held` rempli, `local` vidé) et ne la
+disait à personne : son presse-papiers ne signale jamais ce qu'il tient d'un autre
+(`clipboard/mod.rs`, « What it put there itself it never reports as a change »), et la
+gestion des pairs n'annonçait que les copies faites sur le maître (`announce`). B gardait
+l'offre précédente du maître, que celui-ci refusait ensuite (`the clipboard changed
+since`). Ce qui est copié sur le maître, lui, partait déjà vers tous les esclaves.
+
+Corrigé : le maître relaie (contrat dans `multi-pc.md`, « Relayed between remotes ») —
+annonce sous son propre numéro aux autres esclaves, lecture renvoyée à l'auteur, contenu
+retransmis morceau par morceau, annulation dans les deux sens, retrait par offre vide.
+Options du maître (recevoir pour garder, envoyer pour relayer) et sa borne en plus de
+celles des esclaves. Tests à trois agents en mémoire (`tests/clipboard.rs`) : texte,
+image, fichiers de A vers B et de B vers A, départ et arrêt d'envoi de l'auteur, maître
+qui n'envoie pas, borne du maître, deux copies simultanées. Après la revue de mgth,
+ce que le maître garde pour un esclave plus lent que la source tient dans un budget commun
+à tous les relais, et une annulation de l'esclave arrête l'envoi même une fois la source
+finie ; deux tests avec un esclave qui lit lentement (lien brut) le vérifient.
+
+Essai réel du 2026-11-25 : maître jetable sur le poste Linux, esclave Linux jetable
+(tous deux au presse-papiers en mémoire, jamais celui de la session), vm124 en second
+esclave avec le vrai presse-papiers Windows (nœud d'essai à part, son agent v6 arrêté
+pendant l'essai puis relancé). Tout passe, dans les deux sens, par le maître :
+- texte (accents, tiret long, ✓) ;
+- image : 800×600 dessinée sur la vm124 reçue intacte ; PNG de l'esclave Linux reçu sur
+  la vm124 au même SHA-256 (format `PNG`), pixels identiques en `CF_DIB` ;
+- fichiers : un dossier avec un fichier de 9 Mio (trois tranches relayées) et un fichier
+  seul, mêmes SHA-256 à l'arrivée, `Get-Clipboard -Format FileDropList` sur la vm124
+  donnant les chemins du dossier de réception ;
+- copie faite sur le maître : reçue par les deux esclaves.
+
+L'esclave de la vm124 tournait le code de la branche ; un esclave e62dc15e devrait
+suffire (le fil ne change pas), non vérifié. Jamais essayé : le vrai hook maître, un
+esclave Linux au vrai presse-papiers Wayland, deux maîtres.
 - Sélection primaire et X11 : hors périmètre.
 
 ## Fonctionnalités à envisager

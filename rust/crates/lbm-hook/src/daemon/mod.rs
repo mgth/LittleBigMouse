@@ -119,6 +119,9 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                 shared.bound_to_agent.store(bound, Ordering::SeqCst);
             }
             Command::PointerLock { shortcut } => adopt_pointer_lock(shared, shortcut),
+            // Read by a hook that names its machines (`InputHosts`), which this one
+            // does not say it does: no agent sends it here.
+            Command::Drivable { .. } => {}
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);

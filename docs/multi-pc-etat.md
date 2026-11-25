@@ -666,7 +666,18 @@ délicate sur 5353 plus des minuteries. D'où le datagramme à nous
   tant qu'elle n'a pas reçu son premier événement d'écriture ; seule la répétition à
   1 s passait), et l'adresse basculait à chaque datagramme entre le LAN et le pont
   docker (172.17.0.1).
-- Entre le poste Linux et la vm124 : voir la PR.
+- **2026-11-25, poste Linux ↔ vm124** (Windows 11, agent jetable compilé en croisé
+  `x86_64-pc-windows-gnu`, lancé en SYSTEM, TCP 24901, `C:\LittleBigMouse\v6` intact) :
+  la VM démarrée après le poste, chacun voit l'autre (`192.168.4.100:24901` d'un côté,
+  `192.168.4.99:24900` de l'autre) ; le `Quit` de l'agent Linux le retire de la liste de
+  la VM, et sa relance le fait réapparaître des deux côtés. Un `PeerConnect` vers
+  l'adresse lue dans `Discovered` mène chaque côté à `Pending`, avec la bonne empreinte
+  (refusé ensuite, rien n'a été appairé). **Le pare-feu de la vm124 était désactivé sur
+  les trois profils** pendant l'essai : la règle UDP n'a pas pu être éprouvée en effet.
+  Sa commande `netsh`, celle de l'installeur, a été posée puis retirée et se lit
+  conforme (entrante, UDP 24817, `LocalSubnet`, programme, tous profils). Reste à voir,
+  pare-feu actif, qu'une requête diffusée par une autre machine passe avec la règle et
+  pas sans.
 
 ### Limites
 

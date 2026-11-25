@@ -70,6 +70,10 @@
 //! -> {"Id": 15, "Method": "PeerOverlay", "MachineId": "…",     // capability PeerOverlay
 //!     "Bands": [{… lbm_overlay::scene::Band, in that remote's desktop pixels …}]}
 //! <- {"Id": 15, "Result": null}                                // "Bands": [] takes them down
+//! -> {"Id": 16, "Method": "PeerDiscover"}                     // capability PeerDiscovery
+//! <- {"Id": 16, "Result": null}       // the answers come as `Discovered` in the state:
+//!                                     // [{"MachineId": "…", "Name": "tower",
+//!                                     //   "Address": "192.168.1.30:24817", "Paired": false}]
 //! ```
 //!
 //! The rulers on a remote are the frontend's that wrote them last: only its empty
@@ -105,7 +109,16 @@ pub const PROTOCOL: u32 = 3;
 ///   of the `Peers` state: what a remote's screens show, for the master's map.
 /// - `PeerOverlay`: the request of that name — the rulers the editor shows, drawn on a
 ///   remote's screens too — and `OverlayError` on a machine of the `Peers` state.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers", "PeerOverlay"];
+/// - `PeerDiscovery`: `Discovered` and `DiscoveryError` in the `Peers` state — the
+///   machines of the local network that said who they are — and the `PeerDiscover`
+///   request.
+pub const CAPABILITIES: &[&str] = &[
+    "IntrinsicSize",
+    "MultiPc",
+    "PeerWallpapers",
+    "PeerOverlay",
+    "PeerDiscovery",
+];
 
 //==================//
 // The contract     //
@@ -359,6 +372,10 @@ pub enum Request {
         #[serde(rename = "MachineId")]
         machine_id: String,
     },
+    /// Asks the local network again who is there (capability `PeerDiscovery`): the
+    /// machines that are not paired are listed anew in `Discovered` from the answers.
+    /// Refused while discovery does not run.
+    PeerDiscover,
     /// Which machine a panel two machines know shows (`MultiPc`): `Source` is one of
     /// the sources of `Monitor` in the current layout, on its machine's desktop. Saved,
     /// and handed to a running engine. Refused for another layout than the current one,

@@ -573,7 +573,8 @@ essayés sur matériel ; les autres ne sont pas commencés. Dans l'ordre d'utili
 
 Moins prioritaires :
 
-- **Découverte automatique** des machines sur le réseau local.
+- ~~**Découverte automatique** des machines sur le réseau local~~ *(livrée, voir
+  « Découverte automatique » ci-dessous)*.
 - **Suivre l'entrée du moniteur** : quand un écran partagé change d'entrée par ses
   propres boutons, basculer la source active. Seulement si le moniteur le signale par
   un événement, le projet excluant la scrutation.
@@ -582,6 +583,84 @@ Moins prioritaires :
 
 Écartés : le partage audio et le transfert de fichiers autonome, hors du sujet de
 LittleBigMouse.
+
+## Découverte automatique
+
+Les agents d'un même réseau local se signalent les uns aux autres ; la page Machines de
+`lbm-app` les liste dans « On the network », chacun avec un bouton **Pair** qui fait
+exactement ce que fait une adresse tapée (`PeerConnect`). La découverte ne fait que
+proposer : l'appairage reste celui de `lbm-net`, TLS mutuel, empreinte confirmée sur les
+deux machines.
+
+### Le mécanisme choisi : un datagramme UDP à nous
+
+Trois candidats : mDNS/DNS-SD (`_littlebigmouse._tcp`), une diffusion UDP propre, ou
+rien de plus que l'adresse tapée. Critère par critère :
+
+| Critère | mDNS/DNS-SD | Diffusion UDP propre |
+|---|---|---|
+| Linux à côté d'Avahi | soit passer par Avahi (D-Bus, un démon de plus à exiger), soit un répondeur embarqué qui partage le port 5353 avec Avahi | port à nous, aucun voisin |
+| Windows | soit `DnsServiceRegister`/`DnsServiceBrowse` (Windows 10 1809+, un second code), soit le répondeur embarqué qui partage 5353 avec le service DNS Client | le même code que sous Linux |
+| Aucune scrutation | un répondeur conforme réannonce et rafraîchit son cache à 80 % du TTL (RFC 6762 § 5.2) : des minuteries tant que le mode tourne | une requête au démarrage, des réponses aux requêtes, un adieu à l'arrêt, rien d'autre |
+| Pare-feu Windows | la règle « mDNS (UDP-In) » fournie vise le service DNS Client, pas notre exe : il faut quand même une règle | une règle UDP 24817, posée comme la règle TCP |
+| Ce qui est annoncé | nom d'instance, cible, port, enregistrements TXT : à cadrer, et visible de tout navigateur Bonjour | nom, empreinte, port, et rien d'autre (vérifié par un test) |
+| Coût | une dépendance lourde ou deux backends | ~250 lignes dans `lbm-net` et `if-addrs` |
+
+mDNS n'apporte rien que la diffusion n'apporte aussi entre deux agents LittleBigMouse —
+personne d'autre n'a à les voir — et coûte soit deux backends, soit une cohabitation
+délicate sur 5353 plus des minuteries. D'où le datagramme à nous
+(`rust/crates/lbm-net/src/discovery.rs`).
+
+### Comment ça marche
+
+- Une socket UDP sur **24817** (le même numéro que le TCP des liens, pour une seule
+  chose à retenir dans le pare-feu ; fixe, quel que soit le port TCP choisi, puisqu'il
+  faut savoir où demander avant de rien savoir des autres). `SO_REUSEADDR` : un second
+  agent sur la même machine (une seconde session Windows) écoute aussi. IPv4 seulement.
+- Datagramme JSON d'au plus 1 Kio :
+  `{"Lbm": "LittleBigMouse", "V": 1, "Kind": "Query" | "Announce" | "Bye",
+  "MachineId": "<sha-256 hex>", "Name": "tower", "Port": 24817}`. Un datagramme qui ne
+  se lit pas ainsi (autre en-tête, empreinte mal formée, port nul hors `Bye`) est ignoré.
+  Le nom est coupé à 64 caractères, sans caractères de contrôle.
+- Au démarrage du mode, une fois le port TCP ouvert : un `Query` envoyé à l'adresse de
+  diffusion de **chaque** réseau IPv4 de la machine (la diffusion limitée
+  255.255.255.255 ne sort que par l'interface de la route par défaut), répété à 1 s et
+  3 s au cas où un datagramme se perde. Chaque `Query` entendu reçoit un `Announce` en
+  retour, à l'envoyeur seul. À l'arrêt du mode, un `Bye`. **Aucune minuterie** au-delà
+  des deux répétitions ; mode coupé, aucune socket.
+- L'état `Peers` gagne `Discovered: [{ MachineId, Name, Address, Paired }]` (absent tant
+  que la découverte ne tourne pas) et `DiscoveryError` ; la requête `PeerDiscover`
+  (capacité `PeerDiscovery`) vide la liste des machines non appairées et redemande.
+  C'est le bouton **Look again** : une machine partie sans `Bye` (coupure, veille) reste
+  listée jusque-là, faute de scrutation.
+- Une machine **appairée** entendue est reconnue par son empreinte. Si c'est un esclave
+  non relié, l'agent l'appelle aussitôt : à l'adresse entendue quand celle enregistrée
+  est une adresse IP différente (bail DHCP changé), à celle enregistrée sinon (un nom
+  tapé par l'utilisateur survit aux baux). L'adresse enregistrée ne change qu'une fois
+  le lien établi **avec la bonne empreinte** (`admit`) : un datagramme menteur fait
+  tenter une connexion, qui échoue sur `UnknownFingerprint`, et rien n'est réécrit
+  (test `a_datagram_that_lies_about_a_paired_fingerprint_changes_nothing_stored`).
+- Au plus 64 machines listées : un réseau inondé de fausses empreintes remplit la liste,
+  pas la mémoire.
+
+### Pare-feu
+
+- Windows : l'installeur pose une seconde règle, `Little Big Mouse (multi-PC
+  discovery)`, UDP 24817 entrant, même portée que la règle TCP (exe de l'agent,
+  sous-réseau local, tous profils). Sans elle, un `Query` diffusé par une autre machine
+  n'arrive pas ; la machine n'est vue que lorsqu'elle demande elle-même (Windows laisse
+  passer les réponses unicast à une diffusion pendant 3 s).
+- Linux : rien n'est posé. Un pare-feu local (firewalld, ufw) doit laisser entrer UDP
+  24817 depuis le réseau local, comme il doit déjà laisser entrer TCP 24817.
+
+### Limites
+
+- IPv4 seulement ; pas de traversée de routeur (la diffusion reste dans le sous-réseau,
+  et c'est voulu).
+- Un agent plus ancien n'annonce rien et ignore les datagrammes : il ne se voit pas et
+  ne voit personne. Les deux machines doivent avoir la découverte.
+- Les agents jetables d'essai annoncent aussi (port UDP fixe) : ils sont vus des agents
+  du réseau qui ont la découverte, pas d'un agent plus ancien.
 
 ## macOS
 

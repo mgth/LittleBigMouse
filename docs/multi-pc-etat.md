@@ -314,17 +314,38 @@ dans l'interface qu'une fenêtre élevée a ramené le pointeur.
   d'un processus de session. Il faut un service. C'est ce qui a bloqué un essai pendant
   le développement : la machine était verrouillée.
 
-Le bureau sécurisé est un chantier à part, avec ses propres questions de sécurité ; il
-couvrirait aussi les fenêtres élevées pour un utilisateur standard. Conception :
+**Le service Windows est livré dans `v6`** (conception :
 [`multi-pc-service-windows.md`](multi-pc-service-windows.md), option B validée le
-2026-11-24 ; injecteur (#824) et service (#825) en revue. Essayé sur la vm124 sans le
-service (même lancement, depuis la session 0) : invite UAC annulée par Échap injecté,
-fenêtre élevée au premier plan pilotée, session verrouillée atteinte (`Winlogon`, effet
-non vu à l'œil). Jamais tournés : le service sous le SCM, un compte standard, le réseau
-du service (étape 4), l'installeur (étape 5).
-Son point principal : un canal agent → service limité à l'utilisateur ne suffit pas (tout
-processus de l'utilisateur peut se faire passer pour l'agent, donc valider une invite
-UAC) ; le service reçoit lui-même le flux d'un maître approuvé par un administrateur.
+2026-11-24 ; #823 à #832). Il couvre les deux trous, y compris pour un utilisateur
+standard. Son point principal : un canal agent → service limité à l'utilisateur ne
+suffit pas (tout processus de l'utilisateur peut se faire passer pour l'agent, donc
+valider une invite UAC) ; le service reçoit lui-même le flux, en TLS mutuel, des seuls
+maîtres qu'un administrateur a approuvés.
+
+- **Pièces** : `lbm-inject` (#824), l'injecteur lancé en SYSTEM dans la session console,
+  qui suit le bureau d'entrée ; `lbm-service` (#825), le service, son magasin de maîtres
+  approuvés (`lbm-service trust | untrust | list`, en administrateur) et `lbm-admin-only` ;
+  son écoute sur 24818 et l'offre publiée sous `HKLM\SOFTWARE\LittleBigMouse\InputService`
+  (#830) ; le maître qui y envoie le flux (#829) ; l'agent qui annonce l'offre (#831) ;
+  une tâche décochée de l'installeur, la CI et SignPath (#832).
+- **Essayé pour de bon sur la vm124** (compte administrateur), voir « Essai… » dans la
+  conception : depuis la session 0, invite UAC annulée par Échap injecté et fenêtre
+  élevée au premier plan pilotée ; sous le SCM, avec un maître de test Linux
+  (`examples/master_trial`), pointeur au pixel près, invite UAC annulée, maître non
+  approuvé refusé, `untrust` qui coupe aussitôt et relâche Ctrl ; l'installeur réel :
+  installation, mise à jour avec et sans la tâche, désinstallation.
+- **Jamais tourné sur du vrai matériel** : la chaîne complète avec un vrai agent maître
+  et un vrai agent esclave qui annonce l'offre (#829 et #831 seulement en tests sur
+  boucle locale) ; l'écran de verrouillage *via le service* (atteint sans lui, effet
+  jamais vu à l'œil) ; un compte standard (aucun sur la vm124) ; Ctrl+Alt+Suppr (non
+  codé, option `SendSAS` proposée) ; l'écran de connexion avant toute session (hors de
+  cette série) ; changement rapide d'utilisateur, veille ; deux maîtres approuvés à la
+  fois (testé sur boucle locale) ; l'installeur interactif et son code de sortie 100.
+- **À faire par le mainteneur** : ajouter `lbm-service.exe` et `lbm-inject.exe` à la
+  configuration d'artefact SignPath si elle liste les exécutables par nom.
+- **Reste** : épingler côté maître l'empreinte du service (aujourd'hui vérifiée contre
+  l'annonce de l'agent à chaque liaison) ; l'état « piloté par » côté esclave quand le
+  service porte le flux ; une interface pour `trust` (aujourd'hui en ligne de commande).
 
 ### 4. Maîtres Linux sans evdev
 
@@ -625,8 +646,8 @@ macOS n'a de sens qu'après.
 4. ~~Corrélation `Loaded`~~ (#809), ~~retour d'erreur vers l'interface~~ (#808), ~~règle
    de pare-feu dans l'installeur~~ (#811).
 5. ~~Fenêtres élevées par `StartElevated`~~ (essayé sur la vm124, voir « Esclave
-   Windows ») ; reste le service Windows pour le bureau sécurisé et l'utilisateur
-   standard (conception : [`multi-pc-service-windows.md`](multi-pc-service-windows.md)).
+   Windows ») ; ~~service Windows pour le bureau sécurisé et l'utilisateur standard~~
+   (#823 à #832) ; reste l'essai de la chaîne complète avec de vrais agents.
 6. Presse-papiers : texte, image et fichiers passent sur la paire réelle ; suivent
    `FILEDESCRIPTOR`/`FILECONTENTS` sous Windows, puis le palier 2.
 7. Plusieurs esclaves.

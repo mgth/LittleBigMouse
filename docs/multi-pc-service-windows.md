@@ -122,7 +122,7 @@ flowchart LR
   MA -- "flux d'entrée, TLS mutuel" --> SVC
   TM -. lu .-> SVC
   SVC -- "tube nommé, SYSTEM seul" --> INJ
-  SVC -. "état, lecture seule" .-> SA
+  SVC -. "offre (HKLM), lecture seule" .-> SA
 ```
 
 ### `lbm-service` (session 0, LocalSystem)
@@ -166,10 +166,12 @@ Binaire séparé, le plus petit possible ; plomberie SCM par le crate `windows-s
   l'empreinte épinglée du service et la disposition des écrans de l'esclave, et se
   connecte directement au service quand aucun lien d'agent n'existe. Le service, lui,
   saurait déjà lancer un injecteur dans la session console de l'écran de connexion.
-- Publie un état en lecture seule pour l'agent de la session (piloté ou non, par quel
-  maître, bureau courant) : un pipe nommé dont la DACL accorde à SYSTEM l'écriture et à
-  l'utilisateur de la session console **la lecture seule**, côté service ; rien de ce que
-  l'agent y écrirait n'est lu.
+- Publie son **offre** pendant qu'il écoute : `HKLM\SOFTWARE\LittleBigMouse\InputService`,
+  valeurs `Port` et `MachineId` (l'empreinte de son certificat), retirées quand il cesse
+  d'écouter. `HKLM\SOFTWARE` laisse lire les utilisateurs et n'accorde l'écriture qu'aux
+  administrateurs et à SYSTEM : un processus de l'utilisateur ne peut pas y annoncer un
+  service à lui. (Un pipe d'état avait d'abord été prévu ; le registre suffit pour ce que
+  l'agent doit savoir. L'indicateur « piloté par » côté esclave reste à faire.)
 - Ctrl+Alt+Suppr : `SendInput` ne le produit pas. Le service peut appeler `SendSAS`,
   à condition que la stratégie `SoftwareSASGeneration` l'autorise aux services
   (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`). Modifier une
@@ -215,7 +217,7 @@ protégé qu'exige AppInfo *(à vérifier)* serait de toute façon un chemin moi
 ### Ce qui change ailleurs
 
 - **Agent de l'esclave** : annonce dans `Hello` une capacité `SecureInput` avec le port et
-  l'empreinte du service, **lue dans l'état publié par le service**, jamais dans sa
+  l'empreinte du service, **lue dans l'offre que le service publie sous `HKLM`**, jamais dans sa
   configuration. Il ne voit plus le flux d'entrée quand le service le porte ; son
   indicateur « piloté par » (#816) vient de l'état du service.
 - **Agent du maître** : vers un esclave qui annonce `SecureInput`, et seulement si le
@@ -243,9 +245,8 @@ Liste de contrôle pour la relecture de chaque PR :
   d'exécuter en élevé un binaire d'un dossier modifiable. Chemin d'image du service entre
   guillemets.
 - Le canal vers l'injecteur n'est ouvrable que par SYSTEM, sous un nom imprévisible,
-  et chaque bout vérifie l'autre par son numéro de processus. Le pipe d'état est créé par
-  le service (première instance, `FILE_FLAG_FIRST_PIPE_INSTANCE`), en lecture seule pour
-  l'utilisateur.
+  et chaque bout vérifie l'autre par son numéro de processus. L'offre est sous `HKLM`,
+  que seuls les administrateurs et SYSTEM écrivent.
 - Le réseau avant authentification se limite à la poignée de main `rustls` ; après, à
   `lbm_ipc::input::decode`, déjà testé et borné. Aucun chemin du réseau vers autre chose
   que `SendInput` (et `SendSAS` si l'option est posée).
@@ -331,6 +332,28 @@ réseau du service est l'étape 4).
 
 Effet de bord à connaître : un `osk.exe` ouvert au moment du verrouillage est relancé par
 ATBroker, côté utilisateur et sur l'écran de verrouillage (en SYSTEM).
+
+### Essai du service sous le SCM (2026-11-24, vm124, compte administrateur)
+
+Binaires de #830 (avec #824 et #825), service créé comme le fait l'installeur (même nom,
+LocalSystem, `"<dossier>\lbm-service.exe" run`) mais dans `C:\Program Files\LBM-service-trial`
+et démarré à la demande ; magasin écrit à la main en SYSTEM avec la DACL protégée ; pare-feu
+limité à la machine Linux. Maître : `examples/master_trial` (un `lbm_net::link` maître, depuis
+Linux). Le LBM v6 du mainteneur tournait en même temps, intact.
+
+| Cas | Résultat |
+|---|---|
+| Démarrage par le SCM | **marche** : contrôle `admin_only` passé, identité créée dans le dossier protégé, écoute sur 24818, offre publiée sous `HKLM` (`Port`, `MachineId`) |
+| Maître approuvé, mouvement | **marche** : injecteur lancé en session 1, curseur au pixel injecté (1000, 540) |
+| Invite UAC, Échap envoyé par le maître | **marche** : invite annulée (« L'opération a été annulée par l'utilisateur ») |
+| Maître non approuvé | **refusé** avant tout échange (« not approved on this machine ») |
+| `untrust` (magasin vidé + contrôle 128) pendant une session avec Ctrl enfoncé | **marche** : lien fermé aussitôt (« no longer approved »), port fermé, offre retirée, Ctrl relâché |
+| Arrêt du service | l'injecteur s'arrête avec lui |
+
+Trouvé : l'offre retirée laisse une clé `HKLM\SOFTWARE\LittleBigMouse` vide ; la
+désinstallation de #832 la retire si elle est vide. Pas fait ici : l'installeur lui-même
+(il tue d'abord tous les processus LittleBigMouse, donc le v6 du mainteneur), un vrai agent
+maître (#829, #831), l'écran de verrouillage par le service, un compte standard.
 
 ## Questions pour le mainteneur
 

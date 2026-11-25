@@ -64,6 +64,19 @@ pub fn read() -> Result<TrustStore, String> {
 /// Changes the store, making its folder first if there is none. Elevated only: the
 /// folder refuses everyone else.
 pub fn edit<R>(change: impl FnOnce(&mut TrustStore) -> Result<R, String>) -> Result<R, String> {
+    let folder = made_folder()?;
+    trust::edit_in(&folder, &protected, change)
+}
+
+/// The service's folder, made with its protected DACL if there is none, and checked:
+/// where the service keeps its identity as well as the store.
+pub fn ready_folder() -> Result<PathBuf, String> {
+    let folder = made_folder()?;
+    protected(&folder)?;
+    Ok(folder)
+}
+
+fn made_folder() -> Result<PathBuf, String> {
     let folder = folder()?;
     if let Some(parent) = folder.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -71,7 +84,7 @@ pub fn edit<R>(change: impl FnOnce(&mut TrustStore) -> Result<R, String>) -> Res
     if !folder.exists() {
         create_protected(&folder)?;
     }
-    trust::edit_in(&folder, &protected, change)
+    Ok(folder)
 }
 
 fn create_protected(folder: &Path) -> Result<(), String> {

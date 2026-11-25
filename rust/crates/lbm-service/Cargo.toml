@@ -8,6 +8,10 @@ description = "The Windows service of the multi-PC mode: injects a master's inpu
 
 [dependencies]
 lbm-admin-only = { path = "../lbm-admin-only" }
+# The link masters speak to the service on, as to a remote's agent.
+lbm-net = { path = "../lbm-net" }
+lbm-ipc = { path = "../lbm-ipc" }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
@@ -26,6 +30,7 @@ features = [
     "Win32_System_Com",
     "Win32_System_IO",
     "Win32_System_Pipes",
+    "Win32_System_Registry",
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
     "Win32_UI_Shell",
@@ -34,5 +39,5 @@ features = [
 
 [dev-dependencies]
 tempfile.workspace = true
-# The trial example writes batches the way the service will.
-lbm-ipc = { path = "../lbm-ipc" }
+# The trial master (examples/master_trial.rs).
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

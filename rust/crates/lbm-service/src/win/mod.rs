@@ -4,6 +4,7 @@
 
 pub mod commands;
 pub mod launch;
+pub mod offer;
 pub mod service;
 pub mod store;
 

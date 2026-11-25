@@ -379,8 +379,43 @@ le portail Wayland ou sur X11, et le mode multi-PC n'y existe pas.
 
 ### 6. Transversal
 
-- **Plusieurs esclaves à la fois.** Le flux hook → agent ne porte pas de destination ;
-  un seul esclave est « sélectionné ». Le lever change le protocole du flux d'entrée.
+- **Plusieurs esclaves à la fois.** Conception écrite : « Several remotes at once »
+  dans [`multi-pc.md`](multi-pc.md). La destination n'existe que sur le saut hook → agent
+  du maître (événement `Host` avant chaque `Enter`, l'agent découpe les lots et la
+  retire) ; rien ne change pour un esclave, quelle que soit sa version. Le hook annonce
+  `InputHosts`, l'agent lui dit quelles machines il peut joindre (`Drivable`) ; sans l'un
+  ou l'autre, la règle « un seul esclave sélectionné » reste en vigueur. Limite connue :
+  le presse-papiers ne passe pas d'un esclave à un autre (seulement esclave ↔ maître).
+  Code : PR #836 (hook, les deux maîtres) et #839 (agent), voir « Travaux en cours ».
+
+  **Essayé le 2026-11-25, en local seulement** (les deux PR fusionnées sur une branche
+  d'essai) : `examples/multi_master` en maître — le gestionnaire multi-PC de l'agent,
+  sans monde ni hook, qui joue lui-même un hook nommant ses machines — face à deux
+  esclaves jetables sur ce poste (`lbm-agent --fake-hook`, `XDG_RUNTIME_DIR` et
+  configuration à eux, ports 24901 et 24902, chacun avec `lbm-hook --example input_sink`
+  qui consigne au lieu d'injecter), en TLS sur la boucle locale. Maître → esclave 1
+  (mouvements, touche, clic) → directement l'esclave 2 → retour à l'esclave 1 → retour au
+  maître : chaque esclave n'a reçu que ses événements, l'esclave 1 rangé et l'esclave 2
+  sorti du même lot, `Driven` juste à chaque étape. Un premier passage, mal câblé (le
+  puits d'entrée écoutait à côté), a aussi montré le retour du pointeur sur `InputReset`
+  de l'esclave où il était.
+
+  **Puis avec la vm124** (même jour, accord du mainteneur) : le même maître face à un
+  esclave Linux jetable et à l'agent v6 e62dc15e de la vm124 tel qu'il tournait (rien de
+  remplacé ni relancé ; le maître jetable appairé par `PeerAccept` sur le canal de l'API,
+  puis oublié par `PeerForget`, la vm124 restant appairée au seul maître réel). Esclave
+  Linux → directement la vm124 → directement l'esclave Linux → retour : le curseur de la
+  vm124, relevé par `GetCursorPos`, est allé à (1920,1080) à l'`Enter`, a suivi le
+  mouvement jusqu'à (1970,1080), puis a été rangé au `Leave`. Le script a aussi envoyé à
+  la vm124 une touche A et un clic gauche au centre de son écran 4K, sur ce qui s'y
+  trouvait.
+
+  **Jamais tourné sur du vrai matériel** : le vrai hook maître (evdev ou Windows) pilotant
+  deux esclaves — couvert par des tests avec le vrai moteur, des deux maîtres, mais pas
+  par une souris ; deux esclaves physiques ; un esclave Windows passant par son service
+  parmi plusieurs ; l'interface (carte et page Machines) avec deux esclaves fusionnés ;
+  le retour au pointeur quand un lien tombe pendant qu'il est sur une autre machine,
+  ailleurs que dans les tests.
 - **Presse-papiers** : texte et image (PR #821) essayés sur la paire réelle, ils passent
   dans les deux sens ; les fichiers (PR #822) passent aussi ;
   glisser-déposer étudié et écarté pour l'instant. Voir la section suivante.
@@ -780,6 +815,11 @@ La détection des autres outils de partage (PR #814) est fusionnée dans `v6` ; 
 décrite dans « Ce qui est livré » et « Faiblesses connues ». Les règles graduées sur les
 écrans de l'esclave (PR #817) le sont aussi, voir « Rulers on a remote's screens » dans
 [`multi-pc.md`](multi-pc.md).
+
+Plusieurs esclaves à la fois : conception dans `multi-pc.md` (« Several remotes at
+once », PR #835) ; code en deux PR indépendantes vers `v6`, #836 (hook) et #839 (agent),
+chacune sans effet seule. Celle qui est fusionnée en second a un conflit d'une ligne dans
+`lbm-hook/src/daemon/mod.rs` (garder le bras `Drivable` de #836).
 
 Partout : `lbm-agent/tests/supervise.rs` (`an_absent_hook_is_launched_detached_and_outlives_the_agent`)
 échoue en local sur un poste où un vrai hook tourne déjà ; ce n'est pas lié à ces branches.

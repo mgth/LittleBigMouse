@@ -610,10 +610,12 @@ master's and the remotes', measures it.
   master's, injected there) and the keyboard as the master's own do; every gesture —
   press, move, release, wheel, Escape — goes back on the link to the master whose rulers
   they are, in order, and the agent hands it to the window that showed them alone.
-  While the link lags, a move that follows a move on the same ruler replaces it (where
-  the pointer is now is what a drag needs); a press, a release, a wheel notch or a key
-  is never merged nor dropped short of 1024 waiting, so the release that commits a drag
-  always arrives. The master's agent takes the gestures of the current showing only:
+  Wherever they wait — for the link on the remote, for the next frame in the window
+  (`lbm_overlay::input::Gestures`) — a move that follows a move on the same ruler
+  replaces it (where the pointer is now is what a drag needs), and nothing else is
+  merged nor dropped, so the release that commits a drag always follows. Should 1024
+  presses, releases, notches or keys wait all the same, they are given up for a
+  `Cancel`, which ends the gesture under way instead of leaving it open. The master's agent takes the gestures of the current showing only:
   from the revision it began with — rulers turned on, made draggable, or sent again on a
   new link — to the last it sent, so a late release from rulers since closed never
   commits a drag of those reopened. The window takes a gesture only

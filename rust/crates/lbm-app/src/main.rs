@@ -209,7 +209,7 @@ struct App {
     remote_rulers: lbm_app::remote_rulers::RemoteRulers,
     /// Gestures on the remotes' rulers, checked against what was sent there, waiting
     /// for the next frame to be acted on with this machine's own.
-    remote_overlay_inputs: Vec<lbm_overlay::input::Input>,
+    remote_overlay_inputs: lbm_overlay::input::Gestures,
     /// Their textures, uploaded once per change, by `remote_wallpapers::key_of`.
     remote_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
@@ -623,7 +623,7 @@ impl App {
             desktop_textures: HashMap::new(),
             remote_wallpapers: Default::default(),
             remote_rulers: Default::default(),
-            remote_overlay_inputs: Vec::new(),
+            remote_overlay_inputs: Default::default(),
             remote_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
@@ -1352,13 +1352,13 @@ impl App {
             return;
         }
         if let Message::PeerOverlayInput { machine_id, input } = &message {
-            // A frame's worth at most: a window that does not draw has no drag to feed.
-            if self.screen_overlay_mode == lbm_overlay::Mode::Rulers
-                && self.remote_overlay_inputs.len() < 1024
-            {
-                if let Some(input) = self.remote_rulers.gesture(machine_id, input) {
-                    self.remote_overlay_inputs.push(input);
-                }
+            // Until the next frame acts on them, in order: moves merged, nothing that
+            // ends a drag dropped (lbm_overlay::input::Gestures). Rulers off, there is
+            // no drag to feed.
+            if self.screen_overlay_mode != lbm_overlay::Mode::Rulers {
+                self.remote_overlay_inputs.clear();
+            } else if let Some(input) = self.remote_rulers.gesture(machine_id, input) {
+                self.remote_overlay_inputs.push((), input);
             }
             return;
         }
@@ -2566,9 +2566,9 @@ impl App {
             .take_input()
             .into_iter()
             .map(|i| (i, false));
-        let remote = std::mem::take(&mut self.remote_overlay_inputs)
-            .into_iter()
-            .map(|i| (i, true));
+        let remote: Vec<_> = std::iter::from_fn(|| self.remote_overlay_inputs.pop())
+            .map(|((), i)| (i, true))
+            .collect();
         for (input, remote) in local.chain(remote) {
             if !allowed {
                 break;
@@ -5369,18 +5369,25 @@ mod machines_tests {
         assert!(app.remote_overlay_inputs.is_empty());
 
         // Pressed at 100 px, released at 300 px: the laptop's monitor moves by as many
-        // millimetres of its panel the other way, as a ruler here would move it.
-        for (kind, x) in [
-            (lbm_overlay::input::Kind::Press, 100.0),
-            (lbm_overlay::input::Kind::Move, 200.0),
-            (lbm_overlay::input::Kind::Release, 300.0),
-        ] {
+        // millimetres of its panel the other way, as a ruler here would move it. All of
+        // it comes before the next frame, the moves of a fast drag included (#840
+        // review: 1 023 moves put the release beyond a queue of 1 024).
+        let drag = std::iter::once((lbm_overlay::input::Kind::Press, 100.0))
+            .chain((1..=1023).map(|i| {
+                (
+                    lbm_overlay::input::Kind::Move,
+                    100.0 + 200.0 * f64::from(i) / 1024.0,
+                )
+            }))
+            .chain(std::iter::once((lbm_overlay::input::Kind::Release, 300.0)));
+        for (kind, x) in drag {
             app.agent_said(Message::PeerOverlayInput {
                 machine_id: LAPTOP.into(),
                 input: at(kind, x),
             });
         }
         app.screen_overlay_input();
+        assert!(!app.screen_input.active(), "the release committed the drag");
         let after = app
             .layout
             .as_ref()
@@ -5393,6 +5400,22 @@ mod machines_tests {
             (after.x - before.x - expected).abs() < 1e-6 && after.y == before.y,
             "{before:?} -> {after:?}, expected {expected} mm"
         );
+
+        // More presses and releases than wait between two frames: given up, and the
+        // gesture under way ended rather than left waiting for its end.
+        for i in 0..1100 {
+            let kind = if i % 2 == 0 {
+                lbm_overlay::input::Kind::Press
+            } else {
+                lbm_overlay::input::Kind::Release
+            };
+            app.agent_said(Message::PeerOverlayInput {
+                machine_id: LAPTOP.into(),
+                input: at(kind, 100.0),
+            });
+        }
+        app.screen_overlay_input();
+        assert!(!app.screen_input.active());
 
         // Turned off: what the laptop might still say is dropped.
         app.screen_overlay_mode = lbm_overlay::Mode::Off;

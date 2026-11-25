@@ -263,7 +263,7 @@ struct Overlaid {
 /// The gestures waiting for the master's link, and whether the surfaces that make them
 /// are gone; the sending task is woken by the notify.
 type Outbox = (
-    std::sync::Mutex<(overlay::Gestures, bool)>,
+    std::sync::Mutex<(lbm_overlay::input::Gestures<u64>, bool)>,
     tokio::sync::Notify,
 );
 
@@ -279,8 +279,8 @@ impl Drop for Closing {
 }
 
 /// What hands the gestures on interactive overlays to the master on `sender`, in the
-/// order they were made ([`overlay::Gestures`]: moves merged, nothing that ends a drag
-/// dropped): one task sends them, one after the other, for as long as the surfaces live,
+/// order they were made ([`lbm_overlay::input::Gestures`]: moves merged, nothing that
+/// ends a drag dropped, a full queue cancelled rather than cut short): one task sends them, one after the other, for as long as the surfaces live,
 /// then sends what is left and ends.
 fn overlay_inputs(
     sender: LinkSender,
@@ -323,7 +323,7 @@ fn overlay_inputs(
             .map(|mut pending| pending.0.push(revision.load(Ordering::Acquire), input))
             .unwrap_or(false);
         if !kept {
-            eprintln!("[lbm-agent] multi-PC: the master's link does not keep up: a gesture on the rulers is dropped");
+            eprintln!("[lbm-agent] multi-PC: the master's link does not keep up: the gestures on the rulers waiting for it are cancelled");
         }
         outbox.1.notify_one();
     })

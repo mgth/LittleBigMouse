@@ -140,8 +140,10 @@ Jamais essayé sur du vrai matériel, bien que codé et couvert par des tests :
   kittest, jamais à l'écran.
 - Règles sur l'esclave : manipulables seulement avec un agent maître et un esclave à
   jour (sinon inertes, on aligne en tirant celles des écrans du maître) ; sur un lien
-  lent, les déplacements se fondent en un seul, et rien d'autre n'est perdu avant 1024
-  gestes en attente (le relâché qui valide un glissé arrive toujours, revue de la #840) ;
+  lent comme dans la fenêtre entre deux images, les déplacements se fondent en un seul
+  et rien d'autre n'est perdu : le relâché qui valide un glissé arrive toujours ; au-delà
+  de 1024 gestes non fusionnables en attente, ils sont abandonnés pour une annulation
+  explicite du geste en cours (revue de la #840) ;
   sous Linux, l'esclave renouvelle le
   bail de l'hôte d'overlay toutes les 500 ms tant que des règles sont affichées (pas
   au-delà).

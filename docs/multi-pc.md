@@ -75,18 +75,15 @@ the Windows secure desktop (UAC, lock screen), the portal and X11 backends as ma
     its latest choice for that panel (see "Input
     switching"). Added after protocol 1 without a new version, an older master ignores
     it as an unknown type and an older remote sends none
-<<<<<<< HEAD
   - `ClipboardOffer { Serial, Formats }`, `ClipboardRequest { Serial, Format, Transfer }`,
     `ClipboardAbort { Transfer, Reason }` — either way, between peers that both announced
     `Clipboard`: see "Shared clipboard"
-=======
   - `Overlay { Revision, Bands: [Band] }` — master → remote: the rulers to draw on the
     remote's screens, in place of any drawn before; empty takes them down (see "Rulers
     on a remote's screens"). Sent only to a remote whose `Hello` lists the capability
     `RemoteOverlay`; added after protocol 1 without a new version
   - `OverlayFailed { Revision, Error }` — remote → master: the rulers of `Revision`
     are not shown, refused or taken down, and why
->>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
   - `Ping` / `Pong` — every second while idle; three missed means the link is lost
   - `Bye { Reason }`
 - `PeerDisplay` is OS-neutral and carries what the master's detection would have
@@ -473,7 +470,6 @@ by the window itself; a remote's are on another desktop, so the remote sends the
   one keeps this desktop's — so a panel two machines share shows the wallpaper of the
   machine it shows.
 
-<<<<<<< HEAD
 ## Shared clipboard
 
 Off by default, on each machine and each way (`ClipboardSend`, `ClipboardReceive` in
@@ -562,7 +558,6 @@ sees it.
   Wayland gives up after one second without data, so a large picture over a slow network
   may fail to paste. X11 and the
   primary selection are not shared.
-=======
 ## Rulers on a remote's screens
 
 "Rulers on screens" (Location mode) draws on every screen a ruler graduated in
@@ -599,7 +594,6 @@ place and its physical size.
   rulers.
 - `examples/peer_drive` asks for them (`rulers N`, `norulers`); `examples/peer_remote`
   runs a remote's multi-PC node alone, with real rulers, beside a user's running agent.
->>>>>>> 9d66615f22a09df6d561b0734b2a0b9008f02f82
 
 ## A panel both machines know
 

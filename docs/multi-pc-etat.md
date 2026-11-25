@@ -640,6 +640,9 @@ délicate sur 5353 plus des minuteries. D'où le datagramme à nous
   le lien établi **avec la bonne empreinte** (`admit`) : un datagramme menteur fait
   tenter une connexion, qui échoue sur `UnknownFingerprint`, et rien n'est réécrit
   (test `a_datagram_that_lies_about_a_paired_fingerprint_changes_nothing_stored`).
+- Une machine sur plusieurs réseaux (un LAN et un pont de conteneurs, filaire et Wi-Fi)
+  est entendue sur chacun : l'adresse affichée ne change que pour une source jamais
+  entendue d'elle (un bail qui change), pas à chaque datagramme.
 - Au plus 64 machines listées : un réseau inondé de fausses empreintes remplit la liste,
   pas la mémoire.
 
@@ -653,10 +656,25 @@ délicate sur 5353 plus des minuteries. D'où le datagramme à nous
 - Linux : rien n'est posé. Un pare-feu local (firewalld, ufw) doit laisser entrer UDP
   24817 depuis le réseau local, comme il doit déjà laisser entrer TCP 24817.
 
+### Essai réel
+
+- **2026-11-25, deux agents jetables sur le poste Linux** (`--fake-hook`, config à part,
+  TCP 24900 et 24901, UDP 24817 partagé), par la vraie diffusion du LAN 192.168.4.0/24 :
+  chacun voit l'autre dans `Discovered` sans adresse tapée, et le `Quit` de l'un le
+  retire de la liste de l'autre (`Bye`). Deux défauts trouvés et corrigés avant la PR :
+  le tout premier `Query` ne partait pas (une socket Tokio neuve refuse `try_send_to`
+  tant qu'elle n'a pas reçu son premier événement d'écriture ; seule la répétition à
+  1 s passait), et l'adresse basculait à chaque datagramme entre le LAN et le pont
+  docker (172.17.0.1).
+- Entre le poste Linux et la vm124 : voir la PR.
+
 ### Limites
 
 - IPv4 seulement ; pas de traversée de routeur (la diffusion reste dans le sous-réseau,
   et c'est voulu).
+- Le `Bye` part quand le mode est coupé ou l'agent quitté (`Quit`, tray) ; un agent tué
+  par un signal (fermeture de session sous Linux) ne le dit pas, et reste listé chez les
+  autres jusqu'à « Look again » ou à son prochain démarrage.
 - Un agent plus ancien n'annonce rien et ignore les datagrammes : il ne se voit pas et
   ne voit personne. Les deux machines doivent avoir la découverte.
 - Les agents jetables d'essai annoncent aussi (port UDP fixe) : ils sont vus des agents

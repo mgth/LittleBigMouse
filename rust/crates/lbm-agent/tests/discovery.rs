@@ -401,3 +401,54 @@ async fn with_the_mode_off_or_no_discovery_nothing_is_listed_or_bound() {
     let refused = quiet.ask(PeerRequest::Discover).await.unwrap_err();
     assert!(refused.contains("discovery"), "{refused}");
 }
+
+/// Found in the real trial: an agent heard both on the LAN and on a container bridge
+/// flipped between the two at every datagram. An address already heard does not take
+/// the place of the one shown; one never heard before does (a lease that changed).
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_machine_heard_on_two_networks_keeps_one_address_until_it_has_a_new_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let udp = free_udp_port();
+    let mut desk = Node::new(dir.path(), setup(udp, &[]));
+    desk.set(true, 0, "desk").await;
+    let tower = "cd".repeat(32);
+    let says = |from: [u8; 4]| {
+        let datagram = Beacon {
+            kind: Kind::Announce,
+            machine_id: tower.clone(),
+            name: "tower".into(),
+            port: 24817,
+        };
+        UdpSocket::bind(SocketAddr::from((from, 0)))
+            .unwrap()
+            .send_to(&datagram.encode(), loopback(udp))
+            .unwrap();
+    };
+    let at = |state: &PeersState| seen(state, &tower).map(|seen| seen.address.clone());
+    says([127, 0, 0, 1]);
+    desk.until(|s| at(s).as_deref() == Some("127.0.0.1:24817"))
+        .await;
+    says([127, 0, 0, 2]);
+    desk.until(|s| at(s).as_deref() == Some("127.0.0.2:24817"))
+        .await;
+    // The first network again, then a marker: the address did not go back.
+    says([127, 0, 0, 1]);
+    let marker = "ef".repeat(32);
+    let datagram = Beacon {
+        kind: Kind::Announce,
+        machine_id: marker.clone(),
+        name: "marker".into(),
+        port: 1,
+    };
+    UdpSocket::bind(loopback(0))
+        .unwrap()
+        .send_to(&datagram.encode(), loopback(udp))
+        .unwrap();
+    let state = desk.until(|s| seen(s, &marker).is_some()).await;
+    assert_eq!(at(&state).as_deref(), Some("127.0.0.2:24817"));
+    // A third, never heard: it is where the machine is now.
+    says([127, 0, 0, 3]);
+    desk.until(|s| at(s).as_deref() == Some("127.0.0.3:24817"))
+        .await;
+}

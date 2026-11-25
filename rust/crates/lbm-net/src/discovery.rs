@@ -158,6 +158,11 @@ impl Config {
 #[derive(Debug)]
 pub struct Discovery {
     socket: UdpSocket,
+    /// The same socket, for sending without waiting: a Tokio socket only knows it can
+    /// write once its first readiness event came, so its `try_send_to` refuses a
+    /// datagram sent right after it was bound (seen on the first query of the real
+    /// trial). The system's own non-blocking send has no such state.
+    sender: std::net::UdpSocket,
     targets: Targets,
     port: u16,
 }
@@ -173,8 +178,11 @@ impl Discovery {
         socket.set_broadcast(true)?;
         socket.set_nonblocking(true)?;
         socket.bind(&config.bind.into())?;
-        let socket = UdpSocket::from_std(socket.into())?;
+        let socket: std::net::UdpSocket = socket.into();
+        let sender = socket.try_clone()?;
+        let socket = UdpSocket::from_std(socket)?;
         Ok(Discovery {
+            sender,
             port: config.bind.port(),
             socket,
             targets: config.targets.clone(),
@@ -201,7 +209,7 @@ impl Discovery {
         let mut sent = 0;
         let mut last_error = None;
         for target in self.targets() {
-            match self.socket.try_send_to(&bytes, target) {
+            match self.sender.send_to(&bytes, target) {
                 Ok(_) => sent += 1,
                 Err(error) => last_error = Some(error),
             }
@@ -215,7 +223,7 @@ impl Discovery {
 
     /// Sends `beacon` to one machine, without waiting.
     pub fn send_to(&self, beacon: &Beacon, to: SocketAddr) -> io::Result<()> {
-        self.socket.try_send_to(&beacon.encode(), to).map(|_| ())
+        self.sender.send_to(&beacon.encode(), to).map(|_| ())
     }
 
     /// The next datagram of ours, and where it came from. What is not one is skipped.
@@ -407,6 +415,26 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(answer.kind, Kind::Announce);
+    }
+
+    /// The first datagram goes out the moment the socket is bound, without anything
+    /// awaited on it before.
+    #[tokio::test]
+    async fn a_socket_just_bound_sends_at_once() {
+        let loopback = |port| SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
+        let listener = std::net::UdpSocket::bind(loopback(0)).unwrap();
+        listener
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let fresh = Discovery::bind(&Config {
+            bind: loopback(0),
+            targets: Targets::Fixed(vec![listener.local_addr().unwrap()]),
+        })
+        .unwrap();
+        assert_eq!(fresh.broadcast(&beacon(Kind::Query)).unwrap(), 1);
+        let mut buffer = [0u8; MAX_DATAGRAM];
+        let (length, _) = listener.recv_from(&mut buffer).unwrap();
+        assert_eq!(Beacon::decode(&buffer[..length]), Some(beacon(Kind::Query)));
     }
 
     #[test]

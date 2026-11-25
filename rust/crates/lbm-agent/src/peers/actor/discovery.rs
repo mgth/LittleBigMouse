@@ -29,6 +29,9 @@ use crate::peers::DiscoveredPeer;
 /// otherwise leave this machine unseen until the others look again.
 const QUERY_REPEATS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(3)];
 
+/// The most addresses kept per machine ([`Seen::heard_at`]).
+const MAX_ADDRESSES: usize = 8;
+
 /// The most machines listed. A network flooded with made-up fingerprints fills the
 /// list, never the memory.
 pub(super) const MAX_SEEN: usize = 64;
@@ -38,6 +41,10 @@ pub(super) struct Seen {
     name: String,
     /// The address of its node: where its datagram came from, at the port it gave.
     address: SocketAddr,
+    /// Every address it was heard from. A machine on several networks — a LAN and a
+    /// container bridge, wired and Wi-Fi — is heard on each: the address shown changes
+    /// for one never heard before (a lease that changed), not at every datagram.
+    heard_at: Vec<SocketAddr>,
     /// The order it was first heard in, for a list that does not jump around.
     serial: u64,
 }
@@ -178,13 +185,17 @@ impl Actor {
         let known = self.discovery.seen.len();
         match self.discovery.seen.get_mut(&beacon.machine_id) {
             Some(seen) => {
-                if seen.address != address {
+                if !seen.heard_at.contains(&address) {
+                    if seen.heard_at.len() == MAX_ADDRESSES {
+                        seen.heard_at.remove(0);
+                    }
+                    seen.heard_at.push(address);
+                    seen.address = address;
                     eprintln!(
                         "[lbm-agent] multi-PC: {} ({}) is now at {address}",
                         beacon.name, beacon.machine_id
                     );
                 }
-                seen.address = address;
                 seen.name = beacon.name.clone();
             }
             None if known >= MAX_SEEN => return,
@@ -199,12 +210,14 @@ impl Actor {
                     Seen {
                         name: beacon.name.clone(),
                         address,
+                        heard_at: vec![address],
                         serial: self.discovery.next_serial,
                     },
                 );
             }
         }
-        self.reach_paired(&beacon.machine_id, address);
+        let shown = self.discovery.seen[&beacon.machine_id].address;
+        self.reach_paired(&beacon.machine_id, shown);
     }
 
     /// A paired remote that is not linked is called on now that it said it is there:

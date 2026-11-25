@@ -64,6 +64,14 @@ pub struct Shared {
     /// changes: the routing thread reads them again only then, and reads both, because
     /// the pointer lock's may never be the rescue's.
     pub shortcuts_revision: AtomicU32,
+    /// Multi-PC master: the machines the agent relays the input stream to
+    /// (`Command::Drivable`); `None` until an agent names them, and again at every
+    /// agent's `Hello`. Named, the batches say their machine and only those machines'
+    /// zones are in play (`hook::crossing`, "Several remotes").
+    pub drivable: Mutex<Option<Vec<String>>>,
+    /// Bumped each time [`Self::drivable`] changes: the routing thread reads it again
+    /// only then.
+    pub drivable_revision: AtomicU32,
     /// Where the desktop's keyboard layout puts the letters a shortcut names, for the
     /// keys a master reads below any layout (`hook::linux::keymap`). Changing it bumps
     /// [`Self::shortcuts_revision`].
@@ -144,6 +152,8 @@ impl Shared {
             rescue_shortcut: Mutex::new(crate::shortcut::DEFAULT.to_string()),
             pointer_lock_shortcut: Mutex::new(String::new()),
             shortcuts_revision: AtomicU32::new(0),
+            drivable: Mutex::new(None),
+            drivable_revision: AtomicU32::new(0),
             rescue_bound_by_desktop: AtomicBool::new(false),
             rescue_read_from_keys: AtomicBool::new(false),
             rescue_refused_by_desktop: Mutex::new(None),

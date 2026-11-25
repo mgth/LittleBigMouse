@@ -335,7 +335,7 @@ async fn connection<S>(
                     // would hide a user clearing their exclusions.
                     Command::Excluded { processes } => s.excluded = Some(processes),
                     // Arms nothing: only recorded, with every other command.
-                    Command::Desktop { .. } => {}
+                    Command::Desktop { .. } | Command::Drivable { .. } => {}
                     Command::PointerLock { shortcut } => s.pointer_lock = shortcut,
                     Command::Unknown => {}
                 }

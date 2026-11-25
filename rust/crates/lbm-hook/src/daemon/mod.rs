@@ -31,6 +31,9 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
             // not the versions agree — the agent decides what to do about a mismatch,
             // and it cannot decide on silence.
             Command::Hello { .. } => {
+                // A new agent: it names the machines it drives afresh, and one that
+                // never does (an older one) reads no destination in the stream.
+                adopt_drivable(shared, None);
                 server.send_to(
                     client_id,
                     &Event::Hello {
@@ -41,7 +44,10 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
                             .clone(),
-                        capabilities: vec![lbm_ipc::input::LOCKS_CAPABILITY.to_owned()],
+                        capabilities: vec![
+                            lbm_ipc::input::LOCKS_CAPABILITY.to_owned(),
+                            lbm_ipc::input::HOSTS_CAPABILITY.to_owned(),
+                        ],
                     },
                 );
             }
@@ -119,6 +125,7 @@ pub fn receive_message(line: &str, client_id: ClientId, server: &ServerHandle, s
                 shared.bound_to_agent.store(bound, Ordering::SeqCst);
             }
             Command::PointerLock { shortcut } => adopt_pointer_lock(shared, shortcut),
+            Command::Drivable { hosts } => adopt_drivable(shared, Some(hosts)),
             Command::Quit => {
                 // Post WM_QUIT so the pump unwinds and `main` returns cleanly.
                 hook::request_quit(shared);
@@ -164,6 +171,33 @@ fn adopt_pointer_lock(shared: &Shared, wanted: String) {
     if *current != wanted {
         *current = wanted;
         shared.shortcuts_revision.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Adopt the machines the agent drives, sorted and without duplicates; the routing
+/// thread picks them up at its next cycle (`hook::crossing`).
+fn adopt_drivable(shared: &Shared, mut hosts: Option<Vec<String>>) {
+    // Normalised here, once: the routing thread compares what it hands the zones
+    // with what they hold, borrowed, at every report.
+    if let Some(hosts) = &mut hosts {
+        hosts.sort();
+        hosts.dedup();
+    }
+    let mut current = shared.drivable.lock().unwrap_or_else(|p| p.into_inner());
+    if *current != hosts {
+        if let Some(hosts) = &hosts {
+            eprintln!(
+                "[LittleBigMouse.Hook] multi-PC: the agent drives {} machine(s): {}",
+                hosts.len(),
+                hosts.join(", ")
+            );
+        }
+        *current = hosts;
+        shared.drivable_revision.fetch_add(1, Ordering::SeqCst);
+        drop(current);
+        // A master woken by nothing but its devices (the Windows hooks) learns it at
+        // once, as of a client.
+        crate::hook::drivable_changed(shared);
     }
 }
 
@@ -414,6 +448,22 @@ mod tests {
             run(shared);
         }
         loaded
+    }
+
+    #[test]
+    fn the_drivable_machines_are_kept_sorted_once_and_said_on_a_change_only() {
+        let shared = Shared::new();
+        let names = |v: &[&str]| v.iter().map(|h| (*h).to_owned()).collect::<Vec<_>>();
+        adopt_drivable(&shared, Some(names(&["bbbb", "aaaa", "bbbb"])));
+        assert_eq!(
+            *shared.drivable.lock().unwrap(),
+            Some(names(&["aaaa", "bbbb"]))
+        );
+        let revision = shared.drivable_revision.load(Ordering::SeqCst);
+        adopt_drivable(&shared, Some(names(&["aaaa", "bbbb"])));
+        assert_eq!(shared.drivable_revision.load(Ordering::SeqCst), revision);
+        adopt_drivable(&shared, None);
+        assert_eq!(*shared.drivable.lock().unwrap(), None);
     }
 
     #[test]

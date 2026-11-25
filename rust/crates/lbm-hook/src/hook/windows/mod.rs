@@ -397,6 +397,12 @@ pub fn post_rescue_reconfigure(shared: &Shared) {
     }
 }
 
+/// The machines the agent drives changed: the pump looks at the input stream again, as
+/// when its client changes, rather than at the next move.
+pub fn post_drivable_changed(shared: &Shared) {
+    post(shared, WM_MASTER_CLIENT);
+}
+
 fn post(shared: &Shared, message: u32) {
     let tid = shared.pump_tid.load(Ordering::SeqCst);
     if tid != 0 {

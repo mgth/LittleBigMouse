@@ -311,9 +311,8 @@ impl Pipeline {
             // which the other machines are not in play yet. Rebuilding allocates, but
             // only on such a change, never per report.
             // Locked here, the other machines' borders are walls, as without a client.
-            engine
-                .layout
-                .set_remote_enterable(connected && !self.crossing.walled_in());
+            // Only the machines the agent drives, once it named them.
+            self.crossing.put_in_play(&mut engine.layout, connected);
             {
                 let pos = self.env.virtual_pos;
                 let (crossing, mut machine) = self.split(out);
@@ -393,7 +392,8 @@ impl Pipeline {
                     if self.resync {
                         self.resync_with(&mut engine);
                     } else {
-                        engine.layout.set_remote_enterable(out.remote_connected());
+                        self.crossing
+                            .put_in_play(&mut engine.layout, out.remote_connected());
                     }
                 }
             }
@@ -527,7 +527,7 @@ mod tests {
 
     use evdev::{AbsoluteAxisCode, KeyCode, RelativeAxisCode};
     use lbm_ipc::input::InputEvent as Wire;
-    use lbm_ipc::input::{decode, read_batch};
+    use lbm_ipc::input::{by_host, decode, read_batch};
 
     use super::super::frame::Frame;
     use crate::engine::event::MouseEventArg;
@@ -582,6 +582,9 @@ mod tests {
         connected: bool,
         accepting: bool,
         sent: Vec<Wire>,
+        /// Every event sent, with the machine the last `Host` marker named.
+        routed: Vec<(Option<String>, Wire)>,
+        marked: Option<String>,
         /// The keyboards are grabbed: asked for, and not let go since.
         grabbed: bool,
         releases: usize,
@@ -618,8 +621,15 @@ mod tests {
             if !(self.connected && self.accepting) {
                 return false;
             }
-            self.sent
-                .extend(decode(&batch).expect("a batch that decodes"));
+            for (host, run) in by_host(&batch).expect("a batch that walks") {
+                if let Some(host) = host {
+                    self.marked = Some(host.to_owned());
+                }
+                for event in decode(run).expect("a batch that decodes") {
+                    self.sent.push(event);
+                    self.routed.push((self.marked.clone(), event));
+                }
+            }
             true
         }
 
@@ -661,12 +671,24 @@ mod tests {
         }
 
         fn with_driver(connected: bool, driver: Option<(Driver, Arc<Outlet>)>) -> Rig {
+            Rig::build(connected, driver, LAYOUT, None)
+        }
+
+        fn build(
+            connected: bool,
+            driver: Option<(Driver, Arc<Outlet>)>,
+            layout: &str,
+            drivable: Option<&[&str]>,
+        ) -> Rig {
             let shared: &'static Shared = Box::leak(Box::new(Shared::new()));
             shared
                 .engine
                 .lock()
                 .unwrap()
-                .load(ZonesLayout::from_xml(LAYOUT).unwrap());
+                .load(ZonesLayout::from_xml(layout).unwrap());
+            *shared.drivable.lock().unwrap() =
+                drivable.map(|hosts| hosts.iter().map(|h| (*h).to_owned()).collect());
+            shared.drivable_revision.fetch_add(1, Ordering::SeqCst);
             let desktop = Rect::new(0, 0, 1920, 1080);
             *shared.desktop.lock().unwrap() = Some(desktop);
             shared.want_hook.store(true, Ordering::SeqCst);
@@ -688,6 +710,8 @@ mod tests {
                     connected,
                     accepting: true,
                     sent: Vec::new(),
+                    routed: Vec::new(),
+                    marked: None,
                     grabbed: false,
                     releases: 0,
                     client: 1,
@@ -1284,5 +1308,73 @@ mod tests {
             matches!(seen[first_input], Wire::Enter { .. }),
             "the successor read {seen:?}"
         );
+    }
+
+    /// Here (0..1920), then A (abcd, 3000..4920), then B (efgh, 6000..7920), each
+    /// border linked both ways.
+    const THREE_MACHINES: &str = concat!(
+        r#"<ZonesLayout Algorithm="Strait"><MainZones>"#,
+        r#"<Zone Id="0" Name="Here"><PixelsBounds><Rect Left="0" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="0" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="1" Name="A" Host="abcd" HostX="3000" HostY="0"><PixelsBounds><Rect Left="3000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="527" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="0"></ZoneLink></LeftLinks>"#,
+        r#"<RightLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="2"></ZoneLink></RightLinks></Zone>"#,
+        r#"<Zone Id="2" Name="B" Host="efgh" HostX="6000" HostY="0"><PixelsBounds><Rect Left="6000" Top="0" Width="1920" Height="1080"></Rect></PixelsBounds><PhysicalBounds><Rect Left="1054" Top="0" Width="527" Height="296"></Rect></PhysicalBounds>"#,
+        r#"<LeftLinks><ZoneLink From="0" To="296" SourceFromPixel="0" SourceToPixel="1080" TargetFromPixel="0" TargetToPixel="1080" BorderResistance="0" TargetId="1"></ZoneLink></LeftLinks></Zone>"#,
+        r#"</MainZones></ZonesLayout>"#,
+    );
+
+    fn hosts_of(routed: &[(Option<String>, Wire)], wanted: fn(&Wire) -> bool) -> Vec<String> {
+        routed
+            .iter()
+            .filter(|(_, e)| wanted(e))
+            .map(|(h, _)| h.clone().unwrap_or_default())
+            .collect()
+    }
+
+    #[test]
+    fn evdev_takes_the_pointer_from_one_remote_straight_to_the_next_and_back_home() {
+        let mut rig = Rig::build(true, None, THREE_MACHINES, Some(&["abcd", "efgh"]));
+        rig.go_over();
+        rig.type_key(KEY_LEFTSHIFT, 1);
+        for _ in 0..6 {
+            rig.move_by(500, 0);
+        }
+        let routed = std::mem::take(&mut rig.out.routed);
+        let enters = hosts_of(&routed, |e| matches!(e, Wire::Enter { .. }));
+        let leaves = hosts_of(&routed, |e| matches!(e, Wire::Leave));
+        assert_eq!(enters, ["abcd", "efgh"], "{routed:?}");
+        assert_eq!(leaves, ["abcd"]);
+        assert!(rig.out.grabbed, "still grabbed on B");
+        assert_eq!(rig.out.shows, 0);
+        assert!(
+            rig.out.pointer.is_empty(),
+            "nothing here: {:?}",
+            rig.out.pointer
+        );
+        // The Shift went to A, whose Leave released it; its release goes to nobody.
+        rig.type_key(KEY_LEFTSHIFT, 0);
+        assert!(rig.out.routed.is_empty(), "{:?}", rig.out.routed);
+
+        for _ in 0..12 {
+            rig.move_by(-500, 0);
+        }
+        assert!(!rig.pipe.is_remote(), "home");
+        let leaves = hosts_of(&rig.out.routed, |e| matches!(e, Wire::Leave));
+        assert_eq!(leaves, ["efgh", "abcd"], "{:?}", rig.out.routed);
+        assert_eq!(rig.out.shows, 1);
+        assert!(!rig.out.grabbed);
+    }
+
+    #[test]
+    fn evdev_walls_a_machine_the_agent_does_not_drive() {
+        let mut rig = Rig::build(true, None, THREE_MACHINES, Some(&["abcd"]));
+        rig.go_over();
+        for _ in 0..6 {
+            rig.move_by(500, 0);
+        }
+        assert!(rig.pipe.is_remote());
+        let enters = hosts_of(&rig.out.routed, |e| matches!(e, Wire::Enter { .. }));
+        assert_eq!(enters, ["abcd"], "{:?}", rig.out.routed);
     }
 }

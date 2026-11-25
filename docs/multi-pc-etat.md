@@ -606,7 +606,28 @@ partiel (Windows → Windows seulement) serait possible, au prix de la bande cib
   l'annonce) : l'annonce est faite, c'est le collage qui échoue, et l'état le dit
   (`Clipboard.Problem`).
 - Pas de réannonce de ce qu'on vient de recevoir (propriétaire sous Windows, type privé
-  sous Wayland).
+  sous Wayland). Le relais d'un esclave à l'autre ne passe pas par le presse-papiers
+  système du maître : il est fait par la gestion des pairs, jamais vers l'auteur.
+
+### D'un esclave à l'autre
+
+Signalé à l'essai : « le presse-papiers ne passe toujours pas d'un esclave à l'autre ».
+Les esclaves ne sont liés qu'au maître. Avant le relais, le maître prenait l'offre de
+l'esclave A pour lui seul (`Sharing::control`, `held` rempli, `local` vidé) et ne la
+disait à personne : son presse-papiers ne signale jamais ce qu'il tient d'un autre
+(`clipboard/mod.rs`, « What it put there itself it never reports as a change »), et la
+gestion des pairs n'annonçait que les copies faites sur le maître (`announce`). B gardait
+l'offre précédente du maître, que celui-ci refusait ensuite (`the clipboard changed
+since`). Ce qui est copié sur le maître, lui, partait déjà vers tous les esclaves.
+
+Corrigé : le maître relaie (contrat dans `multi-pc.md`, « Relayed between remotes ») —
+annonce sous son propre numéro aux autres esclaves, lecture renvoyée à l'auteur, contenu
+retransmis morceau par morceau, annulation dans les deux sens, retrait par offre vide.
+Options du maître (recevoir pour garder, envoyer pour relayer) et sa borne en plus de
+celles des esclaves. Tests à trois agents en mémoire (`tests/clipboard.rs`) : texte,
+image, fichiers de A vers B et de B vers A, départ et arrêt d'envoi de l'auteur, maître
+qui n'envoie pas, borne du maître, deux copies simultanées. Jamais essayé sur la paire
+réelle à trois machines.
 - Sélection primaire et X11 : hors périmètre.
 
 ## Fonctionnalités à envisager

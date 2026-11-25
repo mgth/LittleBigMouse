@@ -698,6 +698,21 @@ sees it.
   number), and a read names the copy it is for: a newer one, or the same one marked not
   to be monitored since, is refused (`the clipboard changed since`), checked with the
   Windows clipboard open so that nothing comes between the check and the read.
+- **Relayed between remotes.** Remotes are linked to their master only, never to each
+  other, so the master relays. The offer of a remote it holds is announced in turn to
+  its other remotes, as an offer of the master's own under the number its clipboard
+  holds it by, never to the remote it came from. A read of it there is passed on to that
+  remote under a transfer number of the master's — whole formats and file ranges alike —
+  and what comes back goes on to the asker piece by piece as it arrives, never buffered
+  whole; an abort from either end is passed to the other, and so is a link ending. The
+  relay takes the master's own options (receiving to hold the offer, sending to pass it
+  on) and its bound, on top of those of both remotes. When the relayed offer is let go of
+  (its remote copied a secret, stopped sending, left, or another copy replaced it), the
+  remotes it went to are told with an empty offer under its number, which one holding a
+  newer offer of the master's ignores. Two copies at once follow the same rule as above:
+  a relayed offer is the master's as far as the remote knows. Only a master relays, and
+  only from a remote to a remote: with two masters, each relays for itself, and since no
+  remote relays, no offer goes round.
 - **No echo.** A clipboard never reports a change it made itself (Windows: it is the
   owner; Wayland: its source offers the private `application/x-littlebigmouse-remote`
   type), so a received copy is never announced back.

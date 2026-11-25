@@ -368,6 +368,7 @@ fn sharing_peers(links: &HashMap<String, Live>) -> Vec<clipboard::Peer<'_>> {
             machine_id,
             id: live.id,
             sender: &live.sender,
+            remote: live.info.hello.role == Role::Remote,
         })
         .collect()
 }
@@ -1255,7 +1256,7 @@ impl Actor {
                 .iter()
                 .find(|p| p.machine_id == machine_id && p.id == id)
             {
-                self.sharing.control(from, message);
+                self.sharing.control(from, message, &peers);
             }
             return;
         }

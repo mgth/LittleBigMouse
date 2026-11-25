@@ -90,6 +90,29 @@ pub fn hider_rect(spot: (i32, i32)) -> (i32, i32, i32, i32) {
     (spot.0, spot.1, HIDER_SIDE, HIDER_SIDE)
 }
 
+/// What parking does on the hiding window's thread, in the order it must be done.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParkStep {
+    /// Put the one-pixel window at the spot.
+    ShowWindow,
+    /// Blank the cursor image. The pointer is still where the master left it, so this
+    /// is when nothing of it can be seen at the spot yet.
+    BlankCursor,
+    /// Move the pointer onto the window.
+    MovePointer,
+}
+
+/// The parking, in order. The pointer jumps from an edge to the middle of a monitor;
+/// the window only hides it once it has handled `WM_SETCURSOR`, which it does after
+/// the current handler returns (the window's thread is the one that moves the
+/// pointer). Until then the system draws the cursor it had: an arrow, flashed in the
+/// middle of the screen. So the image is blanked *before* the pointer moves.
+pub const PARK_ORDER: [ParkStep; 3] = [
+    ParkStep::ShowWindow,
+    ParkStep::BlankCursor,
+    ParkStep::MovePointer,
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,5 +171,12 @@ mod tests {
     #[test]
     fn the_hiding_window_is_the_single_pixel_under_the_hot_spot() {
         assert_eq!(hider_rect((-960, 1140)), (-960, 1140, 1, 1));
+    }
+
+    #[test]
+    fn the_cursor_is_blanked_before_the_pointer_jumps_to_the_spot() {
+        let at = |step| PARK_ORDER.iter().position(|s| *s == step).unwrap();
+        assert!(at(ParkStep::BlankCursor) < at(ParkStep::MovePointer));
+        assert!(at(ParkStep::ShowWindow) < at(ParkStep::MovePointer));
     }
 }

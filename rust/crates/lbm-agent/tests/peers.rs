@@ -29,6 +29,8 @@ fn setup_with(input_endpoint: Option<String>, options: link::Options) -> Setup {
         options,
         // Never the system's clipboard in a test: the developer's own is in it.
         clipboard: lbm_agent::clipboard::memory::Memory::new().factory(),
+        // Never the real network either: the discovery tests say where to send.
+        discovery: None,
     }
 }
 

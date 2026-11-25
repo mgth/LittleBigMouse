@@ -24,6 +24,8 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
+mod discovery;
+
 use super::clipboard::{self, Sharing, Wake};
 use super::hook_input::{HookInput, Sink, Target};
 use super::overlay::{self, Painter, Shown};
@@ -108,6 +110,8 @@ pub(super) enum Command {
         machine_id: String,
         bands: Vec<Value>,
     },
+    /// Ask the local network again who is there (`PeerDiscover`).
+    Discover(Reply),
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
 }
@@ -203,6 +207,8 @@ pub(super) struct Start {
     /// Where this machine's Windows service takes the input stream, told to its masters
     /// in `Hello` ([`Service::set_secure_input`](super::Service::set_secure_input)).
     pub secure_input: Option<SecureInput>,
+    /// Where discovery listens and sends (`lbm_net::discovery`); `None` runs none.
+    pub discovery: Option<lbm_net::discovery::Config>,
 }
 
 /// A link with a remote's Windows service (docs/multi-pc-service-windows.md): the input
@@ -341,6 +347,8 @@ struct Actor {
     tasks: JoinSet<()>,
     /// The shared clipboard.
     sharing: Sharing,
+    /// The machines of the local network that said who they are.
+    discovery: discovery::Part,
 }
 
 /// The links whose machines share their clipboard.
@@ -476,6 +484,7 @@ pub(super) async fn run(
             start.clipboard_factory,
             identity_id.clone(),
         ),
+        discovery: discovery::Part::default(),
     };
     if let Some(address) = actor.listen_address {
         eprintln!(
@@ -484,6 +493,7 @@ pub(super) async fn run(
             actor.identity.fingerprint()
         );
     }
+    actor.discovery_start(start.discovery.as_ref());
     let _ = started.send(());
     actor.call_remotes_back();
     // The pointer going to the remote and coming back: only the state changes.
@@ -491,6 +501,8 @@ pub(super) async fn run(
 
     loop {
         actor.publish();
+        // Read anew each turn: discovery may have stopped in the last one.
+        let discovery = actor.discovery.socket();
         tokio::select! {
             command = commands.recv() => match command {
                 Some(Command::Shutdown(done)) => {
@@ -518,6 +530,15 @@ pub(super) async fn run(
                 None => listener = None,
             },
             Some(internal) = internal_rx.recv() => actor.internal(internal),
+            heard = async {
+                match &discovery {
+                    Some(discovery) => discovery.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => match heard {
+                Ok((beacon, from)) => actor.heard(beacon, from),
+                Err(error) => actor.discovery_failed(error),
+            },
             wake = actor.sharing.next() => actor.sharing_wake(wake),
             Ok(()) = driving.changed() => {}
         }
@@ -636,6 +657,8 @@ impl Actor {
                 .driven_by
                 .as_ref()
                 .map(|(machine_id, _)| machine_id.clone()),
+            discovered: self.discovered(),
+            discovery_error: self.discovery_error(),
             peers,
         }
     }
@@ -644,6 +667,9 @@ impl Actor {
         match command {
             Command::State(reply) => {
                 let _ = reply.send(self.state());
+            }
+            Command::Discover(reply) => {
+                let _ = reply.send(self.discover_again().map(|()| Value::Null));
             }
             Command::Connect { address, reply } => {
                 let address = with_default_port(&address);
@@ -2104,6 +2130,7 @@ impl Actor {
 
     /// Says `Bye` on every link and lets go of everything.
     async fn shutdown(&mut self) {
+        self.discovery_stop();
         if self.overlaid.take().is_some() {
             eprintln!("[lbm-agent] multi-PC: the rulers of the master are taken down");
         }

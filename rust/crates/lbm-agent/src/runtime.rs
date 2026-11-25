@@ -885,6 +885,7 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerForget { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Forget(machine_id))
             }
+            Request::PeerDiscover => return self.ask_peers(id, client, PeerRequest::Discover),
             Request::PeerWallpapers { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
             }

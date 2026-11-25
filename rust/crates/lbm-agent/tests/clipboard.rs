@@ -822,3 +822,196 @@ async fn two_remotes_copying_at_once_settle_on_one_copy_all_three_can_paste() {
         }
     }
 }
+
+/// A remote that is nothing but a link, to read the master's relay at its own pace.
+struct Raw {
+    link: lbm_net::link::Link,
+    _dir: tempfile::TempDir,
+}
+
+/// A desk (master) and a tower A (its remote, which copies) as the options say, and
+/// `raws` remotes of [`Raw`]'s, all linked.
+async fn master_with_raws(
+    desk: ClipboardChange,
+    a: ClipboardChange,
+    raws: usize,
+) -> (Node, Node, Vec<Raw>) {
+    let (mut d, mut ta) = (Node::new(), Node::new());
+    pair(ta.dir(), &d.machine_id, "", Role::Master);
+    let address_a = ta.set(Some(0), a).await.listen_address.unwrap();
+    pair(d.dir(), &ta.machine_id, &address_a, Role::Remote);
+    let mut listeners = Vec::new();
+    for i in 0..raws {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = Identity::load_or_create(dir.path()).unwrap();
+        let mut hello = lbm_net::wire::Hello::new(format!("raw{i}"), "0", Role::Remote);
+        hello
+            .capabilities
+            .push(lbm_net::wire::CLIPBOARD_CAPABILITY.to_owned());
+        // Few events held: what it does not read stays with the master.
+        let options = link::Options {
+            queue: 4,
+            ..link::Options::default()
+        };
+        let listener = link::listen("127.0.0.1:0", &identity, hello, options)
+            .await
+            .unwrap();
+        pair(
+            d.dir(),
+            identity.fingerprint(),
+            &listener.local_addr().to_string(),
+            Role::Remote,
+        );
+        listeners.push((listener, dir));
+    }
+    d.set(Some(0), desk).await;
+    let (am, dm) = (ta.machine_id.clone(), d.machine_id.clone());
+    d.until(|s| linked(s, &am)).await;
+    ta.until(|s| linked(s, &dm)).await;
+    let mut linked_raws = Vec::new();
+    for (mut listener, dir) in listeners {
+        let link = tokio::time::timeout(PATIENCE, listener.next())
+            .await
+            .expect("the desk calls its remote")
+            .unwrap()
+            .unwrap()
+            .accept()
+            .await
+            .unwrap();
+        linked_raws.push(Raw { link, _dir: dir });
+    }
+    (d, ta, linked_raws)
+}
+
+impl Raw {
+    /// Waits for the master to offer something, and says its number.
+    async fn offered(&mut self) -> u64 {
+        tokio::time::timeout(PATIENCE, async {
+            loop {
+                match self.link.next().await.expect("the link") {
+                    lbm_net::link::Event::Control(lbm_net::wire::Control::ClipboardOffer {
+                        serial,
+                        formats,
+                        ..
+                    }) if !formats.is_empty() => return serial,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("an offer in time")
+    }
+
+    async fn ask(&self, serial: u64, transfer: u64) {
+        self.link
+            .sender()
+            .control(&lbm_net::wire::Control::ClipboardRequest {
+                serial,
+                format: ClipFormat::Png,
+                transfer,
+                item: None,
+                offset: 0,
+                length: None,
+            })
+            .await
+            .unwrap();
+    }
+
+    /// Reads for `during` what comes of `transfer`, waiting `pace` after each piece: the
+    /// bytes, whether the last piece came, and the reason of an abort.
+    async fn take(
+        &mut self,
+        transfer: u64,
+        during: Duration,
+        pace: Duration,
+    ) -> (usize, bool, Option<String>) {
+        let deadline = tokio::time::Instant::now() + during;
+        let mut bytes = 0;
+        loop {
+            // A ready event wins over a deadline passed: said here instead.
+            if tokio::time::Instant::now() >= deadline {
+                return (bytes, false, None);
+            }
+            let Ok(event) = tokio::time::timeout_at(deadline, self.link.next()).await else {
+                return (bytes, false, None);
+            };
+            match event {
+                Some(lbm_net::link::Event::Bulk(piece)) if piece.transfer == transfer => {
+                    bytes += piece.data.len();
+                    if piece.last {
+                        return (bytes, true, None);
+                    }
+                    tokio::time::sleep(pace).await;
+                }
+                Some(lbm_net::link::Event::Control(lbm_net::wire::Control::ClipboardAbort {
+                    transfer: t,
+                    reason,
+                })) if t == transfer => return (bytes, false, Some(reason)),
+                Some(_) => {}
+                None => return (bytes, false, Some("closed".into())),
+            }
+        }
+    }
+}
+
+fn big_png(megabytes: usize) -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    bytes.extend((0..megabytes * 1024 * 1024).map(|i| (i % 251) as u8));
+    bytes
+}
+
+#[tokio::test]
+async fn a_relayed_read_given_up_by_its_asker_stops_even_once_the_source_sent_everything() {
+    let (_desk, a, mut raws) = master_with_raws(both_ways(None), both_ways(None), 1).await;
+    let raw = &mut raws[0];
+    a.clipboard.copy(vec![(ClipFormat::Png, big_png(16))]);
+    let serial = raw.offered().await;
+    raw.ask(serial, 7).await;
+    // Slower than the source: the master has it all long before the asker.
+    let (early, last, _) = raw
+        .take(7, Duration::from_millis(300), Duration::from_millis(20))
+        .await;
+    assert!(!last && early < 8 * 1024 * 1024, "{early}");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    raw.link
+        .sender()
+        .control(&lbm_net::wire::Control::ClipboardAbort {
+            transfer: 7,
+            reason: "pasted elsewhere".into(),
+        })
+        .await
+        .unwrap();
+    let (later, last, _) = raw.take(7, Duration::from_secs(2), Duration::ZERO).await;
+    assert!(!last, "the sending went on to the end");
+    assert!(early + later < 12 * 1024 * 1024, "{}", early + later);
+}
+
+#[tokio::test]
+async fn what_the_master_holds_for_slow_askers_stays_within_its_budget() {
+    // A bound of 6 MiB: two pastes of 5 MiB held at once do not fit.
+    let (_desk, a, mut raws) =
+        master_with_raws(both_ways(Some(6 * 1024 * 1024)), both_ways(None), 2).await;
+    a.clipboard.copy(vec![(ClipFormat::Png, big_png(5))]);
+    let first = raws[0].offered().await;
+    let second = raws[1].offered().await;
+    // The first reads nothing for a while: what it has not taken waits on the master.
+    raws[0].ask(first, 1).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    // The second too: together, more than the master may hold.
+    raws[1].ask(second, 2).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let (_, last, reason) = raws[1]
+        .take(2, Duration::from_secs(2), Duration::ZERO)
+        .await;
+    assert!(!last);
+    let reason = reason.expect("the second given up");
+    assert!(
+        reason.contains("faster than the other machine takes it"),
+        "{reason}"
+    );
+    // The first is whole.
+    let (bytes, last, reason) = raws[0]
+        .take(1, Duration::from_secs(5), Duration::ZERO)
+        .await;
+    assert_eq!((bytes, last, reason), (big_png(5).len(), true, None));
+}

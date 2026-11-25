@@ -152,18 +152,26 @@ struct Held {
 }
 
 /// A read of a relayed offer, passed on to the remote it came from: what it sends back
-/// goes to the asker as it comes, through a task of its own.
+/// goes to the asker as it comes, through a task of its own. Kept until that task has
+/// handed the asker's link the last piece, so that an abort can still stop it.
 struct Relay {
     /// The link it is read from, by the transfer number given there.
     source: (String, u64),
     source_sender: LinkSender,
     /// The link that asked, and its number for the transfer.
     asker: (String, u64),
+    asker_sender: LinkSender,
     asked: u64,
     /// Bytes received so far, and the most that may come.
     received: u64,
     bound: u64,
-    pieces: mpsc::UnboundedSender<Piece>,
+    pieces: mpsc::UnboundedSender<Bulk>,
+    /// Bytes received and not handed to the asker's link yet: all relays together stay
+    /// within [`Sharing::relay_budget`].
+    queued: Arc<AtomicU64>,
+    /// The source sent its last piece: only the sending to the asker is left.
+    complete: bool,
+    task: JoinHandle<()>,
 }
 
 /// Where the files of the offer held are.
@@ -371,16 +379,47 @@ impl Sharing {
             .map(|(transfer, _)| *transfer)
             .collect();
         for transfer in gone {
-            let relay = self.relays.remove(&transfer).expect("listed above");
-            let _ = relay.pieces.send(Piece::Abort(reason.to_owned()));
+            self.end_relay(transfer, reason, true, true);
+        }
+    }
+
+    /// Ends the relayed read `upstream` here and now: its sending stops, what waited
+    /// for the asker is dropped, and either end is told as asked — the source only while
+    /// it still owes pieces.
+    fn end_relay(&mut self, upstream: u64, reason: &str, tell_asker: bool, tell_source: bool) {
+        let Some(relay) = self.relays.remove(&upstream) else {
+            return;
+        };
+        relay.task.abort();
+        if tell_asker {
             send(
-                &relay.source_sender,
+                &relay.asker_sender,
                 Control::ClipboardAbort {
-                    transfer,
+                    transfer: relay.asked,
                     reason: reason.to_owned(),
                 },
             );
         }
+        if tell_source && !relay.complete {
+            send(
+                &relay.source_sender,
+                Control::ClipboardAbort {
+                    transfer: upstream,
+                    reason: reason.to_owned(),
+                },
+            );
+        }
+    }
+
+    /// The most the relays may hold for their askers, all together: a whole transfer
+    /// within this machine's bound, or a range of files, always fits alone.
+    fn relay_budget(&self) -> u64 {
+        self.options.max_bytes.max(files::RANGE)
+    }
+
+    /// Forgets the relayed reads whose sending ended.
+    fn prune_relays(&mut self) {
+        self.relays.retain(|_, relay| !relay.task.is_finished());
     }
 
     /// The user changed the options. Turning sending on offers what was copied last.
@@ -1082,12 +1121,17 @@ impl Sharing {
                         reason.to_owned()
                     }
                 };
-                // A relayed read: the remote sending gave up, said to the asker; or the
-                // asker did, said to the remote sending.
+                // A relayed read: the remote sending gave up, said to the asker at once,
+                // ahead of what still waited for it; or the asker did, which stops the
+                // sending to it even once the source sent everything.
+                self.prune_relays();
                 let link = from.link();
-                if self.relays.get(&transfer).is_some_and(|r| r.source == link) {
-                    let relay = self.relays.remove(&transfer).expect("checked above");
-                    let _ = relay.pieces.send(Piece::Abort(reason_or(&reason)));
+                if self
+                    .relays
+                    .get(&transfer)
+                    .is_some_and(|r| r.source == link && !r.complete)
+                {
+                    self.end_relay(transfer, &reason_or(&reason), true, false);
                 }
                 let asked: Vec<u64> = self
                     .relays
@@ -1096,14 +1140,7 @@ impl Sharing {
                     .map(|(upstream, _)| *upstream)
                     .collect();
                 for upstream in asked {
-                    let relay = self.relays.remove(&upstream).expect("listed above");
-                    send(
-                        &relay.source_sender,
-                        Control::ClipboardAbort {
-                            transfer: upstream,
-                            reason: reason_or(&reason),
-                        },
-                    );
+                    self.end_relay(upstream, &reason_or(&reason), false, true);
                 }
                 if let Some(route) = self.routes.lock().unwrap().get(&transfer) {
                     if route.machine_id == from.machine_id && route.link == from.id {
@@ -1281,6 +1318,7 @@ impl Sharing {
         if !self.options.send || self.open.is_none() {
             return refuse("this machine does not share its clipboard");
         }
+        self.prune_relays();
         let held = self.held.as_ref().expect("checked by the caller");
         if !held.formats.contains(&format) {
             return refuse(CHANGED);
@@ -1303,28 +1341,17 @@ impl Sharing {
             return refuse("the machine it was copied on left");
         };
         let upstream = self.transfers.fetch_add(1, Ordering::Relaxed) + 1;
-        let (pieces, mut received) = mpsc::unbounded_channel();
+        let (pieces, mut received) = mpsc::unbounded_channel::<Bulk>();
+        let queued = Arc::new(AtomicU64::new(0));
         let asker = from.sender.clone();
-        tokio::spawn(async move {
+        let left = queued.clone();
+        let task = tokio::spawn(async move {
             // In order, after the input the link carries, as any bulk transfer.
             while let Some(piece) = received.recv().await {
-                match piece {
-                    Piece::Data(piece) => {
-                        if asker
-                            .piece(transfer, piece.last, &piece.data)
-                            .await
-                            .is_err()
-                            || piece.last
-                        {
-                            return;
-                        }
-                    }
-                    Piece::Abort(reason) => {
-                        let _ = asker
-                            .control(&Control::ClipboardAbort { transfer, reason })
-                            .await;
-                        return;
-                    }
+                let sent = asker.piece(transfer, piece.last, &piece.data).await;
+                left.fetch_sub(piece.data.len() as u64, Ordering::Relaxed);
+                if sent.is_err() || piece.last {
+                    return;
                 }
             }
         });
@@ -1334,10 +1361,14 @@ impl Sharing {
                 source: source.link(),
                 source_sender: source.sender.clone(),
                 asker: from.link(),
+                asker_sender: from.sender.clone(),
                 asked: transfer,
                 received: 0,
                 bound,
                 pieces,
+                queued,
+                complete: false,
+                task,
             },
         );
         send(
@@ -1361,20 +1392,46 @@ impl Sharing {
             .get(&transfer)
             .is_some_and(|r| r.source == from.link())
         {
+            // Whatever the asker's link takes, the loop never waits on it: what it has
+            // not taken yet is held here, within one budget for every relay together.
+            let held: u64 = self
+                .relays
+                .values()
+                .filter(|r| !r.task.is_finished())
+                .map(|r| r.queued.load(Ordering::Relaxed))
+                .sum();
+            let budget = self.relay_budget();
             let relay = self.relays.get_mut(&transfer).expect("checked above");
-            relay.received += piece.data.len() as u64;
-            if relay.received > relay.bound {
-                let reason = too_large(usize::try_from(relay.bound).unwrap_or(usize::MAX));
-                eprintln!("[lbm-agent] multi-PC: a relayed clipboard transfer failed: {reason}");
-                self.drop_relays(|r| r.source == from.link() && r.received > r.bound, &reason);
+            if relay.task.is_finished() {
+                // The asker's link closed under it: the source need not go on.
+                self.end_relay(transfer, "the other machine left", false, true);
                 return;
             }
-            let last = piece.last;
-            let _ = relay.pieces.send(Piece::Data(piece));
-            if last {
-                // Its task sends what is queued, then ends.
-                self.relays.remove(&transfer);
+            if relay.complete {
+                return;
             }
+            let length = piece.data.len() as u64;
+            relay.received += length;
+            let reason = if relay.received > relay.bound {
+                Some(too_large(
+                    usize::try_from(relay.bound).unwrap_or(usize::MAX),
+                ))
+            } else if held + length > budget {
+                Some(format!(
+                    "the clipboard came faster than the other machine takes it: more than {} MiB waited for it",
+                    budget.div_ceil(1024 * 1024)
+                ))
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                eprintln!("[lbm-agent] multi-PC: a relayed clipboard transfer failed: {reason}");
+                self.end_relay(transfer, &reason, true, true);
+                return;
+            }
+            relay.queued.fetch_add(length, Ordering::Relaxed);
+            relay.complete = piece.last;
+            let _ = relay.pieces.send(piece);
             return;
         }
         if let Some(route) = self.routes.lock().unwrap().get(&transfer) {

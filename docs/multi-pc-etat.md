@@ -635,7 +635,10 @@ retransmis morceau par morceau, annulation dans les deux sens, retrait par offre
 Options du maître (recevoir pour garder, envoyer pour relayer) et sa borne en plus de
 celles des esclaves. Tests à trois agents en mémoire (`tests/clipboard.rs`) : texte,
 image, fichiers de A vers B et de B vers A, départ et arrêt d'envoi de l'auteur, maître
-qui n'envoie pas, borne du maître, deux copies simultanées.
+qui n'envoie pas, borne du maître, deux copies simultanées. Après la revue de mgth,
+ce que le maître garde pour un esclave plus lent que la source tient dans un budget commun
+à tous les relais, et une annulation de l'esclave arrête l'envoi même une fois la source
+finie ; deux tests avec un esclave qui lit lentement (lien brut) le vérifient.
 
 Essai réel du 2026-11-25 : maître jetable sur le poste Linux, esclave Linux jetable
 (tous deux au presse-papiers en mémoire, jamais celui de la session), vm124 en second

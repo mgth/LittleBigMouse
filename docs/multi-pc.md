@@ -710,8 +710,13 @@ sees it.
   its other remotes, as an offer of the master's own under the number its clipboard
   holds it by, never to the remote it came from. A read of it there is passed on to that
   remote under a transfer number of the master's — whole formats and file ranges alike —
-  and what comes back goes on to the asker piece by piece as it arrives, never buffered
-  whole; an abort from either end is passed to the other, and so is a link ending. The
+  and what comes back goes on to the asker piece by piece as it arrives. The master's
+  loop never waits on the asker's link: what that link has not taken yet waits on the
+  master, within one budget for every relay together (the master's bound, at least one
+  range of files), and the transfer that would go past it is given up at both ends
+  rather than held. An abort from either end is passed to the other, and so is a link
+  ending; one from the asker stops the sending to it even after the source sent its last
+  piece, and what still waited for it is dropped. The
   relay takes the master's own options (receiving to hold the offer, sending to pass it
   on) and its bound, on top of those of both remotes. When the relayed offer is let go of
   (its remote copied a secret, stopped sending, left, or another copy replaced it), the

@@ -207,6 +207,9 @@ struct App {
     remote_wallpapers: lbm_app::remote_wallpapers::RemoteWallpapers,
     /// The rulers sent to the remotes' screens while "Rulers on screens" is on.
     remote_rulers: lbm_app::remote_rulers::RemoteRulers,
+    /// Gestures on the remotes' rulers, checked against what was sent there, waiting
+    /// for the next frame to be acted on with this machine's own.
+    remote_overlay_inputs: Vec<lbm_overlay::input::Input>,
     /// Their textures, uploaded once per change, by `remote_wallpapers::key_of`.
     remote_textures: HashMap<String, egui::TextureHandle>,
     /// Uploaded editor previews, by screen id.
@@ -620,6 +623,7 @@ impl App {
             desktop_textures: HashMap::new(),
             remote_wallpapers: Default::default(),
             remote_rulers: Default::default(),
+            remote_overlay_inputs: Vec::new(),
             remote_textures: HashMap::new(),
             wallpapers: HashMap::new(),
             wallpaper: Default::default(),
@@ -1345,6 +1349,17 @@ impl App {
     fn agent_said(&mut self, message: Message) {
         if let Message::Peers(state) = &message {
             self.peers_changed(state);
+            return;
+        }
+        if let Message::PeerOverlayInput { machine_id, input } = &message {
+            // A frame's worth at most: a window that does not draw has no drag to feed.
+            if self.screen_overlay_mode == lbm_overlay::Mode::Rulers
+                && self.remote_overlay_inputs.len() < 1024
+            {
+                if let Some(input) = self.remote_rulers.gesture(machine_id, input) {
+                    self.remote_overlay_inputs.push(input);
+                }
+            }
             return;
         }
         if let Message::Answer { id, result } = &message {
@@ -2545,28 +2560,39 @@ impl App {
             && !self.agent.suspended
             && matches!(self.view, View::Map | View::List)
             && self.screen_overlay_mode != lbm_overlay::Mode::Off;
-        for input in self.screen_overlay.take_input() {
+        // This machine's surfaces, then the remotes': theirs were checked against what
+        // was sent there when they came (remote_rulers::gesture).
+        let local = self
+            .screen_overlay
+            .take_input()
+            .into_iter()
+            .map(|i| (i, false));
+        let remote = std::mem::take(&mut self.remote_overlay_inputs)
+            .into_iter()
+            .map(|i| (i, true));
+        for (input, remote) in local.chain(remote) {
             if !allowed {
                 break;
             }
             let Some(layout) = self.layout.as_mut() else {
                 break;
             };
-            let valid = lbm_overlay::scene::from_layout(
-                &lbm_app::machines::local_view(layout),
-                self.screen_overlay_mode,
-                self.selected.as_deref(),
-            )
-            .is_ok_and(|bands| {
-                bands.iter().any(|b| {
-                    b.monitor == input.band.monitor
-                        && b.connector == input.band.connector
-                        && b.screen == input.band.screen
-                        && b.side == input.band.side
-                        && std::mem::discriminant(&b.content)
-                            == std::mem::discriminant(&input.band.content)
-                })
-            });
+            let valid = remote
+                || lbm_overlay::scene::from_layout(
+                    &lbm_app::machines::local_view(layout),
+                    self.screen_overlay_mode,
+                    self.selected.as_deref(),
+                )
+                .is_ok_and(|bands| {
+                    bands.iter().any(|b| {
+                        b.monitor == input.band.monitor
+                            && b.connector == input.band.connector
+                            && b.screen == input.band.screen
+                            && b.side == input.band.side
+                            && std::mem::discriminant(&b.content)
+                                == std::mem::discriminant(&input.band.content)
+                    })
+                });
             if !valid {
                 self.screen_input.cancel(&mut self.resistance);
                 continue;
@@ -5266,6 +5292,115 @@ mod machines_tests {
             .map(|s| s.source.id.as_str())
             .collect();
         assert_eq!(attached, [app.selected.as_deref().unwrap()]);
+    }
+
+    #[test]
+    fn a_ruler_dragged_on_the_remotes_screen_moves_its_monitor_here() {
+        let layout = desk_and_laptop(false);
+        let panel = panel_of(&layout);
+        let dell = dell_of(&layout);
+        let (mut app, mut incoming) = app_with(layout);
+        app.remote_rulers.connected(&[
+            lbm_app::remote_rulers::CAPABILITY.into(),
+            lbm_app::remote_rulers::INPUT_CAPABILITY.into(),
+        ]);
+        app.mode = lbm_ui::mode::Mode::Location;
+        app.selected = Some(dell.clone());
+        app.screen_overlay_mode = lbm_overlay::Mode::Rulers;
+        let wanted = lbm_app::remote_rulers::wanted(app.layout.as_ref().unwrap(), Some(&dell));
+        app.sync_remote_rulers(Some(wanted));
+        let sent = methods(&mut incoming);
+        let (_, method, extra) = &sent[0];
+        assert_eq!(*method, "PeerOverlay");
+        assert_eq!(extra["Interactive"], true, "asked to be dragged there");
+        let band: lbm_overlay::Band = serde_json::from_value(
+            extra["Bands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|b| b["side"] == "Top")
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+        assert_eq!(band.monitor, panel);
+        let at = |kind, x: f64| {
+            serde_json::to_value(lbm_overlay::input::Input::new(
+                &band,
+                kind,
+                (x, 10.0),
+                1.0,
+                0,
+                false,
+                false,
+            ))
+            .unwrap()
+        };
+        let before = app
+            .layout
+            .as_ref()
+            .unwrap()
+            .monitor(&panel)
+            .unwrap()
+            .location();
+
+        // A gesture from another machine, or on a band never sent, is nobody's.
+        let mut elsewhere = band.clone();
+        elsewhere.connector = "HDMI-9".into();
+        let stray = serde_json::to_value(lbm_overlay::input::Input::new(
+            &elsewhere,
+            lbm_overlay::input::Kind::Press,
+            (0.0, 0.0),
+            1.0,
+            0,
+            false,
+            false,
+        ))
+        .unwrap();
+        for (machine, input) in [
+            ("somebody", at(lbm_overlay::input::Kind::Press, 100.0)),
+            (LAPTOP, stray),
+        ] {
+            app.agent_said(Message::PeerOverlayInput {
+                machine_id: machine.into(),
+                input,
+            });
+        }
+        assert!(app.remote_overlay_inputs.is_empty());
+
+        // Pressed at 100 px, released at 300 px: the laptop's monitor moves by as many
+        // millimetres of its panel the other way, as a ruler here would move it.
+        for (kind, x) in [
+            (lbm_overlay::input::Kind::Press, 100.0),
+            (lbm_overlay::input::Kind::Move, 200.0),
+            (lbm_overlay::input::Kind::Release, 300.0),
+        ] {
+            app.agent_said(Message::PeerOverlayInput {
+                machine_id: LAPTOP.into(),
+                input: at(kind, x),
+            });
+        }
+        app.screen_overlay_input();
+        let after = app
+            .layout
+            .as_ref()
+            .unwrap()
+            .monitor(&panel)
+            .unwrap()
+            .location();
+        let expected = -200.0 * band.axis_mm / f64::from(band.axis_pixels());
+        assert!(
+            (after.x - before.x - expected).abs() < 1e-6 && after.y == before.y,
+            "{before:?} -> {after:?}, expected {expected} mm"
+        );
+
+        // Turned off: what the laptop might still say is dropped.
+        app.screen_overlay_mode = lbm_overlay::Mode::Off;
+        app.agent_said(Message::PeerOverlayInput {
+            machine_id: LAPTOP.into(),
+            input: at(lbm_overlay::input::Kind::Press, 100.0),
+        });
+        assert!(app.remote_overlay_inputs.is_empty());
     }
 
     #[test]

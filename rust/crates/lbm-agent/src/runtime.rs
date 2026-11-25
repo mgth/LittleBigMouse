@@ -874,9 +874,11 @@ impl<W: AgentWorld> Agent<W> {
             Request::PeerWallpapers { machine_id } => {
                 return self.ask_peers(id, client, PeerRequest::Wallpapers(machine_id))
             }
-            Request::PeerOverlay { machine_id, bands } => {
-                self.peer_overlay(&client, machine_id, bands)
-            }
+            Request::PeerOverlay {
+                machine_id,
+                bands,
+                interactive,
+            } => self.peer_overlay(&client, machine_id, bands, interactive),
             Request::SetActiveSource {
                 layout_id,
                 monitor,
@@ -918,6 +920,7 @@ impl<W: AgentWorld> Agent<W> {
         client: &api::Client,
         machine_id: String,
         bands: Vec<serde_json::Value>,
+        interactive: bool,
     ) -> Result<serde_json::Value, String> {
         let Some(peers) = self.peers.as_mut().filter(|p| p.enabled()) else {
             return Err("the multi-PC mode is off".into());
@@ -931,7 +934,7 @@ impl<W: AgentWorld> Agent<W> {
         {
             return Ok(serde_json::Value::Null);
         }
-        if !peers.overlay(&machine_id, bands) {
+        if !peers.overlay(&machine_id, bands, interactive) {
             return Err("the multi-PC mode is not running".into());
         }
         if shown {
@@ -940,6 +943,14 @@ impl<W: AgentWorld> Agent<W> {
             self.overlay_owners.remove(&machine_id);
         }
         Ok(serde_json::Value::Null)
+    }
+
+    /// A gesture on the rulers of remote `machine_id`: for the frontend that showed them
+    /// there, and nobody else — another window has no drag of its own to continue.
+    fn peer_overlay_input(&mut self, machine_id: &str, input: &serde_json::Value) {
+        if let Some(owner) = self.overlay_owners.get(machine_id) {
+            owner.send(api::peer_overlay_input_event(machine_id, input));
+        }
     }
 
     /// A multi-PC request. What needs the network is answered from a task of its own,
@@ -1431,7 +1442,7 @@ impl<W: AgentWorld> Agent<W> {
         for machine_id in machines {
             self.overlay_owners.remove(&machine_id);
             if let Some(peers) = &mut self.peers {
-                peers.overlay(&machine_id, Vec::new());
+                peers.overlay(&machine_id, Vec::new(), false);
             }
         }
         if self.previewing_for.as_ref().is_some_and(|o| o.is(client)) {
@@ -1765,6 +1776,9 @@ impl<W: AgentWorld> Agent<W> {
                         }
                         Some(Notice::InputSwitched { from, display, value, request, error }) => {
                             self.remote_switched(from, display, value, request, error)
+                        }
+                        Some(Notice::OverlayInput { from, input }) => {
+                            self.peer_overlay_input(&from, &input)
                         }
                         None => peer_notices = None,
                     }

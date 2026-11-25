@@ -1991,6 +1991,7 @@ async fn next_overlay(
                 Some(lbm_net::link::Event::Control(lbm_net::wire::Control::Overlay {
                     revision,
                     bands,
+                    ..
                 })) => return (revision, bands),
                 Some(_) => {}
                 None => panic!("the link ended"),
@@ -2078,6 +2079,100 @@ async fn a_window_taking_its_rulers_down_leaves_those_another_window_wrote_since
         .await
         .unwrap();
     assert!(bands.is_empty());
+}
+
+/// The next `PeerOverlayInput` event `frontend` is sent within `within`.
+async fn next_overlay_input(frontend: &mut Frontend, within: Duration) -> Option<Value> {
+    tokio::time::timeout(within, async {
+        loop {
+            let frame = read_frame(&mut frontend.stream).await.unwrap();
+            let frame: Value = serde_json::from_str(&frame).unwrap();
+            if frame["Event"] == "PeerOverlayInput" {
+                return frame;
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+#[tokio::test]
+async fn what_is_done_on_a_remotes_rulers_goes_to_the_window_that_showed_them_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut master = Master::start_as(
+        &tmp,
+        lbm_agent::discovery::Discovery::Fallback,
+        None,
+        &[lbm_net::wire::OVERLAY_CAPABILITY],
+    )
+    .await;
+    let laptop_id = master.laptop_id();
+    let hello = master.frontend.ask(json!({ "Method": "Hello" })).await;
+    assert!(hello["Result"]["Capabilities"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("PeerOverlayInput")));
+    let mut link = master.link_the_laptop().await;
+    let mut other = Frontend::connect(&master.api_endpoint).await;
+    other.ask(json!({ "Method": "Peers" })).await;
+    let band = json!({"monitor": "eDP-1@laptop", "connector": "eDP-1"});
+    master
+        .frontend
+        .ask(
+            json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [band],
+            "Interactive": true }),
+        )
+        .await;
+    let revision = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(lbm_net::link::Event::Control(lbm_net::wire::Control::Overlay {
+                revision,
+                interactive,
+                ..
+            })) = link.next().await
+            {
+                assert!(interactive, "asked to be dragged there");
+                return revision;
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    // The laptop says a ruler was pressed: the window that showed them hears it, unread.
+    let press = json!({"band": band, "kind": "Press", "at": 12.0});
+    let said = |revision| lbm_net::wire::Control::OverlayInput {
+        revision,
+        input: press.clone(),
+    };
+    link.sender().control(&said(revision)).await.unwrap();
+    let event = next_overlay_input(&mut master.frontend, Duration::from_secs(5))
+        .await
+        .expect("the gesture");
+    assert_eq!(event["MachineId"], json!(laptop_id));
+    assert_eq!(event["Input"], press);
+    assert_eq!(
+        next_overlay_input(&mut other, Duration::from_millis(300)).await,
+        None,
+        "another window has no drag to continue"
+    );
+    // A revision never sent is nobody's.
+    link.sender().control(&said(revision + 5)).await.unwrap();
+    assert_eq!(
+        next_overlay_input(&mut master.frontend, Duration::from_millis(300)).await,
+        None
+    );
+
+    // Passive again: what the laptop might still say is dropped.
+    master
+        .frontend
+        .ask(json!({ "Method": "PeerOverlay", "MachineId": laptop_id, "Bands": [band] }))
+        .await;
+    link.sender().control(&said(revision)).await.unwrap();
+    assert_eq!(
+        next_overlay_input(&mut master.frontend, Duration::from_millis(300)).await,
+        None
+    );
 }
 
 #[tokio::test]

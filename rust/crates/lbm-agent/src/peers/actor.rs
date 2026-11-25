@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use lbm_ipc::input::{InputEvent, LOCKS_CAPABILITY};
@@ -104,6 +105,8 @@ pub(super) enum Command {
     Overlay {
         machine_id: String,
         bands: Vec<Value>,
+        /// Dragged there: what is done on them comes back (`Notice::OverlayInput`).
+        interactive: bool,
     },
     /// Close everything and end; answered once done.
     Shutdown(oneshot::Sender<()>),
@@ -243,9 +246,42 @@ struct Overlaid {
     /// machine's screens change.
     revision: u64,
     bands: Vec<Value>,
+    /// Taking the pointer: the gestures go to the master under the revision shown, which
+    /// the surfaces' thread reads here.
+    interactive: Option<Arc<AtomicU64>>,
     /// What the surfaces' failures are told by.
     generation: u64,
     shown: Box<dyn Shown>,
+}
+
+/// How many gestures may wait for the master's link: a link that stalls loses the
+/// latest ones (a drag's end included: the master's editor ends it on the next press).
+const OVERLAY_INPUTS: usize = 256;
+
+/// What hands the gestures on interactive overlays to the master on `sender`, in the
+/// order they were made: one task sends them, one after the other, for as long as the
+/// surfaces live (it ends with the callback, which the surfaces' thread drops).
+fn overlay_inputs(
+    sender: LinkSender,
+    revision: Arc<AtomicU64>,
+) -> lbm_overlay::standalone::OnInput {
+    let (queue, mut inputs) = mpsc::channel::<Control>(OVERLAY_INPUTS);
+    tokio::spawn(async move {
+        while let Some(message) = inputs.recv().await {
+            if sender.control(&message).await.is_err() {
+                return;
+            }
+        }
+    });
+    Box::new(move |input| {
+        let Ok(input) = serde_json::to_value(&input) else {
+            return;
+        };
+        let _ = queue.try_send(Control::OverlayInput {
+            revision: revision.load(Ordering::Acquire),
+            input,
+        });
+    })
 }
 
 struct Actor {
@@ -313,8 +349,8 @@ struct Actor {
     /// As a master: the overlays this machine's editor wants on each remote's screens,
     /// sent again to a remote that links anew; the last revision given, and the last
     /// sent to each remote (a failure of an earlier one is old news); and why a remote
-    /// said it could not show them.
-    overlays: HashMap<String, Vec<Value>>,
+    /// said it could not show them. Each with whether it is dragged there.
+    overlays: HashMap<String, (Vec<Value>, bool)>,
     overlay_revision: u64,
     overlay_sent: HashMap<String, u64>,
     overlay_errors: HashMap<String, String>,
@@ -675,7 +711,11 @@ impl Actor {
                 request,
                 error,
             } => self.input_switched(&machine_id, display, value, request, error),
-            Command::Overlay { machine_id, bands } => self.overlay(machine_id, bands),
+            Command::Overlay {
+                machine_id,
+                bands,
+                interactive,
+            } => self.overlay(machine_id, bands, interactive),
             // Handled by the loop, which owns the listener.
             Command::Shutdown(done) => {
                 let _ = done.send(());
@@ -1042,9 +1082,11 @@ impl Actor {
         }
         // This machine is the master: the rulers its editor shows, if it shows any.
         if info.hello.role == Role::Remote {
-            if let Some(bands) = self.overlays.get(&machine_id).cloned() {
+            if let Some((bands, interactive)) = self.overlays.get(&machine_id).cloned() {
                 self.overlay_errors.remove(&machine_id);
-                if let Err(error) = self.send_overlay(&machine_id, &info.hello, &sender, bands) {
+                if let Err(error) =
+                    self.send_overlay(&machine_id, &info.hello, &sender, bands, interactive)
+                {
                     self.overlay_errors.insert(machine_id.clone(), error);
                 }
             }
@@ -1300,12 +1342,34 @@ impl Actor {
                     live.info.hello.name
                 );
             }
-            Control::Overlay { revision, bands } if live.info.hello.role == Role::Master => {
+            Control::Overlay {
+                revision,
+                bands,
+                interactive,
+            } if live.info.hello.role == Role::Master => {
                 if revision <= live.overlay_revision {
                     return;
                 }
                 live.overlay_revision = revision;
-                self.show_overlay((machine_id.to_owned(), id), revision, bands);
+                self.show_overlay((machine_id.to_owned(), id), revision, bands, interactive);
+            }
+            // A gesture on the rulers this machine asked to be dragged there, given to
+            // the editor that asked; none once it stopped asking.
+            Control::OverlayInput { revision, input } if live.info.hello.role == Role::Remote => {
+                let asked = self
+                    .overlays
+                    .get(machine_id)
+                    .is_some_and(|(_, interactive)| *interactive)
+                    && self
+                        .overlay_sent
+                        .get(machine_id)
+                        .is_some_and(|sent| revision <= *sent);
+                if asked {
+                    let _ = self.notices.send(Notice::OverlayInput {
+                        from: machine_id.to_owned(),
+                        input,
+                    });
+                }
             }
             Control::OverlayFailed { revision, error } if live.info.hello.role == Role::Remote => {
                 eprintln!(
@@ -1841,16 +1905,18 @@ impl Actor {
     /// As a master: the editor wants `bands` on the screens of its remote `machine_id`
     /// (none: taken down). Kept, so that a remote linking anew gets them again, and sent
     /// now if the remote is linked and draws overlays at all.
-    fn overlay(&mut self, machine_id: String, bands: Vec<Value>) {
+    fn overlay(&mut self, machine_id: String, bands: Vec<Value>, interactive: bool) {
         self.overlay_errors.remove(&machine_id);
         let known = self.overlays.contains_key(&machine_id);
+        let interactive = interactive && !bands.is_empty();
         if bands.is_empty() {
             self.overlays.remove(&machine_id);
             if !known {
                 return;
             }
         } else {
-            self.overlays.insert(machine_id.clone(), bands.clone());
+            self.overlays
+                .insert(machine_id.clone(), (bands.clone(), interactive));
         }
         let Some(live) = self
             .links
@@ -1860,7 +1926,7 @@ impl Actor {
             return;
         };
         let (hello, sender) = (live.info.hello.clone(), live.sender.clone());
-        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands) {
+        if let Err(error) = self.send_overlay(&machine_id, &hello, &sender, bands, interactive) {
             self.overlay_errors.insert(machine_id, error);
         }
     }
@@ -1874,6 +1940,7 @@ impl Actor {
         hello: &Hello,
         sender: &LinkSender,
         bands: Vec<Value>,
+        interactive: bool,
     ) -> Result<(), String> {
         if !hello.capabilities.iter().any(|c| c == OVERLAY_CAPABILITY) {
             return if bands.is_empty() {
@@ -1891,6 +1958,7 @@ impl Actor {
         let message = Control::Overlay {
             revision: self.overlay_revision,
             bands,
+            interactive,
         };
         let sender = sender.clone();
         tokio::spawn(async move {
@@ -1901,7 +1969,15 @@ impl Actor {
 
     /// As a remote: what the master on link `master` asked to be shown, under `revision`.
     /// Nothing from one master is shown on top of another's: the latest asked wins.
-    fn show_overlay(&mut self, master: (String, u64), revision: u64, bands: Vec<Value>) {
+    /// `interactive`: they take the pointer, and what is done on them goes back to that
+    /// master alone, on its link.
+    fn show_overlay(
+        &mut self,
+        master: (String, u64),
+        revision: u64,
+        bands: Vec<Value>,
+        interactive: bool,
+    ) {
         if bands.is_empty() {
             if self.overlaid.as_ref().is_some_and(|o| o.master == master) {
                 self.overlaid = None;
@@ -1918,13 +1994,21 @@ impl Actor {
                 return self.overlay_failed(&master, revision, error);
             }
         };
-        if let Some(overlaid) = self.overlaid.as_mut().filter(|o| o.master == master) {
+        if let Some(overlaid) = self
+            .overlaid
+            .as_mut()
+            .filter(|o| o.master == master && o.interactive.is_some() == interactive)
+        {
             overlaid.shown.update(checked);
             overlaid.revision = revision;
+            if let Some(shown) = &overlaid.interactive {
+                shown.store(revision, Ordering::Release);
+            }
             overlaid.bands = bands;
             return;
         }
-        // Another master's, if any, goes first.
+        // Another master's, if any, goes first; so do this master's, drawn passive when
+        // they are now to be dragged, or the other way round.
         self.overlaid = None;
         self.overlay_generation += 1;
         let generation = self.overlay_generation;
@@ -1932,14 +2016,26 @@ impl Actor {
         let on_error = Box::new(move |error| {
             let _ = internal.send(Internal::OverlayFailed { generation, error });
         });
+        let shown_revision = interactive.then(|| Arc::new(AtomicU64::new(revision)));
+        let on_input = match (&shown_revision, self.links.get(&master.0)) {
+            (Some(shown), Some(live)) if live.id == master.1 => {
+                Some(overlay_inputs(live.sender.clone(), shown.clone()))
+            }
+            (Some(_), _) => return,
+            (None, _) => None,
+        };
         let count = checked.len();
-        match self.painter.paint(checked, on_error) {
+        match self.painter.paint(checked, on_error, on_input) {
             Ok(shown) => {
-                eprintln!("[lbm-agent] multi-PC: showing {count} ruler(s) for the master");
+                eprintln!(
+                    "[lbm-agent] multi-PC: showing {count} ruler(s) for the master{}",
+                    if interactive { ", to be dragged" } else { "" }
+                );
                 self.overlaid = Some(Overlaid {
                     master,
                     revision,
                     bands,
+                    interactive: shown_revision,
                     generation,
                     shown,
                 });

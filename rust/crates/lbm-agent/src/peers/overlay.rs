@@ -5,14 +5,15 @@
 //! the remote's own desktop pixels, which it knows from the screens the remote reported.
 //! The remote checks every band against its screens as they are now: a master working
 //! from an older report must not draw a ruler across the wrong place. Only then are they
-//! drawn, passive, by [`lbm_overlay::Standalone`], on surfaces that exist only while
-//! they are shown.
+//! drawn by [`lbm_overlay::Standalone`], on surfaces that exist only while they are
+//! shown: passive, or — when the master asks — taking the pointer, what is done on them
+//! going back to the master, whose editor acts on it. The remote itself edits nothing.
 
 use std::sync::Arc;
 
 use lbm_ipc::peer::PeerDisplay;
 use lbm_overlay::scene::{Band, Content, Pixels};
-use lbm_overlay::standalone::OnError;
+use lbm_overlay::standalone::{OnError, OnInput};
 use serde_json::Value;
 
 /// The most bands a master may ask for: four sides of sixteen screens.
@@ -30,7 +31,8 @@ impl Shown for lbm_overlay::Standalone {
     }
 }
 
-type Paint = dyn Fn(Vec<Band>, OnError) -> Result<Box<dyn Shown>, String> + Send + Sync;
+type Paint =
+    dyn Fn(Vec<Band>, OnError, Option<OnInput>) -> Result<Box<dyn Shown>, String> + Send + Sync;
 
 /// What draws the overlays a master asks for: the screens themselves, or — in tests — a
 /// record of what would have been drawn.
@@ -38,17 +40,25 @@ type Paint = dyn Fn(Vec<Band>, OnError) -> Result<Box<dyn Shown>, String> + Send
 pub struct Painter(Arc<Paint>);
 
 impl Painter {
+    /// `paint` shows the bands; with an `OnInput`, they take the pointer and every
+    /// gesture on them goes to it.
     pub fn new(
-        paint: impl Fn(Vec<Band>, OnError) -> Result<Box<dyn Shown>, String> + Send + Sync + 'static,
+        paint: impl Fn(Vec<Band>, OnError, Option<OnInput>) -> Result<Box<dyn Shown>, String>
+            + Send
+            + Sync
+            + 'static,
     ) -> Painter {
         Painter(Arc::new(paint))
     }
 
     /// This machine's screens.
     pub fn screens() -> Painter {
-        Painter::new(|bands, on_error| {
-            lbm_overlay::Standalone::show(bands, on_error)
-                .map(|shown| Box::new(shown) as Box<dyn Shown>)
+        Painter::new(|bands, on_error, on_input| {
+            match on_input {
+                Some(on_input) => lbm_overlay::Standalone::interactive(bands, on_error, on_input),
+                None => lbm_overlay::Standalone::show(bands, on_error),
+            }
+            .map(|shown| Box::new(shown) as Box<dyn Shown>)
         })
     }
 
@@ -56,8 +66,9 @@ impl Painter {
         &self,
         bands: Vec<Band>,
         on_error: OnError,
+        on_input: Option<OnInput>,
     ) -> Result<Box<dyn Shown>, String> {
-        (self.0)(bands, on_error)
+        (self.0)(bands, on_error, on_input)
     }
 }
 

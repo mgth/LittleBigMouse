@@ -2325,7 +2325,7 @@ mod rulers {
     use super::*;
     use lbm_agent::peers::overlay::{Painter, Shown};
     use lbm_overlay::scene::{Band, Content, Pixels, Side};
-    use lbm_overlay::standalone::OnError;
+    use lbm_overlay::standalone::{OnError, OnInput};
     use tokio::sync::mpsc;
 
     #[derive(Debug, PartialEq)]
@@ -2354,14 +2354,54 @@ mod rulers {
         mpsc::UnboundedReceiver<Drawn>,
         mpsc::UnboundedReceiver<OnError>,
     ) {
+        let (painter, drawn, errors, _) = recorder_with_inputs();
+        (painter, drawn, errors)
+    }
+
+    /// The same, with what each showing was given to pass the gestures on: `None` for
+    /// passive rulers.
+    pub fn recorder_with_inputs() -> (
+        Painter,
+        mpsc::UnboundedReceiver<Drawn>,
+        mpsc::UnboundedReceiver<OnError>,
+        mpsc::UnboundedReceiver<Option<OnInput>>,
+    ) {
         let (drawn, drawn_rx) = mpsc::unbounded_channel();
         let (errors, errors_rx) = mpsc::unbounded_channel();
-        let painter = Painter::new(move |bands, on_error: OnError| {
+        let (inputs, inputs_rx) = mpsc::unbounded_channel();
+        let painter = Painter::new(move |bands, on_error: OnError, on_input| {
             let _ = drawn.send(Drawn::Show(bands));
             let _ = errors.send(on_error);
+            let _ = inputs.send(on_input);
             Ok(Box::new(Recorded(drawn.clone())) as Box<dyn Shown>)
         });
-        (painter, drawn_rx, errors_rx)
+        (painter, drawn_rx, errors_rx, inputs_rx)
+    }
+
+    /// A press on `band` as the surfaces would report it.
+    pub fn press(band: &Band, at: f64) -> lbm_overlay::input::Input {
+        lbm_overlay::input::Input::new(
+            band,
+            lbm_overlay::input::Kind::Press,
+            (at, 10.0),
+            1.0,
+            7,
+            false,
+            false,
+        )
+    }
+
+    /// The next `OverlayInput` the master is sent.
+    pub async fn gesture(link: &mut Link) -> (u64, lbm_overlay::input::Input) {
+        loop {
+            match next_control(link).await {
+                Control::OverlayInput { revision, input } => {
+                    return (revision, serde_json::from_value(input).unwrap())
+                }
+                Control::Displays { .. } | Control::Wallpapers { .. } => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        }
     }
 
     pub async fn next(drawn: &mut mpsc::UnboundedReceiver<Drawn>) -> Drawn {
@@ -2437,9 +2477,55 @@ mod rulers {
         (tower, link, drawn, errors)
     }
 
+    /// A tower linked to `count` test masters, its rulers recorded with what each
+    /// showing was given to pass gestures on.
+    pub async fn tower_and_masters(
+        tower_dir: &Path,
+        count: usize,
+    ) -> (
+        Node,
+        Vec<Link>,
+        mpsc::UnboundedReceiver<Drawn>,
+        mpsc::UnboundedReceiver<Option<OnInput>>,
+    ) {
+        let masters: Vec<Identity> = (0..count)
+            .map(|_| Identity::load_or_create(tempfile::tempdir().unwrap().path()).unwrap())
+            .collect();
+        for master in &masters {
+            pair(tower_dir, master.fingerprint(), "", Role::Master);
+        }
+        let mut tower = Node::new(tower_dir, None);
+        let (painter, drawn, _errors, inputs) = recorder_with_inputs();
+        tower.service.set_overlay_painter(painter);
+        tower
+            .service
+            .local_displays(vec![display("A", 0), display("B", 1920)]);
+        let address = tower.turn_on(0, "tower").await.listen_address.unwrap();
+        let mut links = Vec::new();
+        for master in &masters {
+            links.push(
+                master_connects(master, &address)
+                    .await
+                    .accept()
+                    .await
+                    .unwrap(),
+            );
+            tower.until(|s| linked(s, master.fingerprint())).await;
+        }
+        (tower, links, drawn, inputs)
+    }
+
     pub async fn overlay(link: &Link, revision: u64, bands: Vec<Value>) {
+        overlay_as(link, revision, bands, false).await
+    }
+
+    pub async fn overlay_as(link: &Link, revision: u64, bands: Vec<Value>, interactive: bool) {
         link.sender()
-            .control(&Control::Overlay { revision, bands })
+            .control(&Control::Overlay {
+                revision,
+                bands,
+                interactive,
+            })
             .await
             .unwrap();
     }
@@ -2447,7 +2533,10 @@ mod rulers {
     /// The next `Overlay` a remote is sent.
     pub async fn next_overlay(link: &mut Link) -> (u64, Vec<Value>) {
         loop {
-            if let Control::Overlay { revision, bands } = next_control(link).await {
+            if let Control::Overlay {
+                revision, bands, ..
+            } = next_control(link).await
+            {
                 return (revision, bands);
             }
         }
@@ -2625,13 +2714,18 @@ async fn a_master_shows_a_remotes_failure_of_its_latest_rulers_only() {
         .await
         .unwrap();
     desk.until(|s| linked(s, laptop.fingerprint())).await;
-    assert!(desk
-        .service
-        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 0.0)]));
+    assert!(desk.service.overlay(
+        laptop.fingerprint(),
+        vec![ruler(&display("A", 0), 0.0)],
+        false
+    ));
     let (first, bands) = next_overlay(&mut laptop_link).await;
     assert_eq!(bands.len(), 1);
-    desk.service
-        .overlay(laptop.fingerprint(), vec![ruler(&display("A", 0), 9.0)]);
+    desk.service.overlay(
+        laptop.fingerprint(),
+        vec![ruler(&display("A", 0), 9.0)],
+        false,
+    );
     let (latest, _) = next_overlay(&mut laptop_link).await;
     assert!(latest > first);
 
@@ -2659,7 +2753,8 @@ async fn a_master_shows_a_remotes_failure_of_its_latest_rulers_only() {
             .as_deref(),
         Some("Screen bounds changed.")
     );
-    desk.service.overlay(laptop.fingerprint(), Vec::new());
+    desk.service
+        .overlay(laptop.fingerprint(), Vec::new(), false);
     let (_, bands) = next_overlay(&mut laptop_link).await;
     assert!(bands.is_empty());
     desk.until(|s| peer(s, laptop.fingerprint()).is_some_and(|p| p.overlay_error.is_none()))
@@ -2993,5 +3088,79 @@ async fn a_block_said_by_the_agent_is_not_shown_while_the_service_carries_the_st
             .and_then(|p| p.injection_blocked.clone())
             .map(|b| b.process),
         Some("osk.exe".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn draggable_rulers_send_what_is_done_on_them_to_their_master_in_order() {
+    use rulers::*;
+    let tower_dir = tempfile::tempdir().unwrap();
+    let (_tower, mut links, mut drawn, mut inputs) = tower_and_masters(tower_dir.path(), 1).await;
+    let link = &mut links[0];
+    let ruler_a = ruler(&display("A", 0), 0.0);
+
+    // Passive rulers hand no gesture on.
+    overlay_as(link, 1, vec![ruler_a.clone()], false).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    assert!(inputs.recv().await.unwrap().is_none(), "passive");
+
+    // Asked to be dragged: drawn again, taking the pointer, and what is done on them
+    // goes to the master, in order, under the revision shown.
+    overlay_as(link, 2, vec![ruler_a.clone()], true).await;
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+    let Drawn::Show(bands) = next(&mut drawn).await else {
+        panic!("shown");
+    };
+    let mut on_input = inputs.recv().await.unwrap().expect("interactive");
+    on_input(press(&bands[0], 10.0));
+    on_input(press(&bands[0], 20.0));
+    let (revision, first) = gesture(link).await;
+    assert_eq!(revision, 2);
+    assert_eq!(first, press(&bands[0], 10.0));
+    assert_eq!(gesture(link).await.1, press(&bands[0], 20.0));
+
+    // A drag moves the zero: the same surfaces, updated; the gestures carry the new
+    // revision.
+    let moved = ruler(&display("A", 0), 12.0);
+    overlay_as(link, 3, vec![moved], true).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Update(_)));
+    on_input(press(&bands[0], 30.0));
+    assert_eq!(gesture(link).await.0, 3);
+
+    // Taken down: nothing more is sent, the surfaces being gone.
+    overlay_as(link, 4, Vec::new(), true).await;
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+}
+
+#[tokio::test]
+async fn a_second_masters_rulers_take_the_gestures_and_the_first_hears_none() {
+    use rulers::*;
+    let tower_dir = tempfile::tempdir().unwrap();
+    let (_tower, mut links, mut drawn, mut inputs) = tower_and_masters(tower_dir.path(), 2).await;
+    let ruler_a = ruler(&display("A", 0), 0.0);
+
+    overlay_as(&links[0], 1, vec![ruler_a.clone()], true).await;
+    assert!(matches!(next(&mut drawn).await, Drawn::Show(_)));
+    let mut first = inputs.recv().await.unwrap().unwrap();
+    // The second master shows its own: the first's go, and with them their way back.
+    overlay_as(&links[1], 1, vec![ruler_a.clone()], true).await;
+    assert_eq!(next(&mut drawn).await, Drawn::Hide);
+    let Drawn::Show(bands) = next(&mut drawn).await else {
+        panic!("shown");
+    };
+    let mut second = inputs.recv().await.unwrap().unwrap();
+    second(press(&bands[0], 10.0));
+    assert_eq!(gesture(&mut links[1]).await.1, press(&bands[0], 10.0));
+    // What is left of the first's surfaces says nothing to anybody but the first.
+    first(press(&bands[0], 99.0));
+    let (revision, stale) = gesture(&mut links[0]).await;
+    assert_eq!((revision, stale.at), (1, 99.0));
+    let quiet = tokio::time::timeout(Duration::from_millis(300), links[1].next()).await;
+    assert!(
+        !matches!(
+            quiet,
+            Ok(Some(Event::Control(Control::OverlayInput { .. })))
+        ),
+        "{quiet:?}"
     );
 }

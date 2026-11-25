@@ -15,6 +15,8 @@ struct State {
     input: Vec<crate::input::Input>,
 }
 type Shared = Arc<(Mutex<State>, Condvar)>;
+/// Called by the reader thread when the helper said something: an input or an error.
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
 struct Session {
     child: Child,
     shared: Shared,
@@ -22,7 +24,7 @@ struct Session {
     reader: Option<JoinHandle<()>>,
 }
 impl Session {
-    fn start(mut command: std::process::Command) -> Result<Self, String> {
+    fn start(mut command: std::process::Command, waker: Option<Waker>) -> Result<Self, String> {
         // Never share the parent toolkit's inherited Wayland connection with the helper.
         let mut child = command
             .env_remove("WAYLAND_SOCKET")
@@ -66,6 +68,11 @@ impl Session {
         });
         let receive = shared.clone();
         let reader = std::thread::spawn(move || {
+            let wake = || {
+                if let Some(waker) = &waker {
+                    waker()
+                }
+            };
             let mut reader = std::io::BufReader::new(output);
             loop {
                 let mut line = Vec::new();
@@ -73,7 +80,7 @@ impl Session {
                     .take((MAX_MESSAGE + 1) as u64)
                     .read_until(b'\n', &mut line)
                 {
-                    Ok(0) => return,
+                    Ok(0) => return wake(),
                     Ok(n) if n <= MAX_MESSAGE => match serde_json::from_slice::<Reply>(&line) {
                         Ok(Reply::Ready) => {}
                         Ok(Reply::Input(input)) if input.valid() => {
@@ -84,25 +91,27 @@ impl Session {
                                 return;
                             }
                             state.input.push(input);
+                            drop(state);
+                            wake();
                         }
                         Ok(Reply::Input(_)) => {
                             receive.0.lock().unwrap().error = Some("Invalid overlay input.".into());
-                            return;
+                            return wake();
                         }
                         Ok(Reply::Error(error)) => {
                             receive.0.lock().unwrap().error = Some(error);
-                            return;
+                            return wake();
                         }
                         Err(e) => {
                             receive.0.lock().unwrap().error =
                                 Some(format!("Invalid overlay reply: {e}"));
-                            return;
+                            return wake();
                         }
                     },
                     _ => {
                         receive.0.lock().unwrap().error =
                             Some("Overlay response failed or exceeded its size limit.".into());
-                        return;
+                        return wake();
                     }
                 }
             }
@@ -155,6 +164,18 @@ impl Drop for Session {
 #[derive(Default)]
 pub struct Native {
     session: Option<Session>,
+    waker: Option<Waker>,
+}
+impl Native {
+    /// A backend whose helper's inputs and errors are announced by `waker` as they come,
+    /// for an owner that waits on something else than its own frames
+    /// ([`crate::Standalone`]).
+    pub fn with_waker(waker: Waker) -> Native {
+        Native {
+            session: None,
+            waker: Some(waker),
+        }
+    }
 }
 impl Backend for Native {
     fn take_input(&mut self) -> Vec<crate::input::Input> {
@@ -169,7 +190,7 @@ impl Backend for Native {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             let mut command = std::process::Command::new(exe);
             command.arg("--screen-overlay-host");
-            self.session = Some(Session::start(command)?);
+            self.session = Some(Session::start(command, self.waker.clone())?);
         }
         let session = self.session.as_mut().unwrap();
         session.poll()?;
@@ -196,7 +217,7 @@ mod tests {
     fn helper(script: &str) -> Session {
         let mut command = std::process::Command::new("/bin/sh");
         command.arg("-c").arg(script);
-        Session::start(command).unwrap()
+        Session::start(command, None).unwrap()
     }
     fn error(session: &mut Session) -> String {
         let until = Instant::now() + Duration::from_secs(3);
@@ -246,6 +267,9 @@ mod tests {
     fn environment_does_not_reuse_the_editors_inherited_wayland_socket() {
         let mut command = std::process::Command::new("/bin/sh");
         command.env("WAYLAND_SOCKET","123").arg("-c").arg("read line; if [ -n \"${WAYLAND_SOCKET+x}\" ]; then printf '%s\\n' '{\"Error\":\"inherited\"}'; else printf '%s\\n' '{\"Error\":\"isolated\"}'; fi");
-        assert_eq!(error(&mut Session::start(command).unwrap()), "isolated");
+        assert_eq!(
+            error(&mut Session::start(command, None).unwrap()),
+            "isolated"
+        );
     }
 }

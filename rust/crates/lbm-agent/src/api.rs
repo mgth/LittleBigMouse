@@ -70,6 +70,10 @@
 //! -> {"Id": 15, "Method": "PeerOverlay", "MachineId": "…",     // capability PeerOverlay
 //!     "Bands": [{… lbm_overlay::scene::Band, in that remote's desktop pixels …}]}
 //! <- {"Id": 15, "Result": null}                                // "Bands": [] takes them down
+//!     … with "Interactive": true (capability PeerOverlayInput), what is done on them there
+//!     comes back to that frontend alone, in order:
+//! <- {"Event": "PeerOverlayInput", "MachineId": "…",
+//!     "Input": {… lbm_overlay::input::Input, its band as the remote shows it …}}
 //! ```
 //!
 //! The rulers on a remote are the frontend's that wrote them last: only its empty
@@ -105,7 +109,16 @@ pub const PROTOCOL: u32 = 3;
 ///   of the `Peers` state: what a remote's screens show, for the master's map.
 /// - `PeerOverlay`: the request of that name — the rulers the editor shows, drawn on a
 ///   remote's screens too — and `OverlayError` on a machine of the `Peers` state.
-pub const CAPABILITIES: &[&str] = &["IntrinsicSize", "MultiPc", "PeerWallpapers", "PeerOverlay"];
+/// - `PeerOverlayInput`: `Interactive` on `PeerOverlay`, and the `PeerOverlayInput`
+///   event: the rulers on a remote are dragged there, the frontend that showed them
+///   acting on what is done (docs/multi-pc.md, "Rulers on a remote's screens").
+pub const CAPABILITIES: &[&str] = &[
+    "IntrinsicSize",
+    "MultiPc",
+    "PeerWallpapers",
+    "PeerOverlay",
+    "PeerOverlayInput",
+];
 
 //==================//
 // The contract     //
@@ -386,6 +399,9 @@ pub enum Request {
         machine_id: String,
         #[serde(rename = "Bands", default)]
         bands: Vec<Value>,
+        /// What is done on them there comes back as `PeerOverlayInput` events.
+        #[serde(rename = "Interactive", default)]
+        interactive: bool,
     },
 }
 
@@ -478,6 +494,12 @@ pub fn answer(id: u64, result: Result<Value, String>) -> String {
 /// The `State` event.
 pub fn state_event(snapshot: &Snapshot) -> String {
     json!({ "Event": "State", "State": snapshot }).to_string()
+}
+
+/// The `PeerOverlayInput` event: a gesture on the rulers of remote `machine_id`, for the
+/// frontend that showed them.
+pub fn peer_overlay_input_event(machine_id: &str, input: &Value) -> String {
+    json!({ "Event": "PeerOverlayInput", "MachineId": machine_id, "Input": input }).to_string()
 }
 
 /// The `Peers` event: the multi-PC state, whenever it changes.

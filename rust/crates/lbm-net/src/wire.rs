@@ -185,10 +185,26 @@ pub enum Control {
     /// lower one. The remote takes them down by itself when the link ends. Sent only to a
     /// remote announcing [`OVERLAY_CAPABILITY`]. Added after protocol 1 without a new
     /// version.
+    ///
+    /// `interactive`: the bands take the pointer and the keyboard, and what is done on
+    /// them comes back as [`Control::OverlayInput`]; otherwise they let them through. A
+    /// remote that does not know the field draws them passive, and never answers with
+    /// inputs.
     Overlay {
         revision: u64,
         #[serde(default)]
         bands: Vec<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        interactive: bool,
+    },
+    /// Remote → master: a gesture on one of the interactive overlays of `revision`
+    /// (or an earlier one: a drag outlives the revisions it causes), in order. `input`
+    /// is an `lbm_overlay::input::Input`, its band as the remote shows it. Only the master
+    /// whose overlays are shown is sent them, and it acts on them itself — the remote
+    /// edits nothing. Added after [`Control::Overlay`], without a new version.
+    OverlayInput {
+        revision: u64,
+        input: serde_json::Value,
     },
     /// Remote → master: the overlays of `revision` are not shown, and why — refused, or
     /// taken down because a screen changed under them. Added with [`Control::Overlay`].
@@ -645,6 +661,7 @@ mod tests {
         let show = Control::Overlay {
             revision: 2,
             bands: vec![band.clone()],
+            interactive: false,
         };
         let frame = encode_control(&show).unwrap();
         assert_eq!(
@@ -658,9 +675,32 @@ mod tests {
             hide,
             Control::Overlay {
                 revision: 3,
-                bands: vec![]
+                bands: vec![],
+                interactive: false,
             }
         );
+        // Interactive overlays say so; the gestures come back with their revision.
+        let dragged = Control::Overlay {
+            revision: 4,
+            bands: vec![band.clone()],
+            interactive: true,
+        };
+        let frame = encode_control(&dragged).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&frame[5..]).unwrap(),
+            r#"{"Type":"Overlay","Revision":4,"Bands":[{"Monitor":"B","Side":"Top"}],"Interactive":true}"#
+        );
+        assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(dragged));
+        let input = Control::OverlayInput {
+            revision: 4,
+            input: serde_json::json!({"kind": "Press", "at": 12.0}),
+        };
+        let frame = encode_control(&input).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&frame[5..]).unwrap(),
+            r#"{"Type":"OverlayInput","Revision":4,"Input":{"kind":"Press","at":12.0}}"#
+        );
+        assert_eq!(round_trip(&frame).await.unwrap(), Frame::Control(input));
         let failed = Control::OverlayFailed {
             revision: 2,
             error: "Screen bounds changed.".into(),

@@ -17,8 +17,9 @@
 //! `key|keydown|keyup CODE`, `wheel H V` (1/120ths of a notch), `sleep MS`.
 //! `rulers N` asks the remote to draw "Rulers on screens" on all its screens, measuring
 //! its `N`th screen (0 first), as a master's editor computes them from the `Displays` it
-//! was sent; `norulers` takes them down. What the remote says of them (`OverlayFailed`)
-//! is printed as it comes.
+//! was sent; `norulers` takes them down. `dragrulers N` asks for the same rulers taking
+//! the pointer: what is done on them there (`OverlayInput`) is printed, not acted on.
+//! What the remote says of them (`OverlayFailed`) is printed as it comes.
 //!
 //! It hears of blocks as a master does (`InjectionBlocked`, a Windows remote whose
 //! foreground window is elevated): each one is printed, and one said while the pointer
@@ -47,8 +48,9 @@ const DISPLAYS_PATIENCE: Duration = Duration::from_secs(10);
 enum Step {
     Send(Vec<InputEvent>),
     Sleep(Duration),
-    /// Rulers measuring the remote's screen of that index; `None` takes them down.
-    Rulers(Option<usize>),
+    /// Rulers measuring the remote's screen of that index, and whether they take the
+    /// pointer; `None` takes them down.
+    Rulers(Option<(usize, bool)>),
 }
 
 fn number<T: std::str::FromStr>(
@@ -124,8 +126,9 @@ fn script(words: Vec<String>) -> Result<Vec<Step>, String> {
                 horizontal: number(&mut words, "wheel")?,
                 vertical: number(&mut words, "wheel")?,
             }],
-            "rulers" => {
-                steps.push(Step::Rulers(Some(number(&mut words, "rulers")?)));
+            "rulers" | "dragrulers" => {
+                let index = number(&mut words, "rulers")?;
+                steps.push(Step::Rulers(Some((index, word == "dragrulers"))));
                 continue;
             }
             "norulers" => {
@@ -247,6 +250,16 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                         started.elapsed().as_millis()
                     );
                 }
+                Event::Control(Control::OverlayInput { revision, input }) => {
+                    println!(
+                        "<- {:>6} ms rulers {revision} input {} {} at {} of {}",
+                        started.elapsed().as_millis(),
+                        input["band"]["side"],
+                        input["kind"],
+                        input["at"],
+                        input["length"],
+                    );
+                }
                 Event::Closed(_) => break,
                 _ => {}
             }
@@ -290,9 +303,12 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                 }
             }
             Step::Rulers(measured) => {
-                let bands = match measured {
-                    Some(index) => rulers(&peer.fingerprint, &peer.hello.name, &screens, index)?,
-                    None => Vec::new(),
+                let (bands, interactive) = match measured {
+                    Some((index, interactive)) => (
+                        rulers(&peer.fingerprint, &peer.hello.name, &screens, index)?,
+                        interactive,
+                    ),
+                    None => (Vec::new(), false),
                 };
                 revision += 1;
                 println!(
@@ -301,7 +317,11 @@ async fn drive(address: String, directory: PathBuf, steps: Vec<Step>) -> Result<
                     bands.len()
                 );
                 sender
-                    .control(&Control::Overlay { revision, bands })
+                    .control(&Control::Overlay {
+                        revision,
+                        bands,
+                        interactive,
+                    })
                     .await
                     .map_err(|e| format!("cannot send: {e}"))?;
             }

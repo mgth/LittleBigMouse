@@ -224,9 +224,22 @@ pub struct PeersState {
     pub error: Option<String>,
     /// The machine id of the one remote this machine drives now: the only one whose
     /// screens are in the layout and the one the input stream goes to. `None` when no
-    /// remote is linked. Absent from the state of an agent older than the rule.
-    #[serde(default)]
+    /// remote is linked, and while every linked remote is driven ([`Self::drives_all`]).
+    /// Absent then, as from the state of an agent older than the rule: a frontend that
+    /// finds none merges every linked remote, in machine-id order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_remote: Option<String>,
+    /// Every paired machine linked as a remote is driven and merged, not one selected:
+    /// this machine's hook names the machine of every crossing (docs/multi-pc.md,
+    /// "Several remotes at once"). Not in the API, which says it by having no
+    /// `SelectedRemote`.
+    #[serde(skip)]
+    pub drives_all: bool,
+    /// While [`Self::drives_all`]: the machine ids of the remotes the input stream can
+    /// be relayed to now, sorted — what the hook is told it may drive
+    /// (`Command::Drivable`). Empty otherwise. Not in the API.
+    #[serde(skip)]
+    pub drivable: Vec<String>,
     /// Which choice of the selected remote this state reflects: a new number at every
     /// change of it (to another remote, another link of the same one, or none), never
     /// repeated in the life of the process. The agent tags what it tells the manager of
@@ -301,7 +314,8 @@ impl PeersState {
             .iter()
             .filter(|p| {
                 p.state == PeerState::Paired
-                    && self.selected_remote.as_deref() == Some(p.peer.machine_id.as_str())
+                    && (self.drives_all
+                        || self.selected_remote.as_deref() == Some(p.peer.machine_id.as_str()))
                     && p.role == Role::Remote
                     && p.peer.connected
                     && !p.peer.displays.is_empty()
@@ -450,6 +464,8 @@ pub struct Service {
     notices_rx: Option<mpsc::UnboundedReceiver<Notice>>,
     /// What this machine's hook last said it reads ([`Service::hook_reads_locks`]).
     hook_reads_locks: bool,
+    /// What this machine's hook last said of naming machines ([`Service::hook_names_hosts`]).
+    hook_names_hosts: bool,
     /// What draws the rulers a master of this machine asks for.
     painter: overlay::Painter,
     /// Where this machine's Windows service takes the input stream
@@ -473,6 +489,7 @@ impl Service {
             notices,
             notices_rx: Some(notices_rx),
             hook_reads_locks: false,
+            hook_names_hosts: false,
             painter: overlay::Painter::default(),
             secure_input: None,
         };
@@ -607,6 +624,15 @@ impl Service {
     pub fn hook_locked(&mut self, locked: bool) {
         if let Some(running) = &self.running {
             let _ = running.commands.send(Command::PointerLocked(locked));
+        }
+    }
+
+    /// Whether this machine's hook names the machine of every crossing, as it said when
+    /// it greeted its agent: then every linked remote is driven at once.
+    pub fn hook_names_hosts(&mut self, names: bool) {
+        self.hook_names_hosts = names;
+        if let Some(running) = &self.running {
+            let _ = running.commands.send(Command::HookNamesHosts(names));
         }
     }
 
@@ -838,6 +864,7 @@ impl Service {
             options: self.setup.options.clone(),
             input_endpoint: self.setup.input_endpoint.clone(),
             hook_reads_locks: self.hook_reads_locks,
+            hook_names_hosts: self.hook_names_hosts,
             pointer_lock_shortcut: self
                 .settings
                 .pointer_lock_shortcut
@@ -877,6 +904,8 @@ impl Service {
             listen_address: None,
             error: self.failure.clone(),
             selected_remote: None,
+            drives_all: false,
+            drivable: Vec::new(),
             selection: 0,
             driven: None,
             driven_by: None,
@@ -973,6 +1002,8 @@ mod tests {
             listen_address: None,
             error: None,
             selected_remote: Some(selected.to_owned()),
+            drives_all: false,
+            drivable: Vec::new(),
             selection: 1,
             driven: None,
             driven_by: None,

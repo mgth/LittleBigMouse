@@ -30,21 +30,35 @@
 //! remote that misses the release of Ctrl types every later key with Ctrl held. Where a
 //! queue has no room, the session ends instead, on both sides.
 //!
+//! - **Several remotes** ([`HookInput::set_hosts`], docs/multi-pc.md "Several remotes at
+//!   once"): with a hook that names the machine of each crossing, one connection relays
+//!   to every drivable remote. Each batch is cut at its `Host` markers ([`by_host`]) and
+//!   each run goes to its machine's target, without the marker. The connection outlives
+//!   remotes linking and leaving; the end of a hop is per machine. A run its machine
+//!   has no room or no target for breaks that machine's stream until its next `Enter`:
+//!   its runs are dropped and it is told `Leave` with a send that waits; if the pointer
+//!   is on it, the connection is closed and made again at once, which brings the
+//!   pointer home ([`HookInput::restart`] does the same for a remote's `InputReset`).
+//!   A batch that does not walk ends the connection.
 //! - **Driving** ([`HookInput::driving`]): on a master, whether the remote the stream
 //!   is relayed to holds the pointer now — an `Enter` relayed and no `Leave` since, nor
-//!   the end of the connection. Read off the batches as they pass ([`crossing`]), for the
-//!   state's indicator of the machine that receives the input.
+//!   the end of the connection — and, with several remotes, which one. Read off the
+//!   batches as they pass ([`crossing`]), for the state's indicator of the machine that
+//!   receives the input.
 //!
 //! The hook serves one client, the newest. A machine that is both a master and a remote
 //! at once shares this one connection between the two; nothing more is attempted for
 //! that case yet.
 
+use std::collections::{BTreeMap, HashSet};
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use lbm_ipc::input::{crossing, encode, read_batch, without_locks, write_batch, InputEvent};
+use lbm_ipc::input::{
+    by_host, crossing, encode, read_batch, without_locks, write_batch, InputEvent,
+};
 use lbm_net::link::LinkSender;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -85,6 +99,31 @@ enum Message {
 pub struct Target {
     pub link: LinkSender,
     pub reads_locks: bool,
+}
+
+/// Where a master's hook stream goes: one remote, as with a hook that names no machine,
+/// or every drivable one by machine id.
+#[derive(Clone)]
+enum Relay {
+    One(Option<Target>),
+    Hosts(BTreeMap<String, Target>),
+}
+
+/// The value behind the targets' watch. `epoch` counts [`HookInput::restart`]s: the
+/// targets of several remotes change without ending the hop, a restart always ends it.
+#[derive(Clone)]
+struct Targets {
+    relay: Relay,
+    epoch: u64,
+}
+
+impl Targets {
+    fn relaying(&self) -> bool {
+        match &self.relay {
+            Relay::One(target) => target.is_some(),
+            Relay::Hosts(hosts) => !hosts.is_empty(),
+        }
+    }
 }
 
 /// Where the network side hands batches to the hook, and the end of a stream.
@@ -146,28 +185,37 @@ pub struct HookInput {
     messages: mpsc::Sender<Message>,
     numbered: Arc<AtomicU64>,
     lost: watch::Sender<u64>,
-    target: watch::Sender<Option<Target>>,
+    target: watch::Sender<Targets>,
     driving: watch::Receiver<Driving>,
 }
 
-/// The value behind [`HookInput::driving`]: whether the remote is driven, and the number
-/// of the connection that said so — a relay that outlived its connection (aborted, but
-/// running on another thread that very moment) cannot say it any more.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The value behind [`HookInput::driving`]: whether the remote is driven, which one
+/// when the stream names them, and the number of the connection that said so — a relay
+/// that outlived its connection (aborted, but running on another thread that very
+/// moment) cannot say it any more.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Driving {
     connection: u64,
     pub driven: bool,
+    /// The machine the pointer is on, with several remotes; `None` with one.
+    pub host: Option<String>,
 }
 
 type DrivingSender = std::sync::Arc<watch::Sender<Driving>>;
 
 /// Says what connection `connection` saw, unless another one came since.
 fn drive(driving: &watch::Sender<Driving>, connection: u64, driven: bool) {
+    drive_host(driving, connection, driven, None);
+}
+
+/// [`drive`], naming the machine driven.
+fn drive_host(driving: &watch::Sender<Driving>, connection: u64, driven: bool, host: Option<&str>) {
     driving.send_if_modified(|now| {
-        if now.connection != connection || now.driven == driven {
+        if now.connection != connection || (now.driven == driven && now.host.as_deref() == host) {
             return false;
         }
         now.driven = driven;
+        now.host = host.map(str::to_owned);
         true
     });
 }
@@ -177,7 +225,10 @@ impl HookInput {
     /// talk to, and then every batch is dropped.
     pub fn spawn(endpoint: Option<String>) -> HookInput {
         let (messages, inbox) = mpsc::channel(QUEUE);
-        let (target, targets) = watch::channel(None);
+        let (target, targets) = watch::channel(Targets {
+            relay: Relay::One(None),
+            epoch: 0,
+        });
         let (lost, _) = watch::channel(0);
         let (driving_tx, driving) = watch::channel(Driving::default());
         let reads_locks = Arc::new(AtomicBool::new(false));
@@ -204,6 +255,12 @@ impl HookInput {
         self.driving.borrow().driven
     }
 
+    /// The machine the pointer is on, with several remotes ([`Self::set_hosts`]).
+    pub fn driving_host(&self) -> Option<String> {
+        let driving = self.driving.borrow();
+        driving.host.clone().filter(|_| driving.driven)
+    }
+
     /// Whether the remote the stream is relayed to is driven now (see the module): told
     /// when it changes, never asked again and again.
     pub fn driving(&self) -> watch::Receiver<Driving> {
@@ -227,7 +284,17 @@ impl HookInput {
     }
 
     pub fn set_target(&self, target: Option<Target>) {
-        self.target.send_replace(target);
+        self.target
+            .send_modify(|now| now.relay = Relay::One(target));
+    }
+
+    /// The remotes the hook's stream goes to, by machine id, for a hook that names the
+    /// machine of every crossing. A change of them is not the end of a hop: the
+    /// connection stays, a run for a machine no longer here is dropped (and brings the
+    /// pointer home if it was there). From a single target, or to one, it is.
+    pub fn set_hosts(&self, hosts: BTreeMap<String, Target>) {
+        self.target
+            .send_modify(|now| now.relay = Relay::Hosts(hosts));
     }
 
     /// Ends the hop under way and starts the next at once, to the same link: the remote
@@ -235,7 +302,7 @@ impl HookInput {
     /// only a new crossing sends. The connection is closed — the hook comes home, its
     /// keyboards ungrabbed — the link is told `Leave`, and a new connection is made.
     pub fn restart(&self) {
-        self.target.send_modify(|_| {});
+        self.target.send_modify(|now| now.epoch += 1);
     }
 }
 
@@ -243,9 +310,13 @@ impl HookInput {
 struct Connection {
     writer: Box<dyn AsyncWrite + Unpin + Send>,
     reading: JoinHandle<()>,
-    lost: oneshot::Receiver<()>,
-    /// The link the hook's batches go to, for the whole life of this connection.
-    relaying_to: Option<Target>,
+    /// Resolves when the relay ended by itself; `true` asks for a new connection at once
+    /// (a machine the pointer was on is gone or broken), not a second later.
+    lost: oneshot::Receiver<bool>,
+    /// The link the hook's batches go to, for the whole life of this connection — with
+    /// one remote. With several, the target of the machine the pointer is on now, kept
+    /// by the relay: the one told `Leave` when the connection ends.
+    relaying_to: Arc<Mutex<Option<Target>>>,
     /// The number of the last batch written to it (0: none).
     written: u64,
 }
@@ -260,7 +331,7 @@ impl Drop for Connection {
 async fn run(
     endpoint: Option<String>,
     mut inbox: mpsc::Receiver<Message>,
-    mut targets: watch::Receiver<Option<Target>>,
+    mut targets: watch::Receiver<Targets>,
     lost: watch::Sender<u64>,
     driving: watch::Sender<Driving>,
     reads_locks: Arc<AtomicBool>,
@@ -286,8 +357,14 @@ async fn run(
     // anything before it is.
     let mut leaving: Option<JoinHandle<()>> = None;
     let mut targets_open = true;
+    // What the connection was made for: several remotes keep it across a change of
+    // targets, as long as no restart came.
+    let mut seen = {
+        let now = targets.borrow();
+        (matches!(now.relay, Relay::Hosts(_)), now.epoch)
+    };
     loop {
-        let relaying = targets.borrow().is_some();
+        let relaying = targets.borrow().relaying();
         let may_try = retry_at.is_none_or(|at| Instant::now() >= at);
         if relaying && connection.is_none() && may_try && leaving.is_none() {
             connection = open(
@@ -342,14 +419,14 @@ async fn run(
                     }
                 }
             },
-            _ = async {
+            again = async {
                 match &mut connection {
-                    Some(open) => { let _ = (&mut open.lost).await; }
+                    Some(open) => (&mut open.lost).await.unwrap_or(false),
                     None => std::future::pending().await,
                 }
             } => {
                 lose(&mut connection, &mut leaving, 0);
-                retry_at = Some(Instant::now() + RETRY_AFTER);
+                retry_at = (!again).then(|| Instant::now() + RETRY_AFTER);
             }
             _ = async {
                 match &mut leaving {
@@ -361,11 +438,22 @@ async fn run(
                 if changed.is_err() {
                     targets_open = false;
                 } else {
-                    // Another remote, or none: this hop of the stream is over, and the
-                    // next connection, if any, relays to the new one from its start.
-                    // A machine that is also a remote loses its own session with it.
-                    lose(&mut connection, &mut leaving, 0);
-                    retry_at = None;
+                    let now = {
+                        let now = targets.borrow_and_update();
+                        (matches!(now.relay, Relay::Hosts(_)), now.epoch)
+                    };
+                    // Several remotes before and after, and no restart: the relay
+                    // reads the new targets itself, and the hop goes on.
+                    let goes_on = seen.0 && now == seen;
+                    seen = now;
+                    if !goes_on {
+                        // Another remote, or none: this hop of the stream is over, and
+                        // the next connection, if any, relays to the new one from its
+                        // start. A machine that is also a remote loses its own session
+                        // with it.
+                        lose(&mut connection, &mut leaving, 0);
+                        retry_at = None;
+                    }
                 }
             }
             _ = tokio::time::sleep_until(retry), if waiting_to_retry => {}
@@ -373,17 +461,28 @@ async fn run(
     }
 }
 
-/// Where a connection opened now relays: the current target, unless the last hop's
-/// `Leave` is still on its way. A connection opened meanwhile (this machine also being
-/// a remote, whose batches share the connection) relays nothing.
+/// What a connection opened now relays to: the current target, or the drivable
+/// remotes, unless the last hop's `Leave` is still on its way. A connection opened
+/// meanwhile (this machine also being a remote, whose batches share the connection)
+/// relays nothing.
 fn relay_target(
-    targets: &watch::Receiver<Option<Target>>,
+    targets: &watch::Receiver<Targets>,
     leaving: &Option<JoinHandle<()>>,
-) -> Option<Target> {
-    match leaving {
-        Some(_) => None,
-        None => targets.borrow().clone(),
+) -> Option<Relaying> {
+    if leaving.is_some() {
+        return None;
     }
+    match &targets.borrow().relay {
+        Relay::One(target) => target.clone().map(Relaying::One),
+        Relay::Hosts(_) => Some(Relaying::Hosts(targets.clone())),
+    }
+}
+
+/// What one connection relays to, for its whole life.
+enum Relaying {
+    One(Target),
+    /// The drivable remotes, read again at every batch.
+    Hosts(watch::Receiver<Targets>),
 }
 
 /// Ends a connection: the hook sees it go (and comes home, releasing what it holds),
@@ -403,7 +502,12 @@ fn close(
             std::mem::replace(&mut now.driven, false)
         });
     }
-    let Some(Target { link, .. }) = connection.take().and_then(|c| c.relaying_to.clone()) else {
+    let Some(Target { link, .. }) = connection.take().and_then(|c| {
+        c.relaying_to
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+    }) else {
         return;
     };
     let before = leaving.take();
@@ -418,7 +522,7 @@ fn close(
 /// Connects, and starts relaying what the hook writes to `target`.
 async fn open(
     endpoint: Option<&str>,
-    target: Option<Target>,
+    target: Option<Relaying>,
     retry_at: &mut Option<Instant>,
     driving: &DrivingSender,
 ) -> Option<Connection> {
@@ -435,17 +539,33 @@ async fn open(
                 number = now.connection;
                 false
             });
-            let reading = tokio::spawn(relay(
-                reader,
-                target.clone(),
-                lost,
-                (driving.clone(), number),
-            ));
+            let relaying_to = Arc::new(Mutex::new(match &target {
+                Some(Relaying::One(target)) => Some(target.clone()),
+                _ => None,
+            }));
+            let reading = match target {
+                Some(Relaying::Hosts(targets)) => tokio::spawn(relay_hosts(
+                    reader,
+                    targets,
+                    relaying_to.clone(),
+                    lost,
+                    (driving.clone(), number),
+                )),
+                one => tokio::spawn(relay(
+                    reader,
+                    one.map(|one| match one {
+                        Relaying::One(target) => target,
+                        Relaying::Hosts(_) => unreachable!("matched above"),
+                    }),
+                    lost,
+                    (driving.clone(), number),
+                )),
+            };
             Some(Connection {
                 writer: Box::new(writer),
                 reading,
                 lost: lost_rx,
-                relaying_to: target,
+                relaying_to,
                 written: 0,
             })
         }
@@ -463,7 +583,7 @@ async fn open(
 async fn relay(
     mut reader: impl AsyncRead + Unpin,
     target: Option<Target>,
-    lost: oneshot::Sender<()>,
+    lost: oneshot::Sender<bool>,
     (driving, connection): (DrivingSender, u64),
 ) {
     while let Ok(batch) = read_batch(&mut reader).await {
@@ -481,7 +601,104 @@ async fn relay(
         }
     }
     drive(&driving, connection, false);
-    let _ = lost.send(());
+    let _ = lost.send(false);
+}
+
+/// The hook's batches to the drivable remotes, cut at their `Host` markers. Ends when
+/// the hook goes, a batch does not walk, or the machine the pointer is on can take its
+/// run no more (no room, or no target: its link went) — then asking for a new
+/// connection at once, which brings the pointer home. A run for any other machine that
+/// cannot be taken breaks that machine's stream until its next `Enter`: dropped, and
+/// the machine is told `Leave` with a send that waits.
+async fn relay_hosts(
+    mut reader: impl AsyncRead + Unpin,
+    targets: watch::Receiver<Targets>,
+    relaying_to: Arc<Mutex<Option<Target>>>,
+    lost: oneshot::Sender<bool>,
+    (driving, connection): (DrivingSender, u64),
+) {
+    // The machine the last marker named, and the one the pointer is on.
+    let mut marked: Option<String> = None;
+    let mut entered: Option<String> = None;
+    let mut broken: HashSet<String> = HashSet::new();
+    let mut again = false;
+    'batches: while let Ok(batch) = read_batch(&mut reader).await {
+        let Some(runs) = by_host(&batch) else {
+            eprintln!("[lbm-agent] multi-PC: the hook wrote a batch that does not read");
+            break;
+        };
+        for (host, run) in runs {
+            if let Some(host) = host {
+                marked = Some(host.to_owned());
+            }
+            // Before any marker: no destination, so nowhere to go.
+            let Some(host) = marked.as_deref() else {
+                continue;
+            };
+            let edge = crossing(run);
+            if edge == Some(true) {
+                // A fresh session over there: what broke the last one is past.
+                broken.remove(host);
+            }
+            if broken.contains(host) {
+                continue;
+            }
+            let on_it = entered.as_deref() == Some(host);
+            let target = match &targets.borrow().relay {
+                Relay::Hosts(hosts) => hosts.get(host).cloned(),
+                Relay::One(_) => None,
+            };
+            let taken = match &target {
+                Some(Target { link, reads_locks }) => {
+                    let run = match reads_locks {
+                        true => std::borrow::Cow::Borrowed(run),
+                        false => without_locks(run),
+                    };
+                    link.try_input(&run).is_ok()
+                }
+                None => false,
+            };
+            if !taken {
+                broken.insert(host.to_owned());
+                if let Some(Target { link, .. }) = &target {
+                    // What it holds is released by a Leave that is not lost.
+                    let link = link.clone();
+                    tokio::spawn(async move {
+                        let _ = link.input(&encode(&[InputEvent::Leave])).await;
+                    });
+                }
+                if on_it || edge == Some(true) {
+                    eprintln!(
+                        "[lbm-agent] multi-PC: {host} takes the input stream no more: \
+                         the pointer comes home"
+                    );
+                    if on_it && target.is_some() {
+                        // Already told above.
+                        *relaying_to.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                    }
+                    again = true;
+                    break 'batches;
+                }
+                continue;
+            }
+            match edge {
+                Some(true) => {
+                    entered = Some(host.to_owned());
+                    *relaying_to.lock().unwrap_or_else(|p| p.into_inner()) = target;
+                }
+                Some(false) if on_it => {
+                    entered = None;
+                    *relaying_to.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                }
+                _ => {}
+            }
+            if edge.is_some() {
+                drive_host(&driving, connection, entered.is_some(), entered.as_deref());
+            }
+        }
+    }
+    drive(&driving, connection, false);
+    let _ = lost.send(again);
 }
 
 trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}

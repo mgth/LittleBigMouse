@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use lbm_ipc::peer::PeerDisplay;
 use lbm_layout::model::Layout;
-use lbm_ui::machines::{Blocked, Clipboard, Did, Peer, Role, State};
+use lbm_ui::machines::{Blocked, Clipboard, Did, Discovered, Peer, Role, State};
 use serde_json::{json, Value};
 
 /// The agent's capability for everything here.
@@ -130,6 +130,20 @@ pub fn read(value: &Value) -> Option<(State, Vec<Remote>)> {
             fetching: value["Clipboard"]["Fetching"].as_u64(),
         },
         peers,
+        // Absent from the state of an agent without discovery, or while it does not run.
+        discovered: value["Discovered"].as_array().map(|seen| {
+            seen.iter()
+                .filter(|entry| !text(entry, "MachineId").is_empty())
+                .filter(|entry| !text(entry, "Address").is_empty())
+                .map(|entry| Discovered {
+                    machine_id: text(entry, "MachineId"),
+                    name: text(entry, "Name"),
+                    address: text(entry, "Address"),
+                    paired: entry["Paired"].as_bool().unwrap_or(false),
+                })
+                .collect()
+        }),
+        discovery_error: value["DiscoveryError"].as_str().map(str::to_owned),
     };
     Some((state, remotes))
 }
@@ -446,6 +460,7 @@ impl Controller {
             Did::Accept(id) => ("PeerAccept", json!({ "MachineId": id })),
             Did::Refuse(id) => ("PeerRefuse", json!({ "MachineId": id })),
             Did::Forget(id) => ("PeerForget", json!({ "MachineId": id })),
+            Did::Discover => ("PeerDiscover", json!({})),
         }
     }
 
@@ -803,6 +818,45 @@ mod tests {
     }
 
     #[test]
+    fn the_machines_heard_on_the_network_are_read_and_an_older_agent_has_none() {
+        let (older, _) = read(&state(json!([]))).unwrap();
+        assert_eq!(older.discovered, None);
+        assert_eq!(older.discovery_error, None);
+
+        let mut value = state(json!([]));
+        value["Discovered"] = json!([
+            {"MachineId": "0a", "Name": "tower", "Address": "192.168.4.100:24817",
+             "Paired": true},
+            {"MachineId": "0b", "Address": "192.168.4.7:24817"},
+            {"MachineId": "", "Name": "nobody", "Address": "192.168.4.8:24817"},
+            {"MachineId": "0c", "Name": "nowhere"},
+        ]);
+        value["DiscoveryError"] = json!("discovery stopped: boom");
+        let (read_state, _) = read(&value).unwrap();
+        assert_eq!(
+            read_state.discovered,
+            Some(vec![
+                Discovered {
+                    machine_id: "0a".into(),
+                    name: "tower".into(),
+                    address: "192.168.4.100:24817".into(),
+                    paired: true,
+                },
+                Discovered {
+                    machine_id: "0b".into(),
+                    name: String::new(),
+                    address: "192.168.4.7:24817".into(),
+                    paired: false,
+                },
+            ])
+        );
+        assert_eq!(
+            read_state.discovery_error.as_deref(),
+            Some("discovery stopped: boom")
+        );
+    }
+
+    #[test]
     fn requests_carry_what_the_api_documents() {
         let mut machines = Controller::default();
         machines.heard(&state(json!([])));
@@ -813,6 +867,10 @@ mod tests {
         assert_eq!(
             machines.request(&Did::Accept("0a".into())),
             ("PeerAccept", json!({"MachineId": "0a"}))
+        );
+        assert_eq!(
+            machines.request(&Did::Discover),
+            ("PeerDiscover", json!({}))
         );
         assert_eq!(
             machines.request(&Did::Connect("10.0.0.2".into())),

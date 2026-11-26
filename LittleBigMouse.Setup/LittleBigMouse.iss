@@ -23,7 +23,7 @@ AppName=Little Big Mouse
 AppVersion={#AppVer}
 DefaultDirName={commonpf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
-UninstallDisplayIcon={app}\LittleBigMouse.Ui.Avalonia.exe
+UninstallDisplayIcon={app}\lbm-app.exe
 ; Give the setup .exe the LBM icon, which this installer did not do at first.
 SetupIconFile=..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets\lbm-logo.ico
 Compression=lzma2
@@ -68,11 +68,15 @@ Type: files; Name: "{app}\Uninstall.exe"
 Root: HKLM64; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\LittleBigMouse"; Flags: deletekey; Check: IsWin64
 Root: HKLM32; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\LittleBigMouse"; Flags: deletekey
 
+; The window is lbm-app (egui): it starts the agent beside it when none runs, and the
+; agent's tray Open and logon task come back to it. The C# window is still installed
+; (its build output is what this installer packages, and AppVer is read off it) but
+; nothing launches it any more.
 [Icons]
-Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.exe"
+Name: "{group}\Little Big Mouse"; Filename: "{app}\lbm-app.exe"
 
 [Run]
-Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
+Filename: {app}\lbm-app.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [Code]
 var

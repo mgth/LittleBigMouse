@@ -15,6 +15,10 @@
 //! missing Excluded.txt. Display enumeration uses lbm-display and lbm-layout directly;
 //! the frontend does not link or supervise the hook.
 
+// A release build on Windows is a window, not a console program: launched from its
+// shortcut it would otherwise open a console beside it.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

@@ -14,10 +14,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, DIB_RGB_COLORS, HBITMAP,
+    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, MonitorFromPoint, ReleaseDC, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetSystemMetricsForDpi, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
     NOTIFYICONDATAW,
@@ -293,11 +294,13 @@ fn act(action: Action) {
 /// The menu at the cursor; the entry chosen, acted on.
 ///
 /// Each entry has its pictogram as an item bitmap, made for this showing at the size of
-/// a small icon now (the DPI may have changed since the last one) and freed once the menu
-/// is gone: a menu does not own its items' bitmaps.
+/// a small icon on the screen the menu opens on (screens may differ in scale, and change)
+/// and freed once the menu is gone: a menu does not own its items' bitmaps.
 fn menu(window: HWND) {
-    // SAFETY: a metrics query.
-    let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32;
+    let mut at = POINT::default();
+    // SAFETY: a position query.
+    let _ = unsafe { GetCursorPos(&mut at) };
+    let size = small_icon_at(at);
     let bitmaps: Vec<Option<HBITMAP>> = MenuIcon::ALL
         .iter()
         .map(|icon| make_bitmap(icons::at_least(icon.pixmaps(), size)).ok())
@@ -337,8 +340,6 @@ fn menu(window: HWND) {
                 }
             }
         }
-        let mut at = POINT::default();
-        let _ = GetCursorPos(&mut at);
         // Without the foreground, the menu would not close when clicking elsewhere.
         let _ = SetForegroundWindow(window);
         let chosen = TrackPopupMenu(
@@ -365,6 +366,29 @@ fn best_size(pixmaps: &[Pixmap]) -> &Pixmap {
     // SAFETY: a metrics query.
     let wanted = unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32;
     icons::at_least(pixmaps, wanted)
+}
+
+/// The width of a small icon on the screen at `at`. The agent is aware of each screen's
+/// DPI (per-monitor v2), and `GetSystemMetrics` answers for the primary screen's: a menu
+/// opened on a 200 % screen beside a 100 % primary would get half-size pictograms.
+fn small_icon_at(at: POINT) -> u32 {
+    // SAFETY: a monitor and a DPI query.
+    let dpi = unsafe {
+        let monitor = MonitorFromPoint(at, MONITOR_DEFAULTTONEAREST);
+        let (mut x, mut y) = (0, 0);
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y).map(|()| x)
+    };
+    match dpi {
+        Ok(dpi) => small_icon_for_dpi(dpi),
+        // SAFETY: a metrics query.
+        Err(_) => unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32,
+    }
+}
+
+/// The width of a small icon at `dpi`.
+fn small_icon_for_dpi(dpi: u32) -> u32 {
+    // SAFETY: a metrics query.
+    unsafe { GetSystemMetricsForDpi(SM_CXSMICON, dpi) }.max(16) as u32
 }
 
 /// A menu item's bitmap from a pixmap: a 32-bit top-down DIB whose colours are
@@ -491,6 +515,24 @@ mod tests {
                 assert!(unsafe { DeleteObject(made) }.as_bool());
             }
         }
+    }
+
+    #[test]
+    fn the_pictograms_follow_the_scale_of_the_screen() {
+        // A 200 % screen asks for twice the 100 % size, and gets the bitmap of that size.
+        let (normal, double) = (small_icon_for_dpi(96), small_icon_for_dpi(192));
+        assert_eq!((normal, double), (16, 32));
+        let stop = MenuIcon::Stop.pixmaps();
+        assert_eq!(icons::at_least(stop, double).width, 32);
+        // Wherever the menu opens, a size the pixmaps cover.
+        assert!(small_icon_at(POINT { x: 0, y: 0 }) >= 16);
+        assert!(
+            small_icon_at(POINT {
+                x: -100_000,
+                y: 100_000
+            }) >= 16,
+            "off every screen"
+        );
     }
 
     #[test]

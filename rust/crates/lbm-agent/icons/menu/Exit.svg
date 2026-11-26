@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The tray menu's Exit: lbm-ui's Icon::Power (an open ring and a bar, on a 16 grid),
+     in the black the UI's SVGs use for the foreground. -->
+<svg width="128" height="128" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 4.673,4.249 A 5.8,5.8 0 1 0 11.327,4.249"
+        style="fill:none;stroke:#000000;stroke-width:1.8;stroke-linecap:round" />
+  <path d="M 8,1.5 V 8" style="fill:none;stroke:#000000;stroke-width:1.8;stroke-linecap:round" />
+</svg>

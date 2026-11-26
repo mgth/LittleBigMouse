@@ -14,10 +14,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, DIB_RGB_COLORS,
+    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, MonitorFromPoint, ReleaseDC, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetSystemMetricsForDpi, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
     NOTIFYICONDATAW,
@@ -26,14 +27,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
     DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, GetSystemMetrics,
     PostMessageW, PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow,
-    TrackPopupMenu, TranslateMessage, CW_USEDEFAULT, HICON, ICONINFO, MF_SEPARATOR, MF_STRING, MSG,
-    SM_CXSMICON, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WM_APP, WM_CLOSE,
-    WM_DESTROY, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    SetMenuItemInfoW, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT, HICON, ICONINFO,
+    MENUITEMINFOW, MF_SEPARATOR, MF_STRING, MIIM_BITMAP, MSG, SM_CXSMICON, TPM_NONOTIFY,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_DESTROY, WM_LBUTTONUP,
+    WM_NULL, WM_RBUTTONUP, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
 };
 
 use super::{follow, Action, TrayModel};
 use crate::api::{self, Call};
-use crate::icons::{self, Badge, Pixmap, TrayIcon};
+use crate::icons::{self, Badge, MenuIcon, Pixmap, TrayIcon};
 
 const CLASS_NAME: PCWSTR = w!("LittleBigMouseAgentTray");
 /// The icon's messages to its window.
@@ -290,10 +292,23 @@ fn act(action: Action) {
 }
 
 /// The menu at the cursor; the entry chosen, acted on.
+///
+/// Each entry has its pictogram as an item bitmap, made for this showing at the size of
+/// a small icon on the screen the menu opens on (screens may differ in scale, and change)
+/// and freed once the menu is gone: a menu does not own its items' bitmaps.
 fn menu(window: HWND) {
-    // SAFETY: a popup menu owned here, destroyed below.
+    let mut at = POINT::default();
+    // SAFETY: a position query.
+    let _ = unsafe { GetCursorPos(&mut at) };
+    let size = small_icon_at(at);
+    let bitmaps: Vec<Option<HBITMAP>> = MenuIcon::ALL
+        .iter()
+        .map(|icon| make_bitmap(icons::at_least(icon.pixmaps(), size)).ok())
+        .collect();
+    // SAFETY: a popup menu owned here, destroyed below, before the bitmaps it shows.
     let chosen = unsafe {
         let Ok(menu) = CreatePopupMenu() else {
+            free(bitmaps);
             return;
         };
         let mut labels = Vec::new();
@@ -309,14 +324,22 @@ fn menu(window: HWND) {
                     );
                     let label = PCWSTR(labels.last().unwrap().as_ptr());
                     let _ = AppendMenuW(menu, MF_STRING, i + 1, label);
+                    if let Some(bitmap) = bitmaps[action.icon() as usize] {
+                        let item = MENUITEMINFOW {
+                            cbSize: std::mem::size_of::<MENUITEMINFOW>() as u32,
+                            fMask: MIIM_BITMAP,
+                            hbmpItem: bitmap,
+                            ..Default::default()
+                        };
+                        // By command id: the id given just above.
+                        let _ = SetMenuItemInfoW(menu, (i + 1) as u32, false, &item);
+                    }
                 }
                 None => {
                     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
                 }
             }
         }
-        let mut at = POINT::default();
-        let _ = GetCursorPos(&mut at);
         // Without the foreground, the menu would not close when clicking elsewhere.
         let _ = SetForegroundWindow(window);
         let chosen = TrackPopupMenu(
@@ -332,6 +355,7 @@ fn menu(window: HWND) {
         let _ = DestroyMenu(menu);
         chosen.0 as usize
     };
+    free(bitmaps);
     if let Some(Some(action)) = chosen.checked_sub(1).and_then(|i| Action::MENU.get(i)) {
         act(*action);
     }
@@ -341,10 +365,68 @@ fn menu(window: HWND) {
 fn best_size(pixmaps: &[Pixmap]) -> &Pixmap {
     // SAFETY: a metrics query.
     let wanted = unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32;
-    pixmaps
-        .iter()
-        .find(|p| p.width >= wanted)
-        .unwrap_or_else(|| pixmaps.last().expect("icons of every size"))
+    icons::at_least(pixmaps, wanted)
+}
+
+/// The width of a small icon on the screen at `at`. The agent is aware of each screen's
+/// DPI (per-monitor v2), and `GetSystemMetrics` answers for the primary screen's: a menu
+/// opened on a 200 % screen beside a 100 % primary would get half-size pictograms.
+fn small_icon_at(at: POINT) -> u32 {
+    // SAFETY: a monitor and a DPI query.
+    let dpi = unsafe {
+        let monitor = MonitorFromPoint(at, MONITOR_DEFAULTTONEAREST);
+        let (mut x, mut y) = (0, 0);
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y).map(|()| x)
+    };
+    match dpi {
+        Ok(dpi) => small_icon_for_dpi(dpi),
+        // SAFETY: a metrics query.
+        Err(_) => unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32,
+    }
+}
+
+/// The width of a small icon at `dpi`.
+fn small_icon_for_dpi(dpi: u32) -> u32 {
+    // SAFETY: a metrics query.
+    unsafe { GetSystemMetricsForDpi(SM_CXSMICON, dpi) }.max(16) as u32
+}
+
+/// A menu item's bitmap from a pixmap: a 32-bit top-down DIB whose colours are
+/// premultiplied, which is what a themed menu blends with its alpha.
+pub fn make_bitmap(pixmap: &Pixmap) -> windows::core::Result<HBITMAP> {
+    let info = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: pixmap.width as i32,
+            biHeight: -(pixmap.height as i32),
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let rows = icons::premultiplied_bgra(pixmap);
+    // SAFETY: a DIB of the pixmap's size, filled within it; the caller frees it.
+    unsafe {
+        let screen = GetDC(None);
+        let mut bits = std::ptr::null_mut();
+        let bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &mut bits, None, 0);
+        ReleaseDC(None, screen);
+        let bitmap = bitmap?;
+        std::ptr::copy_nonoverlapping(rows.as_ptr(), bits.cast::<u8>(), rows.len());
+        Ok(bitmap)
+    }
+}
+
+/// Frees what [`make_bitmap`] made.
+fn free(bitmaps: Vec<Option<HBITMAP>>) {
+    for bitmap in bitmaps.into_iter().flatten() {
+        // SAFETY: made by make_bitmap, no longer shown.
+        unsafe {
+            let _ = DeleteObject(bitmap);
+        }
+    }
 }
 
 /// An icon from a pixmap: a 32-bit top-down color bitmap, alpha included, and an empty
@@ -422,6 +504,35 @@ mod tests {
             .collect();
         seen.sort_unstable();
         assert_eq!(seen, (0..STATES.len() * BADGES.len()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn every_menu_icon_makes_a_bitmap() {
+        for icon in MenuIcon::ALL {
+            for pixmap in icon.pixmaps() {
+                let made = make_bitmap(pixmap).expect("a bitmap");
+                // SAFETY: made just above.
+                assert!(unsafe { DeleteObject(made) }.as_bool());
+            }
+        }
+    }
+
+    #[test]
+    fn the_pictograms_follow_the_scale_of_the_screen() {
+        // A 200 % screen asks for twice the 100 % size, and gets the bitmap of that size.
+        let (normal, double) = (small_icon_for_dpi(96), small_icon_for_dpi(192));
+        assert_eq!((normal, double), (16, 32));
+        let stop = MenuIcon::Stop.pixmaps();
+        assert_eq!(icons::at_least(stop, double).width, 32);
+        // Wherever the menu opens, a size the pixmaps cover.
+        assert!(small_icon_at(POINT { x: 0, y: 0 }) >= 16);
+        assert!(
+            small_icon_at(POINT {
+                x: -100_000,
+                y: 100_000
+            }) >= 16,
+            "off every screen"
+        );
     }
 
     #[test]

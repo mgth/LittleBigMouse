@@ -179,6 +179,108 @@ pub fn pixmaps(icon: TrayIcon) -> &'static [Pixmap] {
     &decoded[icon.index()]
 }
 
+/// The pictogram of an entry of the tray's menu.
+///
+/// Under Linux the menu host draws a themed icon by its name when the Icon Naming Spec
+/// has one, so that it follows KDE's light or dark theme as the rest of the menu does;
+/// the UI's pictograms are black where they mean "the foreground", which a dark menu
+/// would swallow. Only Open, the logo, has no such name and goes as a PNG: its colours
+/// read on either background. Windows has no theme to ask: every entry is a bitmap of
+/// the UI's own SVGs (`icons/render.sh`), drawn on the light menu Win32 shows to an
+/// application that did not opt into the dark one — the agent does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuIcon {
+    /// LittleBigMouse's logo: Open shows the application.
+    Logo,
+    Start,
+    Stop,
+    Refresh,
+    Exit,
+}
+
+impl MenuIcon {
+    pub const ALL: [MenuIcon; 5] = [
+        MenuIcon::Logo,
+        MenuIcon::Start,
+        MenuIcon::Stop,
+        MenuIcon::Refresh,
+        MenuIcon::Exit,
+    ];
+
+    /// Its name in the freedesktop Icon Naming Spec, which every conforming theme (Breeze,
+    /// Adwaita, hicolor's fallbacks) draws; `None` for the logo, which is ours.
+    pub fn theme_name(self) -> Option<&'static str> {
+        match self {
+            MenuIcon::Logo => None,
+            MenuIcon::Start => Some("media-playback-start"),
+            MenuIcon::Stop => Some("media-playback-stop"),
+            MenuIcon::Refresh => Some("view-refresh"),
+            MenuIcon::Exit => Some("application-exit"),
+        }
+    }
+
+    /// The embedded PNGs, smallest first.
+    pub fn pngs(self) -> &'static [(u32, &'static [u8])] {
+        &MENU_PNGS[self as usize]
+    }
+
+    /// Every size, decoded, smallest first.
+    pub fn pixmaps(self) -> &'static [Pixmap] {
+        static DECODED: OnceLock<Vec<Vec<Pixmap>>> = OnceLock::new();
+        let decoded = DECODED.get_or_init(|| {
+            MENU_PNGS
+                .iter()
+                .map(|sizes| sizes.iter().map(|(_, png)| decode(png)).collect())
+                .collect()
+        });
+        &decoded[self as usize]
+    }
+}
+
+macro_rules! menu_pngs {
+    ($name:literal) => {
+        menu_pngs!(@ $name, 16, 20, 24, 32, 40, 48)
+    };
+    (@ $name:literal, $($size:literal),*) => {
+        [$((
+            $size,
+            include_bytes!(concat!("../icons/menu/", $name, "-", $size, ".png")).as_slice(),
+        )),*]
+    };
+}
+
+/// In [`MenuIcon`] order.
+const MENU_PNGS: [[(u32, &[u8]); 6]; 5] = [
+    menu_pngs!("open"),
+    menu_pngs!("start"),
+    menu_pngs!("stop"),
+    menu_pngs!("refresh"),
+    menu_pngs!("exit"),
+];
+
+/// The first of `pixmaps` (smallest first) at least `wanted` wide, or the largest: a
+/// smaller one would be stretched into a blur, a larger one is drawn shrunk.
+pub fn at_least(pixmaps: &[Pixmap], wanted: u32) -> &Pixmap {
+    pixmaps
+        .iter()
+        .find(|p| p.width >= wanted)
+        .unwrap_or_else(|| pixmaps.last().expect("icons of every size"))
+}
+
+/// `pixmap` as the rows of a 32-bit DIB: BGRA, its colours premultiplied by their alpha,
+/// as `AlphaBlend` — which draws a menu item's bitmap — reads them. Straight colours there
+/// come out brighter than they are on every half-transparent edge.
+pub fn premultiplied_bgra(pixmap: &Pixmap) -> Vec<u8> {
+    let times = |c: u8, a: u8| ((u16::from(c) * u16::from(a) + 127) / 255) as u8;
+    pixmap
+        .argb
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[a, r, g, b]| [times(b, a), times(g, a), times(r, a), a])
+        .collect()
+}
+
 /// An embedded PNG (8-bit RGBA, as `rsvg-convert` writes them) as ARGB32.
 fn decode(png: &[u8]) -> Pixmap {
     let mut decoder = png::Decoder::new(png);
@@ -296,6 +398,123 @@ mod tests {
             pixel(On, Badge::Driven, 6, 16),
             pixel(On, Badge::None, 6, 16)
         );
+    }
+
+    #[test]
+    fn every_menu_icon_has_every_size_decoded() {
+        for icon in MenuIcon::ALL {
+            let sizes: Vec<u32> = icon.pixmaps().iter().map(|p| p.width).collect();
+            assert_eq!(sizes, [16, 20, 24, 32, 40, 48], "{icon:?}");
+            let named: Vec<u32> = icon.pngs().iter().map(|&(size, _)| size).collect();
+            assert_eq!(named, sizes, "{icon:?}: the table says the sizes it embeds");
+            for p in icon.pixmaps() {
+                assert_eq!(
+                    (p.height as usize, p.argb.len()),
+                    (p.width as usize, (p.width * p.width * 4) as usize)
+                );
+                assert!(
+                    p.argb.chunks(4).any(|px| px[0] == 255),
+                    "{icon:?} draws something"
+                );
+                assert!(
+                    p.argb.chunks(4).any(|px| px[0] == 0),
+                    "{icon:?} is transparent around"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_menu_icons_are_the_uis_pictograms() {
+        // The 48 px renders of the UI's SVGs: Start's green outline, Stop's red one, the
+        // logo's blue screens; Refresh and Exit in the foreground's black.
+        let colours = |icon: MenuIcon| -> Vec<[u8; 3]> {
+            let p = &icon.pixmaps()[5];
+            p.argb
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|px| px[0] == 255)
+                .map(|px| [px[1], px[2], px[3]])
+                .collect()
+        };
+        let has = |icon, test: fn(&[u8; 3]) -> bool| colours(icon).iter().any(test);
+        assert!(has(MenuIcon::Start, |&[r, g, b]| g > 200
+            && r < 100
+            && b < 100));
+        assert!(has(MenuIcon::Stop, |&[r, g, b]| r > 150
+            && g < 60
+            && b < 60));
+        assert!(has(MenuIcon::Logo, |&[r, g, b]| b > 150
+            && r < 60
+            && g < 160));
+        for icon in [MenuIcon::Refresh, MenuIcon::Exit] {
+            assert!(
+                colours(icon)
+                    .iter()
+                    .all(|&[r, g, b]| r < 40 && g < 40 && b < 40),
+                "{icon:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_menu_names_are_the_icon_naming_specs() {
+        let names: Vec<Option<&str>> = MenuIcon::ALL.iter().map(|i| i.theme_name()).collect();
+        assert_eq!(
+            names,
+            [
+                None,
+                Some("media-playback-start"),
+                Some("media-playback-stop"),
+                Some("view-refresh"),
+                Some("application-exit"),
+            ]
+        );
+    }
+
+    #[test]
+    fn at_least_takes_the_next_size_up() {
+        let sizes = MenuIcon::Stop.pixmaps();
+        assert_eq!(at_least(sizes, 16).width, 16);
+        assert_eq!(
+            at_least(sizes, 18).width,
+            20,
+            "125 % of 15 rounds to 18 on some setups"
+        );
+        assert_eq!(at_least(sizes, 32).width, 32);
+        assert_eq!(
+            at_least(sizes, 64).width,
+            48,
+            "past the largest: the largest"
+        );
+        assert_eq!(at_least(sizes, 0).width, 16);
+    }
+
+    #[test]
+    fn premultiplied_bgra_swaps_and_scales_the_colours() {
+        let pixmap = Pixmap {
+            width: 4,
+            height: 1,
+            argb: vec![
+                255, 10, 20, 30, // opaque: unchanged, reordered
+                0, 200, 100, 50, // transparent: black
+                128, 255, 0, 64, // half: halved, rounded
+                51, 255, 255, 255, // a fifth of white
+            ],
+        };
+        assert_eq!(
+            premultiplied_bgra(&pixmap),
+            [30, 20, 10, 255, 0, 0, 0, 0, 32, 0, 128, 128, 51, 51, 51, 51]
+        );
+        // Never a colour over its alpha, which AlphaBlend would overflow.
+        for icon in MenuIcon::ALL {
+            for p in icon.pixmaps() {
+                for px in premultiplied_bgra(p).as_chunks::<4>().0 {
+                    assert!(px[..3].iter().all(|&c| c <= px[3]), "{icon:?}");
+                }
+            }
+        }
     }
 
     #[test]

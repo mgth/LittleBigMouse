@@ -343,15 +343,15 @@ jobs:
 
     # A signing request can come back "successful" having signed nothing that
     # matters, so assert on the executables Windows will actually judge: the UI,
-    # the hook, the agent the UI starts, and the input service and its injector,
-    # which run as LocalSystem.
+    # the window the installer launches (lbm-app), the hook, the agent, and the
+    # input service and its injector, which run as LocalSystem.
     - name: Verify signed binaries
       id: signed
       run: |
         $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
         if (-not $ui) { throw 'SignPath returned no signed UI executable' }
         $dir = $ui.Directory.FullName
-        $names = 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
+        $names = 'lbm-app.exe', 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
         foreach ($target in @($ui.FullName) + ($names | ForEach-Object { Join-Path $dir $_ })) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target

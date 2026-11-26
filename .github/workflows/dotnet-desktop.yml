@@ -201,6 +201,19 @@ jobs:
     - name: Stage window next to UI output
       run: Copy-Item rust\target\release\lbm-app.exe (Join-Path $env:UI_OUTPUT 'lbm-app.exe')
 
+    # lbm-app reads its pictures (manufacturer logos under Icon/Pnp, the LBM ones) from
+    # an icons folder beside its exe (`icons_root`); the C# window has them embedded,
+    # so nothing in its build output carries them. Without this, an installed or
+    # portable lbm-app draws the screen map with no logo. The Dell logo stands for
+    # the tree: present at its path, the layout `icons_root` expects is too.
+    - name: Stage window pictures next to UI output
+      run: |
+        $icons = Join-Path $env:UI_OUTPUT 'icons'
+        if (Test-Path $icons) { Remove-Item -Recurse -Force $icons }
+        Copy-Item -Recurse LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets $icons
+        $dell = Join-Path $icons 'Icon\Pnp\Dell.DEL.DLL.svg'
+        if (-not (Test-Path -LiteralPath $dell)) { throw "missing ${dell}: lbm-app would draw no manufacturer logo" }
+
     # The multi-PC input service and the injector it launches
     # (docs/multi-pc-service-windows.md). In the portable too, where nothing installs
     # them: the installer creates the service only when its task is ticked, and the

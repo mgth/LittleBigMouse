@@ -53,6 +53,10 @@ Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags
 ; on a wildcard that matches nothing. Add it back with the file, if one ever needs
 ; shipping again.
 Source: "{#SourceDir}\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+; lbm-app's pictures (manufacturer logos, LBM icons), read from icons\ beside it. CI
+; stages them there; a wildcard that matched nothing would stop the compile, so an
+; installer cannot be built without them.
+Source: "{#SourceDir}\icons\*"; DestDir: "{app}\icons"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 
 ;Source: "..\bin\x86\Release\net10.0\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
 ;Source: "..\bin\x86\Release\net10.0\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode

@@ -56,6 +56,8 @@ impl ksni::Tray for AgentTray {
             .map(|entry| match *entry {
                 Some(action) => StandardItem {
                     label: action.label().to_owned(),
+                    icon_name: action.icon().theme_name().unwrap_or_default().to_owned(),
+                    icon_data: menu_png(action.icon()),
                     activate: Box::new(move |t: &mut AgentTray| t.0.act(action)),
                     ..Default::default()
                 }
@@ -64,6 +66,20 @@ impl ksni::Tray for AgentTray {
             })
             .collect()
     }
+}
+
+/// The PNG a menu entry carries when the theme has no icon of that name (the logo): the
+/// 32 px one, which the host shrinks for a menu at 100 % and keeps sharp at 200 %. An
+/// entry with a name carries none, so that no host prefers our black over its theme.
+fn menu_png(icon: crate::icons::MenuIcon) -> Vec<u8> {
+    if icon.theme_name().is_some() {
+        return Vec::new();
+    }
+    icon.pngs()
+        .iter()
+        .find(|&&(size, _)| size == 32)
+        .map(|&(_, png)| png.to_vec())
+        .unwrap_or_default()
 }
 
 /// Puts the tray up and keeps it on the agent's state until the agent goes. Without a
@@ -141,6 +157,32 @@ mod tests {
             })
             .collect();
         assert_eq!(labels, ["Open", "Start", "Stop", "Refresh", "-", "Exit"]);
+        let icons: Vec<(String, bool)> = tray
+            .menu()
+            .iter()
+            .filter_map(|item| match item {
+                MenuItem::Standard(s) => Some((s.icon_name.clone(), !s.icon_data.is_empty())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            icons,
+            [
+                (String::new(), true),
+                ("media-playback-start".to_owned(), false),
+                ("media-playback-stop".to_owned(), false),
+                ("view-refresh".to_owned(), false),
+                ("application-exit".to_owned(), false),
+            ],
+            "a theme's icon where it has one, else ours"
+        );
+        let MenuItem::Standard(open) = &tray.menu()[0] else {
+            panic!("an entry");
+        };
+        assert!(
+            open.icon_data.starts_with(b"\x89PNG"),
+            "a PNG, as DBusMenu wants"
+        );
 
         let MenuItem::Standard(stop) = tray.menu().remove(2) else {
             panic!("an entry");

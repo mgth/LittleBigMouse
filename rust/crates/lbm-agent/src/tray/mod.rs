@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request};
-use crate::icons::{Badge, TrayIcon};
+use crate::icons::{Badge, MenuIcon, TrayIcon};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -65,6 +65,18 @@ impl Action {
             Action::Stop => "Stop",
             Action::Refresh => "Refresh",
             Action::Exit => "Exit",
+        }
+    }
+
+    /// Its pictogram, the UI's for the same thing: Start and Stop are the toolbar's
+    /// buttons, Refresh its reload, Open the application's logo.
+    pub fn icon(self) -> MenuIcon {
+        match self {
+            Action::Open => MenuIcon::Logo,
+            Action::Start => MenuIcon::Start,
+            Action::Stop => MenuIcon::Stop,
+            Action::Refresh => MenuIcon::Refresh,
+            Action::Exit => MenuIcon::Exit,
         }
     }
 
@@ -301,6 +313,21 @@ mod tests {
         tray.act(Action::Open);
         assert_eq!(opened.load(Ordering::Relaxed), 1);
         assert!(calls.try_recv().is_err(), "Open asks the agent nothing");
+    }
+
+    #[test]
+    fn every_entry_has_an_icon_of_its_own() {
+        let icons: Vec<MenuIcon> = Action::MENU.iter().flatten().map(|a| a.icon()).collect();
+        assert_eq!(
+            icons,
+            [
+                MenuIcon::Logo,
+                MenuIcon::Start,
+                MenuIcon::Stop,
+                MenuIcon::Refresh,
+                MenuIcon::Exit
+            ]
+        );
     }
 
     #[test]

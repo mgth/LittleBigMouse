@@ -339,14 +339,21 @@ end;
   settings stay. The run level stays too, except outside Program Files, where an
   elevated task would hand administrator rights to whoever can replace the agent. A
   task this cannot rewrite is logged and left to the agent. }
+{ What RetargetLogonTask was doing when a COM call failed: the Task Scheduler's
+  exceptions often come back with no message, and the log has to say which call. }
+var
+  RetargetStep: String;
+
 procedure RetargetLogonTask(Folder, Task: Variant);
 var
-  Definition, Action: Variant;
+  Definition, Action, Principal: Variant;
   Name, Launched: String;
 begin
+  RetargetStep := 'reading a task';
   Name := Task.Name;
   if Pos('LittleBigMouse_', Name) <> 1 then
     Exit;
+  RetargetStep := 'reading ' + Name;
   Definition := Task.Definition;
   if Definition.Actions.Count <> 1 then
     Exit;
@@ -355,14 +362,21 @@ begin
   if CompareText(RemoveQuotes(Launched),
                  ExpandConstant('{app}\LittleBigMouse.Ui.Avalonia.exe')) <> 0 then
     Exit;
+  RetargetStep := 'changing the program of ' + Name;
   Action.Path := ExpandConstant('{app}\lbm-agent.exe');
   Action.Arguments := '';
   Action.WorkingDirectory := ExpandConstant('{app}');
+  Principal := Definition.Principal;
   { TASK_RUNLEVEL_LUA }
-  if not InProgramFiles then
-    Definition.Principal.RunLevel := 0;
-  { TASK_UPDATE, TASK_LOGON_INTERACTIVE_TOKEN: no password. }
-  Folder.RegisterTaskDefinition(Name, Definition, 4, Null, Null, 3);
+  if not InProgramFiles then begin
+    RetargetStep := 'lowering the run level of ' + Name;
+    Principal.RunLevel := 0;
+  end;
+  { TASK_UPDATE, for the account the task already runs as, with its interactive token
+    (TASK_LOGON_INTERACTIVE_TOKEN): no password. Unassigned rather than Null: the
+    Task Scheduler takes VT_NULL for a value, VT_EMPTY for an argument left out. }
+  RetargetStep := 'registering ' + Name + ' for ' + String(Principal.UserId);
+  Folder.RegisterTaskDefinition(Name, Definition, 4, Principal.UserId, Unassigned, 3);
   Log('Logon task ' + Name + ' now launches the agent');
 end;
 
@@ -381,7 +395,8 @@ begin
       try
         RetargetLogonTask(Folder, Tasks.Item(I));
       except
-        Log('A logon task could not be pointed at the agent: ' + GetExceptionMessage);
+        Log('A logon task could not be pointed at the agent (' + RetargetStep + '): ' +
+            GetExceptionMessage);
       end;
   except
     Log('The logon tasks could not be read: ' + GetExceptionMessage);

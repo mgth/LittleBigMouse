@@ -121,6 +121,7 @@
     "FocusRestoreApps": "",
     "HideTrayIcon": false,
     "BoundToAgent": false,
+    "IncludeBetaUpdates": false,
     "ExcludedDefaultsVersion": 2
   }
 }

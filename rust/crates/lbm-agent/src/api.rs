@@ -492,6 +492,15 @@ pub struct Snapshot {
     /// (`crate::input_sharing`): never watched in between. Additive; absent when none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub input_sharing: Vec<lbm_ipc::sharing::Running>,
+    /// The user asked for the update check at startup and once a day (`AutoUpdate`).
+    /// Read by the agent's own check (`crate::update`, Windows). Additive; absent
+    /// before there are options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_update: Option<bool>,
+    /// The update check also offers pre-releases (`IncludeBetaUpdates`). Additive;
+    /// absent before there are options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_beta_updates: Option<bool>,
 }
 
 /// An answer to request `id`.

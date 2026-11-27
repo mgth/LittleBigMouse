@@ -209,6 +209,12 @@ pub trait AgentWorld: World {
         None
     }
 
+    /// The update settings: whether to check at startup and once a day, and whether
+    /// betas are offered. `None` before there are options.
+    fn update_options(&self) -> Option<(bool, bool)> {
+        None
+    }
+
     /// The rescue shortcut the options name.
     fn rescue_shortcut(&self) -> Option<String> {
         None
@@ -945,6 +951,12 @@ impl<S: LayoutStore, P: PersistencePlatform> AgentWorld for SystemWorld<S, P> {
         self.layout
             .as_ref()
             .map(|l| (l.options.load_at_startup, l.options.hide_tray_icon))
+    }
+
+    fn update_options(&self) -> Option<(bool, bool)> {
+        self.layout
+            .as_ref()
+            .map(|l| (l.options.auto_update, l.options.include_beta_updates))
     }
 
     fn rescue_shortcut(&self) -> Option<String> {

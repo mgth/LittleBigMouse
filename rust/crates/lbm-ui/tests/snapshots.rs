@@ -177,6 +177,8 @@ fn settings_cards() {
     let mut results = egui_kittest::SnapshotResults::new();
     for (page, name) in [
         (Page::General, "settings-cards"),
+        // The settings only Windows acts on: elevation and the update check.
+        (Page::General, "settings-windows"),
         (Page::Mouse, "settings-mouse"),
         (Page::Layout, "settings-layout"),
         (Page::Applications, "settings-applications"),
@@ -210,7 +212,8 @@ fn settings_cards() {
                         &["/usr/bin/example".into()],
                     );
                 } else {
-                    options::panel(ui, &mut options, false, &mut recording, None, page);
+                    let windows = name == "settings-windows";
+                    options::panel(ui, &mut options, windows, &mut recording, None, page);
                 }
             });
         });

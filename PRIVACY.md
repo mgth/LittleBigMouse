@@ -4,15 +4,18 @@ Little Big Mouse collects no analytics and sends no telemetry. There is no crash
 
 ## When it uses the network
 
-Three cases, all of them either initiated by you or announced here:
+Four cases, all of them either initiated by you or announced here:
 
+- **Update check** (Windows only) — the application asks the public GitHub Releases API, `https://api.github.com/repos/mgth/LittleBigMouse/releases`, whether a newer version exists. It sends no information about you or your machine beyond what any HTTP request reveals: your IP address and a `LittleBigMouse` user agent. GitHub's privacy terms apply to that request. On Linux the check is disabled entirely — your package manager owns updates.
+  - *When.* In v6 the agent (`lbm-agent`, the program in the notification area) asks a minute after it starts, then once a day while it runs, and only while **Check for updates automatically** is on and its tray icon is shown. It also asks whenever you choose **Check for update** in its tray menu, whatever that option says. **Include beta versions** decides whether pre-releases are offered; it changes nothing about what is sent. The 5.x C# application asked at startup only.
+  - *Installing.* Nothing is downloaded until you click the notice that announces a new version. The installer then comes from the release's own file on GitHub (`github.com/mgth/LittleBigMouse/releases/download/…`, served through GitHub's download host) into `%TEMP%\LittleBigMouse-update\`. It is run, elevated, only if its Authenticode signature is valid and signed by SignPath Foundation (see [SIGNING.md](SIGNING.md)). Checking that signature may make Windows contact the certificate's revocation servers. An installer that fails the check is deleted unrun, and the notice offers the release page in your browser instead. The folder is emptied at the next download.
 - **Smart-TV discovery** — when you use the monitor control features, the application sends SSDP multicast on your local network (`239.255.255.250:1900`) and probes the devices that answer. Samsung Tizen sets are probed on `http://<tv>:8001/api/v2/`, Hisense VIDAA sets on their device descriptor endpoint.
 - **Smart-TV control** — pairing and commands travel to the television over your local network, by WebSocket (Samsung) or MQTT (Hisense).
 - **Multi-PC mode** — off by default; see the next section.
 
 Smart-TV traffic never leaves your network. Multi-PC traffic goes directly to the machines you paired, at the addresses you typed or that discovery found on your local networks. Nothing is relayed through a third party.
 
-The 5.x C# application also asks the public GitHub Releases API, `https://api.github.com/repos/Mgth/LittleBigMouse/releases`, whether a newer version exists (Windows only; your IP address and a `LittleBigMouse` user agent are all it reveals, and GitHub's privacy terms apply). The v6 Rust programs do not check for updates. The 5.x installer additionally downloads the .NET 10 Runtime from Microsoft's `aka.ms` channel link if it is missing; the v6 installer downloads nothing. You download releases from GitHub yourself.
+The 5.x installer additionally downloads the .NET 10 Runtime from Microsoft's `aka.ms` channel link if it is missing; the v6 installer downloads nothing.
 
 ## The multi-PC mode
 

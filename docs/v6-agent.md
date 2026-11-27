@@ -148,7 +148,8 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   n'envoie rien — et un aperçu est un Load **et** un Run, donc sans cela le moteur
   continuerait de piloter une disposition que personne n'a enregistrée, sans rien à l'écran
   pour l'arrêter. Le départ d'un autre frontend ne met fin à rien.
-  `Previewing`, `Saved`, `LoadAtStartup` et `HideTrayIcon` dans l'état.
+  `Previewing`, `Saved`, `LoadAtStartup`, `HideTrayIcon`, `AutoUpdate` et
+  `IncludeBetaUpdates` dans l'état.
   Sous Windows (`winpipe`) : l'agent trouve le tube du hook de sa session
   (`LittleBigMouse-v1-session-{id}`, celui du client C#) et sert l'API sur le sien
   (`LittleBigMouse-Agent-v1-session-{id}`), sécurisé comme celui du hook : SYSTEM et
@@ -203,10 +204,25 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   (stabilisation, puis chien de garde), et le verrou est repris. Rien n'est enregistré :
   l'utilisateur n'a rien arrêté. Sans bus système ni logind, la veille passe inaperçue,
   comme avant.
+- Mises à jour (`update`, C# `ApplicationUpdaterViewModel`), Windows seulement : une
+  minute après le démarrage, puis une fois par jour, si `AutoUpdate` est vrai, et à
+  chaque « Check for update » du tray. La liste vient de l'API GitHub Releases. Les
+  brouillons sont écartés, les pré-versions ne sont retenues que si `IncludeBetaUpdates`
+  est vrai, et il faut un installeur `.exe` hébergé sous les releases du dépôt. La version
+  est lue dans le nom de la release, sinon dans son tag, et comparée à `LBM_VERSION`
+  (`build.rs`). Une version plus récente est annoncée une fois par une bulle du tray.
+  Un clic sur la bulle télécharge l'installeur dans `%TEMP%\LittleBigMouse-update`. Le
+  fichier est vérifié : `WinVerifyTrust` avec révocation sur toute la chaîne, et un
+  signataire nommé exactement `SignPath Foundation`. Il est ensuite lancé élevé
+  (`runas`). Un installeur refusé est supprimé sans avoir été lancé, et la bulle propose
+  la page de la release. Sans icône (`HideTrayIcon`), aucune vérification automatique
+  n'est faite : rien ne pourrait en afficher le résultat.
 - Tray (`tray`, C# `TrayIconController`) : un frontend comme les autres, dans le processus.
   Il suit l'état de l'agent par l'API (`Subscribe`) et son menu envoie les mêmes requêtes
-  (Ouvrir, Start, Stop, Rafraîchir, Quitter ; pas de mise à jour : le paquet de la
-  distribution s'en charge). Le modèle (icône, état en mots, menu, requêtes) est commun ;
+  (Ouvrir, Start, Stop, Rafraîchir, Quitter ; sous Linux, pas de mise à jour : le paquet
+  de la distribution s'en charge). Sous Windows le menu a aussi « Check for update », et
+  les avis de la vérification des mises à jour (`update`) sont les bulles de l'icône. Le
+  modèle (icône, état en mots, menu, requêtes) est commun ;
   `ksni` le dessine sous Linux (sans GTK), la zone de notification sous Windows
   (`Shell_NotifyIcon` : fenêtre cachée top-level sur son fil, clic gauche = Ouvrir, clic
   droit = menu, icône remise quand l'explorateur redémarre — `TaskbarCreated`). Icônes du

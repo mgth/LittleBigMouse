@@ -21,6 +21,7 @@ fn every_setting_the_panel_moves_survives_the_wire() {
     // as the default rather than as the value we set.
     let mut edited = LayoutOptions::default();
     edited.auto_update = !edited.auto_update;
+    edited.include_beta_updates = !edited.include_beta_updates;
     edited.start_minimized = !edited.start_minimized;
     edited.hide_tray_icon = !edited.hide_tray_icon;
     edited.bound_to_agent = !edited.bound_to_agent;
@@ -49,6 +50,11 @@ fn every_setting_the_panel_moves_survives_the_wire() {
 
     for (name, got, want) in [
         ("auto_update", landed.auto_update, edited.auto_update),
+        (
+            "include_beta_updates",
+            landed.include_beta_updates,
+            edited.include_beta_updates,
+        ),
         (
             "start_minimized",
             landed.start_minimized,

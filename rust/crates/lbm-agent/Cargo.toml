@@ -41,6 +41,8 @@ tokio-native-tls = "0.3"
 roxmltree = "0.21"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 reqwest = { version = "0.13", default-features = false }
+# The update check (update/): versions as GitHub's releases name them.
+semver = "1"
 
 url = "2"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
@@ -61,6 +63,14 @@ zbus = { version = "5", default-features = false, features = ["async-io"] }
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 
+# The update check (update/windows.rs) reaches GitHub over HTTPS: SChannel, as the
+# native-tls already here, and the system proxy. Windows only, so the Linux agent links
+# no TLS client it has no use for.
+[target.'cfg(windows)'.dependencies.reqwest]
+version = "0.13"
+default-features = false
+features = ["native-tls-no-alpn", "system-proxy"]
+
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [
@@ -72,6 +82,9 @@ features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
+    "Win32_Security_WinTrust",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Console",
@@ -99,3 +112,5 @@ roxmltree = "0.20"
 
 [dev-dependencies]
 tempfile.workspace = true
+# The update check's timer, run on paused time (update/tests.rs).
+tokio = { workspace = true, features = ["test-util"] }

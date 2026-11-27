@@ -90,5 +90,12 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
+# The VERSIONINFO resource of the Windows exe (see build.rs). Not under a
+# [target.'cfg(windows)'] table: build-dependencies resolve against the host, and
+# build.rs itself does nothing off Windows. Same versions as lbm-hook's.
+[build-dependencies]
+winresource = "0.1.34"
+roxmltree = "0.20"
+
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,21 +1,21 @@
 ﻿; -- LittleBigMouse.iss --
-; SourceDir is where the packaged binaries are read from. It defaults to the local
-; build output, so a manual compile keeps working unchanged; the release workflow
-; overrides it (ISCC /DSourceDir=...) to point at the binaries SignPath sent back,
-; because the installer has to carry the *signed* exe and dlls, not the build ones.
+; The package is the Rust binaries and lbm-app's pictures, nothing else: no managed
+; code, so no runtime to install first.
+;
+; SourceDir is where they are read from. It defaults to the folder CI stages them in
+; (dotnet-desktop.yml, "Stage the package"), which a manual compile has to fill the
+; same way; the release workflow overrides it (ISCC /DSourceDir=...) to point at the
+; binaries SignPath sent back, because the installer has to carry the *signed* ones.
 #ifndef SourceDir
-  #define SourceDir "..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0"
+  #define SourceDir "..\artifacts\windows"
 #endif
 
 ; AppVer is normally passed by CI from the git tag (ISCC /DAppVer=5.3.0-beta.2)
 ; so betas are distinguishable in Programs & Features and in the installer name.
-; Falls back to the built exe's numeric FileVersion for a manual local compile.
+; Falls back to the agent's numeric FileVersion for a manual local compile.
 #ifndef AppVer
-  #define AppVer GetVersionNumbersString(SourceDir + '\LittleBigMouse.Ui.Avalonia.exe')
+  #define AppVer GetVersionNumbersString(SourceDir + '\lbm-agent.exe')
 #endif
-
-; The hook daemon is staged into the UI output before the installer is compiled,
-; so it is packaged by the UI *.exe line below and needs no source of its own.
 
 [Setup]
 AppId={{C170D4ED-CDCC-4383-8907-B85461E643FF}
@@ -24,7 +24,8 @@ AppVersion={#AppVer}
 DefaultDirName={commonpf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
 UninstallDisplayIcon={app}\lbm-app.exe
-; Give the setup .exe the LBM icon, which this installer did not do at first.
+; Give the setup .exe the LBM icon, which this installer did not do at first. The
+; same source file lbm-app embeds (crates/lbm-app/build.rs).
 SetupIconFile=..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets\lbm-logo.ico
 Compression=lzma2
 SolidCompression=yes
@@ -32,7 +33,7 @@ OutputDir="."
 ArchitecturesInstallIn64BitMode=x64
 OutputBaseFilename=LittleBigMouse_{#AppVer}
 ; Force-close the running app instead of asking the user: the Restart Manager's
-; polite WM_CLOSE is treated as "minimize to tray" by the UI and ignored by the
+; polite WM_CLOSE is treated as "minimize to tray" by the 5.x UI and ignored by the
 ; windowless hook, so the default (CloseApplications=yes) leaves files locked.
 ; A hard taskkill in [Code] backs this up (see StopLittleBigMouse).
 CloseApplications=force
@@ -46,25 +47,58 @@ RestartApplications=no
 Name: "secureinput"; Description: "Let another PC (multi-PC master) drive this one everywhere, UAC prompts and the lock screen included (Windows service, approved masters only)"; Flags: unchecked
 
 [Files]
-Source: "{#SourceDir}\*.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
-Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
-; No *.xml line here: the build output has not contained one since the Layout and
-; Vcp plugins stopped copying their unused colors.xml, and ISCC aborts the compile
-; on a wildcard that matches nothing. Add it back with the file, if one ever needs
-; shipping again.
-Source: "{#SourceDir}\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+; Named one by one: a binary missing from SourceDir stops the compile, and nothing
+; that merely happens to lie there is shipped. These five are what SIGNING.md signs.
+Source: "{#SourceDir}\lbm-app.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: ignoreversion
+Source: "{#SourceDir}\lbm-agent.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: ignoreversion
+Source: "{#SourceDir}\LittleBigMouse.Hook.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: ignoreversion
+Source: "{#SourceDir}\lbm-service.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: ignoreversion
+Source: "{#SourceDir}\lbm-inject.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: ignoreversion
 ; lbm-app's pictures (manufacturer logos, LBM icons), read from icons\ beside it. CI
 ; stages them there; a wildcard that matched nothing would stop the compile, so an
 ; installer cannot be built without them.
 Source: "{#SourceDir}\icons\*"; DestDir: "{app}\icons"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 
-;Source: "..\bin\x86\Release\net10.0\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
-;Source: "..\bin\x86\Release\net10.0\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode
-;Source: "..\bin\x86\Release\net10.0\*.xml"; DestDir: "{app}"; Check: not Is64BitInstallMode; Flags: recursesubdirs ignoreversion
-
 [InstallDelete]
 ; Old NSIS install (<= 5.2.3) lived in the same folder; drop its leftover uninstaller.
 Type: files; Name: "{app}\Uninstall.exe"
+; The C# application of 5.x (and of the first v6 builds), replaced by lbm-app: Inno
+; does not remove on an update what a new version no longer ships. Left there, its
+; window would still start from an old logon task or a pinned shortcut, beside the
+; new agent. Its libraries have no list that holds across versions, so they go by
+; pattern, which is only safe in a folder that is Little Big Mouse's own and did hold
+; that application (HadCSharpApplication). This installer ships no .dll.
+Type: files; Name: "{app}\*.dll"; Check: HadCSharpApplication
+Type: files; Name: "{app}\*.deps.json"; Check: HadCSharpApplication
+Type: files; Name: "{app}\*.runtimeconfig.json"; Check: HadCSharpApplication
+Type: filesandordirs; Name: "{app}\runtimes"; Check: HadCSharpApplication
+; The satellite folders of Microsoft.Win32.TaskScheduler, then the folders if that
+; left them empty.
+Type: files; Name: "{app}\de\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\de"; Check: HadCSharpApplication
+Type: files; Name: "{app}\es\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\es"; Check: HadCSharpApplication
+Type: files; Name: "{app}\fr\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\fr"; Check: HadCSharpApplication
+Type: files; Name: "{app}\it\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\it"; Check: HadCSharpApplication
+Type: files; Name: "{app}\ja\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\ja"; Check: HadCSharpApplication
+Type: files; Name: "{app}\pl\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\pl"; Check: HadCSharpApplication
+Type: files; Name: "{app}\ru\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\ru"; Check: HadCSharpApplication
+Type: files; Name: "{app}\sv\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\sv"; Check: HadCSharpApplication
+Type: files; Name: "{app}\tr\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\tr"; Check: HadCSharpApplication
+Type: files; Name: "{app}\zh-CN\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\zh-CN"; Check: HadCSharpApplication
+Type: files; Name: "{app}\zh-Hant\*.resources.dll"; Check: HadCSharpApplication
+Type: dirifempty; Name: "{app}\zh-Hant"; Check: HadCSharpApplication
+; Its own executables, by name. Last: the first one is what the checks above look for.
+Type: files; Name: "{app}\LittleBigMouse.Ui.Loader.exe"
+Type: files; Name: "{app}\LittleBigMouse.Ui.Avalonia.exe"
 
 [Registry]
 ; Remove the stale "LittleBigMouse" (NSIS, <= 5.2.3) Programs & Features entry so it
@@ -73,9 +107,7 @@ Root: HKLM64; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\Littl
 Root: HKLM32; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\LittleBigMouse"; Flags: deletekey
 
 ; The window is lbm-app (egui): it starts the agent beside it when none runs, and the
-; agent's tray Open and logon task come back to it. The C# window is still installed
-; (its build output is what this installer packages, and AppVer is read off it) but
-; nothing launches it any more.
+; agent's tray Open and logon task come back to it.
 [Icons]
 Name: "{group}\Little Big Mouse"; Filename: "{app}\lbm-app.exe"
 
@@ -84,93 +116,15 @@ Filename: {app}\lbm-app.exe; Description: Run Application; Flags: postinstall no
 
 [Code]
 var
-  DotNetDownloadPage: TDownloadWizardPage;
-  DotNetInstallAttempted: Boolean;
+  CSharpApplicationFound: Boolean;
 
-{ The app ships framework-dependent: it needs the .NET 10 Runtime (x64), which a
-  freshly (re)installed Windows does not have (#510) — and a missing runtime means
-  the exe just shows an apphost dialog, or nothing at all. Detect the standard
-  install location; when missing, pull the runtime from the official aka.ms
-  channel link and install it silently before the files are copied. If the
-  download or the install fails, the app files are still installed and the user
-  is pointed at the manual download page. }
-function DotNet10RuntimeInstalled: Boolean;
-var
-  FindRec: TFindRec;
+{ Whether the folder installed into is Little Big Mouse's own and held the C#
+  application, as it was before this install touched it (set by PrepareToInstall:
+  [InstallDelete] removes the file looked for). The folder's name is the guard for the
+  patterns deleted on this answer: Setup appends it to a folder picked in the wizard. }
+function HadCSharpApplication: Boolean;
 begin
-  { 32-bit Windows can't run the x64 build anyway; don't try to fix it here. }
-  if not IsWin64 then begin
-    Result := True;
-    Exit;
-  end;
-  Result := False;
-  if FindFirst(ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.NETCore.App\10.*'), FindRec) then begin
-    try
-      repeat
-        if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then begin
-          Result := True;
-          Break;
-        end;
-      until not FindNext(FindRec);
-    finally
-      FindClose(FindRec);
-    end;
-  end;
-end;
-
-function RunDotNetRuntimeInstaller: Boolean;
-var
-  ResultCode: Integer;
-begin
-  { 3010 = success, reboot required. }
-  Result := Exec(ExpandConstant('{tmp}\dotnet-runtime-win-x64.exe'),
-                 '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode)
-            and ((ResultCode = 0) or (ResultCode = 3010));
-  if not Result then
-    Log('dotnet runtime installer exit code: ' + IntToStr(ResultCode));
-end;
-
-function InstallDotNetRuntime: Boolean;
-begin
-  Result := False;
-  DotNetInstallAttempted := True;
-  DotNetDownloadPage.Clear;
-  DotNetDownloadPage.Add('https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe',
-                         'dotnet-runtime-win-x64.exe', '');
-  DotNetDownloadPage.Show;
-  try
-    try
-      DotNetDownloadPage.Download;
-    except
-      if DotNetDownloadPage.AbortedByUser then
-        Log('.NET runtime download aborted by user.')
-      else
-        Log('.NET runtime download failed: ' + GetExceptionMessage);
-      Exit;
-    end;
-    Result := RunDotNetRuntimeInstaller;
-  finally
-    DotNetDownloadPage.Hide;
-  end;
-end;
-
-procedure InitializeWizard;
-begin
-  DotNetDownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing),
-                                           SetupMessage(msgPreparingDesc), nil);
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if (CurPageID = wpReady) and not DotNet10RuntimeInstalled then begin
-    if not InstallDotNetRuntime then
-      SuppressibleMsgBox(
-        'Setup could not install the .NET 10 Runtime (x64), which Little Big Mouse requires.'#13#10 +
-        'The application will be installed but will not start until you install the runtime from:'#13#10 +
-        'https://dotnet.microsoft.com/download/dotnet/10.0',
-        mbError, MB_OK, IDOK);
-  end;
+  Result := CSharpApplicationFound;
 end;
 
 procedure KillImage(const ExeName: String);
@@ -377,9 +331,67 @@ begin
            ' remoteip=localsubnet profile=any enable=yes');
 end;
 
+{ A 5.x logon task (LittleBigMouse_<domain>_<user>) launches the C# window, which this
+  install removes: every logon would then fail until an agent had run and pointed the
+  task back at itself (crates/lbm-agent/src/schtask.rs), and a silent install runs
+  nothing afterwards. So the tasks that launch that very file are pointed at the agent
+  here, every account's: only the program changes, the trigger, the account and the
+  settings stay. The run level stays too, except outside Program Files, where an
+  elevated task would hand administrator rights to whoever can replace the agent. A
+  task this cannot rewrite is logged and left to the agent. }
+procedure RetargetLogonTask(Folder, Task: Variant);
+var
+  Definition, Action: Variant;
+  Name, Launched: String;
+begin
+  Name := Task.Name;
+  if Pos('LittleBigMouse_', Name) <> 1 then
+    Exit;
+  Definition := Task.Definition;
+  if Definition.Actions.Count <> 1 then
+    Exit;
+  Action := Definition.Actions.Item(1);
+  Launched := Action.Path;
+  if CompareText(RemoveQuotes(Launched),
+                 ExpandConstant('{app}\LittleBigMouse.Ui.Avalonia.exe')) <> 0 then
+    Exit;
+  Action.Path := ExpandConstant('{app}\lbm-agent.exe');
+  Action.Arguments := '';
+  Action.WorkingDirectory := ExpandConstant('{app}');
+  { TASK_RUNLEVEL_LUA }
+  if not InProgramFiles then
+    Definition.Principal.RunLevel := 0;
+  { TASK_UPDATE, TASK_LOGON_INTERACTIVE_TOKEN: no password. }
+  Folder.RegisterTaskDefinition(Name, Definition, 4, Null, Null, 3);
+  Log('Logon task ' + Name + ' now launches the agent');
+end;
+
+procedure RetargetLogonTasks;
+var
+  Service, Folder, Tasks: Variant;
+  I: Integer;
+begin
+  try
+    Service := CreateOleObject('Schedule.Service');
+    Service.Connect;
+    Folder := Service.GetFolder('\');
+    { TASK_ENUM_HIDDEN }
+    Tasks := Folder.GetTasks(1);
+    for I := 1 to Tasks.Count do
+      try
+        RetargetLogonTask(Folder, Tasks.Item(I));
+      except
+        Log('A logon task could not be pointed at the agent: ' + GetExceptionMessage);
+      end;
+  except
+    Log('The logon tasks could not be read: ' + GetExceptionMessage);
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
+    RetargetLogonTasks;
     AddFirewallRule;
     if not WizardIsTaskSelected('secureinput') then
       { Unticked on an update: a service installed before goes, its folder stays. }
@@ -400,19 +412,9 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopLittleBigMouse;
-  { Silent installs never reach NextButtonClick: give the runtime one headless
-    attempt here (no progress UI). Skipped when the interactive path already
-    tried, whatever its outcome — no point failing twice. }
-  if not DotNetInstallAttempted and not DotNet10RuntimeInstalled then begin
-    DotNetInstallAttempted := True;
-    try
-      DownloadTemporaryFile('https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe',
-                            'dotnet-runtime-win-x64.exe', '', nil);
-      RunDotNetRuntimeInstaller;
-    except
-      Log('.NET runtime download failed: ' + GetExceptionMessage);
-    end;
-  end;
+  CSharpApplicationFound :=
+    (CompareText(ExtractFileName(RemoveBackslashUnlessRoot(ExpandConstant('{app}'))), 'LittleBigMouse') = 0)
+    and FileExists(ExpandConstant('{app}\LittleBigMouse.Ui.Avalonia.exe'));
   Result := '';
 end;
 

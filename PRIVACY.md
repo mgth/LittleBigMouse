@@ -6,13 +6,13 @@ Little Big Mouse collects no analytics and sends no telemetry. There is no crash
 
 Three cases, all of them either initiated by you or announced here:
 
-- **Update check** (Windows only) — the application asks the public GitHub Releases API, `https://api.github.com/repos/Mgth/LittleBigMouse/releases`, whether a newer version exists. It sends no information about you or your machine beyond what any HTTP request reveals: your IP address and a `LittleBigMouse` user agent. GitHub's privacy terms apply to that request. On Linux the check is disabled entirely — your package manager owns updates.
+- **Update check** (Windows, 5.x only) — the C# application asks the public GitHub Releases API, `https://api.github.com/repos/Mgth/LittleBigMouse/releases`, whether a newer version exists. It sends no information about you or your machine beyond what any HTTP request reveals: your IP address and a `LittleBigMouse` user agent. GitHub's privacy terms apply to that request. On Linux the check is disabled entirely — your package manager owns updates. The Rust application that the v6 Windows setup installs does not check for updates.
 - **Smart-TV discovery** — when you use the monitor control features, the application sends SSDP multicast on your local network (`239.255.255.250:1900`) and probes the devices that answer. Samsung Tizen sets are probed on `http://<tv>:8001/api/v2/`, Hisense VIDAA sets on their device descriptor endpoint.
 - **Smart-TV control** — pairing and commands travel to the television over your local network, by WebSocket (Samsung) or MQTT (Hisense).
 
 Smart-TV traffic never leaves your network. Nothing is relayed through a third party.
 
-The installer additionally downloads the .NET 10 Runtime from Microsoft's `aka.ms` channel link if it is missing, and you download releases from GitHub yourself.
+The 5.x installer additionally downloads the .NET 10 Runtime from Microsoft's `aka.ms` channel link if it is missing; the v6 installer downloads nothing. You download releases from GitHub yourself.
 
 ## What is stored, and where
 

@@ -347,7 +347,7 @@ var
 procedure RetargetLogonTask(Folder, Task: Variant);
 var
   Definition, Action, Principal: Variant;
-  Name, Launched: String;
+  Name, Launched, Agent, Params: String;
 begin
   RetargetStep := 'reading a task';
   Name := Task.Name;
@@ -363,21 +363,34 @@ begin
                  ExpandConstant('{app}\LittleBigMouse.Ui.Avalonia.exe')) <> 0 then
     Exit;
   RetargetStep := 'changing the program of ' + Name;
-  Action.Path := ExpandConstant('{app}\lbm-agent.exe');
-  Action.Arguments := '';
-  Action.WorkingDirectory := ExpandConstant('{app}');
-  Principal := Definition.Principal;
-  { TASK_RUNLEVEL_LUA }
-  if not InProgramFiles then begin
-    RetargetStep := 'lowering the run level of ' + Name;
-    Principal.RunLevel := 0;
+  Agent := ExpandConstant('{app}\lbm-agent.exe');
+  try
+    Action.Path := Agent;
+    Action.Arguments := '';
+    Action.WorkingDirectory := ExpandConstant('{app}');
+    Principal := Definition.Principal;
+    { TASK_RUNLEVEL_LUA }
+    if not InProgramFiles then
+      Principal.RunLevel := 0;
+    { TASK_CREATE_OR_UPDATE, the account and logon type the task already has, no
+      password: Unassigned leaves the arguments out (Null would pass VT_NULL). }
+    RetargetStep := 'registering ' + Name + ' through COM';
+    Folder.RegisterTaskDefinition(Name, Definition, 6, Unassigned, Unassigned,
+                                  Principal.LogonType);
+    Log('Logon task ' + Name + ' now launches the agent');
+  except
+    { Seen on a GitHub runner: the registration throws, with no message. schtasks
+      changes the program alone and keeps the account, the trigger and the rest. }
+    Log('Logon task ' + Name + ': ' + RetargetStep + ' failed (' + GetExceptionMessage +
+        '), trying schtasks');
+    RetargetStep := 'changing ' + Name + ' through schtasks';
+    Params := '/Change /TN "' + Name + '" /TR "\"' + Agent + '\""';
+    if not InProgramFiles then
+      Params := Params + ' /RL LIMITED';
+    if not RunSystem('schtasks.exe', Params) then
+      RaiseException('schtasks /Change failed');
+    Log('Logon task ' + Name + ' now launches the agent (schtasks)');
   end;
-  { TASK_UPDATE, for the account the task already runs as, with its interactive token
-    (TASK_LOGON_INTERACTIVE_TOKEN): no password. Unassigned rather than Null: the
-    Task Scheduler takes VT_NULL for a value, VT_EMPTY for an argument left out. }
-  RetargetStep := 'registering ' + Name + ' for ' + String(Principal.UserId);
-  Folder.RegisterTaskDefinition(Name, Definition, 4, Principal.UserId, Unassigned, 3);
-  Log('Logon task ' + Name + ' now launches the agent');
 end;
 
 procedure RetargetLogonTasks;

@@ -683,3 +683,85 @@ fn a_panel_two_remotes_report_is_one_monitor_named_by_its_key() {
     );
     assert_eq!(layout.monitors().len(), 3);
 }
+
+/// A Samsung Odyssey G80SD gives each input its own product code (E035 on DisplayPort,
+/// E031 on HDMI) under one name and one serial string: this machine on its DisplayPort
+/// input, the laptop on its HDMI input, see one panel.
+fn g80sd_here() -> Layout {
+    let mut layout = Layout::new(design_options());
+    let mut edid = edid("SAM", "E035", "H1AK500000", 697.0, 392.0);
+    edid.model = Some("Odyssey G80SD".to_owned());
+    add_monitor(&mut layout, &output("DP-1", 0.0, 3840.0, 2160.0, edid));
+    layout
+}
+
+fn g80sd_there(name: &str) -> RemoteMonitor {
+    let mut display = remote(
+        "SAME031_H1AK500000",
+        "HDMI-1",
+        Some("SAME031_H1AK500000"),
+        0,
+        3840,
+        2160,
+    );
+    display.model_name = Some(name.to_owned());
+    display.panel_identity =
+        lbm_layout::model::panel_identity(Some("SAM"), Some(name), Some("H1AK500000"));
+    display
+}
+
+#[test]
+fn a_panel_seen_through_two_inputs_with_two_product_codes_is_one_monitor() {
+    let mut layout = g80sd_here();
+    merge_remote(
+        &mut layout,
+        LAPTOP,
+        "laptop",
+        &[g80sd_there("Odyssey G80SD")],
+    );
+
+    assert_eq!(layout.monitors().len(), 1);
+    let monitor = &layout.monitors()[0];
+    assert_eq!(monitor.panel_key.as_deref(), Some("SAME035_H1AK500000"));
+    assert_eq!(
+        monitor.sources,
+        [
+            "SAME035_H1AK500000".to_owned(),
+            remote_source_id(LAPTOP, "SAME031_H1AK500000")
+        ]
+    );
+}
+
+#[test]
+fn another_model_with_the_same_serial_string_is_another_monitor() {
+    let mut layout = g80sd_here();
+    merge_remote(
+        &mut layout,
+        LAPTOP,
+        "laptop",
+        &[g80sd_there("Odyssey G70D")],
+    );
+
+    assert_eq!(layout.monitors().len(), 2);
+}
+
+#[test]
+fn the_panel_identity_needs_a_name_and_a_serial_string() {
+    assert_eq!(
+        lbm_layout::model::panel_identity(Some("SAM"), Some("Odyssey G80SD"), Some("H1AK500000"))
+            .as_deref(),
+        Some("SAM/Odyssey G80SD_H1AK500000")
+    );
+    assert_eq!(
+        lbm_layout::model::panel_identity(Some("SAM"), Some(""), Some("H1AK500000")),
+        None
+    );
+    assert_eq!(
+        lbm_layout::model::panel_identity(Some("SAM"), Some("Odyssey G80SD"), Some(" ")),
+        None
+    );
+    assert_eq!(
+        lbm_layout::model::panel_identity(None, Some("x"), Some("y")),
+        None
+    );
+}

@@ -49,7 +49,7 @@ pub struct LinuxEdid {
     pub serial_number: Option<String>,
     /// The 0xFC descriptor string, empty when absent.
     pub model: Option<String>,
-    /// First detailed timing's image size, in mm. Never rotated.
+    /// The image size in mm (`lbm_display::edid::Edid::image_size_mm`). Never rotated.
     pub physical_width: f64,
     pub physical_height: f64,
     pub video_interface: Option<String>,
@@ -77,6 +77,15 @@ impl LinuxEdid {
             self.product_code.as_deref(),
             self.serial_number.as_deref(),
             self.serial.as_deref(),
+        )
+    }
+
+    /// The panel's other identity: [`crate::model::panel_identity`].
+    pub fn panel_identity(&self) -> Option<String> {
+        crate::model::panel_identity(
+            self.manufacturer_code.as_deref(),
+            self.model.as_deref(),
+            self.serial_number.as_deref(),
         )
     }
 }
@@ -150,6 +159,7 @@ pub fn add_monitor(layout: &mut Layout, monitor: &LinuxMonitor) {
     let mut physical_monitor = Monitor::new(monitor_id.clone(), &model);
     physical_monitor.device_id = Some(connector.to_owned());
     physical_monitor.panel_key = edid.and_then(LinuxEdid::panel_key);
+    physical_monitor.panel_identity = edid.and_then(LinuxEdid::panel_identity);
     physical_monitor.serial_number = Some(
         edid.and_then(LinuxEdid::monitor_serial)
             .unwrap_or(UNKNOWN_SERIAL)

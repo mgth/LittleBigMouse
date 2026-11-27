@@ -18,7 +18,7 @@ pub use border_resistance::{
 };
 pub use hosts::{HostOffset, HOST_GAP_PX};
 pub use layout::{DpiAwareness, Layout, LayoutSource};
-pub use monitor::{panel_key, Monitor, MonitorModel};
+pub use monitor::{panel_identity, panel_key, Monitor, MonitorModel};
 pub use options::{LayoutOptions, PER_MODEL, PER_MONITOR};
 pub use placement::SystemPlacement;
 pub use ratio::{inverse_of, Ratio};

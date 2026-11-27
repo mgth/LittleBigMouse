@@ -346,3 +346,81 @@ fn a_truncated_edid_gives_no_windows_id_and_the_monitor_its_fallback() {
         .local_id
         .is_some());
 }
+
+/// The EDIDs of one Samsung Odyssey G80SD, read through its two inputs: here on
+/// DisplayPort (sysfs), on a Windows machine on HDMI (the registry). Samsung gives
+/// each input its own product code, and the HDMI block a first detailed timing of
+/// 1872 x 1053 mm for a 70 x 39 cm panel.
+const G80SD_DISPLAYPORT: &[u8] = include_bytes!("data/g80sd-displayport.edid");
+const G80SD_HDMI: &[u8] = include_bytes!("data/g80sd-hdmi.edid");
+
+#[test]
+fn the_g80sd_has_two_panel_keys_and_one_panel_identity() {
+    let dp = edid::parse("dp", G80SD_DISPLAYPORT);
+    let hdmi = edid::parse("hdmi", G80SD_HDMI);
+    assert_eq!(dp.panel_key().as_deref(), Some("SAME035_H1AK500000"));
+    assert_eq!(hdmi.panel_key().as_deref(), Some("SAME031_H1AK500000"));
+    assert_eq!(
+        dp.panel_identity().as_deref(),
+        Some("SAM/Odyssey G80SD_H1AK500000")
+    );
+    assert_eq!(dp.panel_identity(), hdmi.panel_identity());
+}
+
+#[test]
+fn a_detailed_timing_that_contradicts_the_basic_block_gives_way_to_it() {
+    let dp = edid::parse("dp", G80SD_DISPLAYPORT);
+    let hdmi = edid::parse("hdmi", G80SD_HDMI);
+    // C#'s members are left as C# reads them…
+    assert_eq!(
+        (hdmi.physical_width, hdmi.physical_height),
+        (1872.0, 1053.0)
+    );
+    // …the size the mappings take is not.
+    assert_eq!(hdmi.image_size_mm(), (700.0, 390.0));
+    assert_eq!(hdmi.to_linux().physical_width, 700.0);
+    assert_eq!(hdmi.to_windows().physical_height, 390.0);
+    // A timing that agrees with the centimetres keeps its millimetres.
+    assert_eq!(dp.image_size_mm(), (697.0, 392.0));
+
+    let monitor = remote_monitor_as(
+        &peer_display("SAME031", "HDMI-1", Some(G80SD_HDMI), 0),
+        IdForm::Linux,
+    );
+    assert_eq!(monitor.edid_size_mm, Some((700.0, 390.0)));
+}
+
+#[test]
+fn a_timing_without_a_size_or_a_basic_block_without_one_decide_nothing_wrong() {
+    let mut block = G80SD_HDMI[..128].to_vec();
+    // No size in the timing: the centimetres.
+    block[66] = 0;
+    block[67] = 0;
+    block[68] = 0;
+    assert_eq!(edid::parse("x", &block).image_size_mm(), (700.0, 390.0));
+    // No size in the basic block: the timing, whatever it says.
+    let mut block = G80SD_HDMI[..128].to_vec();
+    block[21] = 0;
+    block[22] = 0;
+    assert_eq!(edid::parse("x", &block).image_size_mm(), (1872.0, 1053.0));
+}
+
+#[test]
+fn merging_the_g80sd_seen_on_hdmi_there_makes_a_second_source_of_it_here() {
+    let mut layout = local_dell(G80SD_DISPLAYPORT);
+    merge_peer_as(
+        &mut layout,
+        LAPTOP,
+        "laptop",
+        &[peer_display("SAME031", "HDMI-1", Some(G80SD_HDMI), 0)],
+        IdForm::Linux,
+    );
+    assert_eq!(layout.monitors().len(), 1);
+    assert_eq!(
+        layout.monitors()[0].sources,
+        vec![
+            "SAME035_H1AK500000".to_owned(),
+            remote_source_id(LAPTOP, "SAME031")
+        ]
+    );
+}

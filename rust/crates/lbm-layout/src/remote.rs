@@ -26,6 +26,8 @@ pub struct RemoteMonitor {
     pub name: String,
     /// [`crate::model::panel_key`] of its EDID.
     pub panel_key: Option<String>,
+    /// [`crate::model::panel_identity`] of its EDID.
+    pub panel_identity: Option<String>,
     /// The id this machine would give the panel if it showed it itself, when that is
     /// not its panel key: on a Windows master, the Windows monitor id computed from
     /// the EDID the remote sent (`lbm_display::peer`). `None` elsewhere, and without
@@ -124,6 +126,15 @@ pub fn merge_remote(
     layout.resolve_active_sources();
 }
 
+/// Whether the remote display is this monitor's panel: the same
+/// [`crate::model::panel_key`], or the same [`crate::model::panel_identity`] for a
+/// monitor whose inputs carry different product codes. Never two missing keys.
+fn is_same_panel(monitor: &Monitor, display: &RemoteMonitor) -> bool {
+    let same = |a: &Option<String>, b: &Option<String>| a.is_some() && a == b;
+    same(&monitor.panel_key, &display.panel_key)
+        || same(&monitor.panel_identity, &display.panel_identity)
+}
+
 fn add_remote_monitor(
     layout: &mut Layout,
     machine_id: &str,
@@ -138,21 +149,19 @@ fn add_remote_monitor(
     );
 
     // A panel already known, and not through this machine: a second source of it.
-    let shared = display.panel_key.as_deref().and_then(|key| {
-        layout
-            .monitors()
-            .iter()
-            .find(|m| {
-                m.panel_key.as_deref() == Some(key)
-                    && !m.sources.iter().any(|s| {
-                        s != &source_id
-                            && layout
-                                .source(s)
-                                .is_some_and(|s| s.source.host.as_deref() == Some(machine_id))
-                    })
-            })
-            .map(|m| m.id.clone())
-    });
+    let shared = layout
+        .monitors()
+        .iter()
+        .find(|m| {
+            is_same_panel(m, display)
+                && !m.sources.iter().any(|s| {
+                    s != &source_id
+                        && layout
+                            .source(s)
+                            .is_some_and(|s| s.source.host.as_deref() == Some(machine_id))
+                })
+        })
+        .map(|m| m.id.clone());
     if let Some(monitor_id) = shared {
         let source = PhysicalSource {
             monitor: monitor_id.clone(),
@@ -187,6 +196,7 @@ fn add_remote_monitor(
     let mut monitor = Monitor::new(monitor_id.clone(), &model);
     monitor.device_id = Some(source_id.clone());
     monitor.panel_key = display.panel_key.clone();
+    monitor.panel_identity = display.panel_identity.clone();
     // A monitor merged before keeps what was placed, chosen or edited on it.
     if let Some(previous) = layout.monitor(&monitor_id) {
         monitor = Monitor {

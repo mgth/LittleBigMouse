@@ -77,6 +77,12 @@ pub struct Monitor {
     ///
     /// [`panel_key`]: super::panel_key
     pub panel_key: Option<String>,
+    /// What else recognises the panel through another of its inputs
+    /// ([`panel_identity`]): set by detection from the EDID, `None` without both a
+    /// monitor name and a serial string. Never persisted either.
+    ///
+    /// [`panel_identity`]: super::panel_identity
+    pub panel_identity: Option<String>,
 }
 
 impl Monitor {
@@ -99,6 +105,7 @@ impl Monitor {
             location: Point::new(0.0, 0.0),
             border_resistance: BorderResistance::default(),
             panel_key: None,
+            panel_identity: None,
         }
     }
 
@@ -138,4 +145,29 @@ pub fn panel_key(
         "{manufacturer}{}_{serial}",
         product_code.unwrap_or("")
     ))
+}
+
+/// A second identity of a panel, for the monitors that give each of their inputs its
+/// own EDID product code: the manufacturer, the monitor name descriptor and the serial
+/// string. A Samsung Odyssey G80SD says `SAM E035` on DisplayPort and `SAM E031` on
+/// HDMI, with the same name `Odyssey G80SD` and the same serial `H1AK500000`: two
+/// machines plugged into those two inputs see one panel under two [`panel_key`]s.
+///
+/// The name stands in for the product code rather than nothing: nothing makes a serial
+/// string unique across a manufacturer's models (`H1AK500000` looks like a placeholder),
+/// so the manufacturer and the serial alone could take a Samsung on one machine and
+/// another Samsung model on the other for one panel. `None` without a name or without a serial string: the binary serial is no
+/// help here, it differs between the inputs (0 and `01000E00` on that G80SD).
+///
+/// It never names a monitor: [`panel_key`] does, as Linux's own ids do. Two displays
+/// are one panel when either key matches (`crate::remote`).
+pub fn panel_identity(
+    manufacturer_code: Option<&str>,
+    model_name: Option<&str>,
+    serial_number: Option<&str>,
+) -> Option<String> {
+    let manufacturer = manufacturer_code.filter(|s| !s.is_empty())?;
+    let name = model_name.map(str::trim).filter(|s| !s.is_empty())?;
+    let serial = serial_number.map(str::trim).filter(|s| !s.is_empty())?;
+    Some(format!("{manufacturer}/{name}_{serial}"))
 }

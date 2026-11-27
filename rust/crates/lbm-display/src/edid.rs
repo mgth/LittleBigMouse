@@ -257,6 +257,49 @@ impl Edid {
         )
     }
 
+    /// The panel's other identity ([`lbm_layout::model::panel_identity`]).
+    pub fn panel_identity(&self) -> Option<String> {
+        lbm_layout::model::panel_identity(
+            self.manufacturer_code.as_deref(),
+            self.model.as_deref(),
+            self.serial_number.as_deref(),
+        )
+    }
+
+    /// The image size in mm the mappings take: the first detailed timing's, as C#
+    /// reads it ([`Edid::physical_width`]), unless it contradicts the basic block's
+    /// centimetres — then those. A Samsung Odyssey G80SD's HDMI EDID gives
+    /// 1872 x 1053 mm in its first detailed timing for a 70 x 39 cm panel (its other
+    /// timings say 700 x 400; its DisplayPort EDID says 697 x 392); `edid-decode`
+    /// fails that block for the same reason.
+    ///
+    /// They agree within 10 mm or 10 %, whichever is larger (centimetres are rounded),
+    /// either way round. A basic block without a size (0, or an aspect ratio instead)
+    /// leaves the timing's, whatever it is; a timing without a size gives way to the
+    /// centimetres. [`Edid::physical_width`] itself stays C#'s, member for member.
+    pub fn image_size_mm(&self) -> (f64, f64) {
+        let timing = (self.physical_width, self.physical_height);
+        // Below 69 bytes there is no timing: the size is the centimetres already.
+        let (Some(&width_cm), Some(&height_cm), true) =
+            (self.raw.get(21), self.raw.get(22), self.raw.len() > 68)
+        else {
+            return timing;
+        };
+        if width_cm == 0 || height_cm == 0 {
+            return timing;
+        }
+        let basic = (f64::from(width_cm) * 10.0, f64::from(height_cm) * 10.0);
+        let close =
+            |mm: f64, reference: f64| (mm - reference).abs() <= f64::max(10.0, reference * 0.1);
+        let agrees = (close(timing.0, basic.0) && close(timing.1, basic.1))
+            || (close(timing.0, basic.1) && close(timing.1, basic.0));
+        if agrees {
+            timing
+        } else {
+            basic
+        }
+    }
+
     /// The members the Linux mapping reads (`LinuxLayoutMapping.AddMonitor`).
     pub fn to_linux(&self) -> LinuxEdid {
         LinuxEdid {
@@ -265,8 +308,8 @@ impl Edid {
             serial: self.serial.clone(),
             serial_number: self.serial_number.clone(),
             model: self.model.clone(),
-            physical_width: self.physical_width,
-            physical_height: self.physical_height,
+            physical_width: self.image_size_mm().0,
+            physical_height: self.image_size_mm().1,
             video_interface: self.video_interface.clone(),
         }
     }
@@ -282,8 +325,8 @@ impl Edid {
             model: self.model.clone(),
             serial_number: self.serial_number.clone(),
             video_interface: self.video_interface.clone(),
-            physical_width: self.physical_width,
-            physical_height: self.physical_height,
+            physical_width: self.image_size_mm().0,
+            physical_height: self.image_size_mm().1,
         }
     }
 }

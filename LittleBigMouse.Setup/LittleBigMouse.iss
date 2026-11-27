@@ -119,8 +119,8 @@ var
   CSharpApplicationFound: Boolean;
 
 { Whether the folder installed into is Little Big Mouse's own and held the C#
-  application, as it was before this install touched it (set by PrepareToInstall:
-  [InstallDelete] removes the file looked for). The folder's name is the guard for the
+  application, as it was before this install touched it (set by PrepareToInstall, since
+  the InstallDelete section removes the file looked for). The folder's name is the guard for the
   patterns deleted on this answer: Setup appends it to a folder picked in the wizard. }
 function HadCSharpApplication: Boolean;
 begin

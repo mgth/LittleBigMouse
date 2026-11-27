@@ -356,8 +356,9 @@ maîtres qu'un administrateur a approuvés.
   codé, option `SendSAS` proposée) ; l'écran de connexion avant toute session (hors de
   cette série) ; changement rapide d'utilisateur, veille ; deux maîtres approuvés à la
   fois (testé sur boucle locale) ; l'installeur interactif et son code de sortie 100.
-- **À faire par le mainteneur** : ajouter `lbm-service.exe` et `lbm-inject.exe` à la
-  configuration d'artefact SignPath si elle liste les exécutables par nom.
+- **À faire par le mainteneur** : ajouter `lbm-service.exe`, `lbm-inject.exe` et
+  `lbm-app.exe` (la fenêtre que l'installeur lance depuis #843) à la configuration
+  d'artefact SignPath si elle liste les exécutables par nom.
 - **Reste** : épingler côté maître l'empreinte du service (aujourd'hui vérifiée contre
   l'annonce de l'agent à chaque liaison) ; l'état « piloté par » côté esclave quand le
   service porte le flux ; une interface pour `trust` (aujourd'hui en ligne de commande).

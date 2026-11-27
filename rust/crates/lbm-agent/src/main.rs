@@ -27,6 +27,11 @@
 //! Without `--fake-hook` the agent drives the hook at the usual endpoint (or
 //! `LBM_HOOK_ENDPOINT`), launching it when none answers.
 
+// A release build on Windows has no console of its own: the logon task, the tray and
+// the window launch the agent bare, and a console executable opens a console window
+// each time. From a terminal, `attach_parent_console` gives it back that terminal.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -86,6 +91,8 @@ fn options_from(args: Vec<String>) -> Option<Options> {
 }
 
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    attach_parent_console();
     // The surfaces of the rulers a master asks this machine to draw (peers/overlay.rs):
     // the overlay library runs them in this same binary, as a child of its own.
     #[cfg(target_os = "linux")]
@@ -623,4 +630,16 @@ fn monitor_json(layout: &lbm_layout::model::Layout, m: &lbm_layout::model::Monit
             })
         }).collect::<Vec<_>>(),
     })
+}
+
+/// Writes to the terminal the agent was started from, if any: a release build has no
+/// console of its own (`windows_subsystem`), so `--dump-displays` and the log of an
+/// agent run by hand would otherwise go nowhere. Started by the logon task, the tray
+/// or the window, there is no parent console and nothing changes: the log goes to its
+/// file. Handles already redirected (`> file`) are inherited and kept.
+#[cfg(windows)]
+fn attach_parent_console() {
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    // SAFETY: no handle is passed; failing (no parent console) leaves things as they are.
+    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }

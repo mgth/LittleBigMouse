@@ -29,7 +29,7 @@ Little Big Mouse collects no analytics and sends no telemetry. What it stores, a
 ## One-time SignPath setup
 
 1. Apply for Little Big Mouse at SignPath Foundation and connect the `mgth/LittleBigMouse` repository through the SignPath GitHub App.
-2. Add an *application* artifact configuration: root is the GitHub artifact ZIP, signing `LittleBigMouse.Ui.Avalonia.exe`, `LittleBigMouse.Hook.exe`, `lbm-agent.exe`, `lbm-service.exe`, `lbm-inject.exe` and the eligible DLLs it contains. The agent is the resident process the UI starts; the input service and its injector run as LocalSystem when the installer's multi-PC service task is ticked (docs/multi-pc-service-windows.md). An existing configuration that lists executables by name has to gain them, or the release stops at the signature check below.
+2. Add an *application* artifact configuration: root is the GitHub artifact ZIP, signing `LittleBigMouse.Ui.Avalonia.exe`, `lbm-app.exe`, `LittleBigMouse.Hook.exe`, `lbm-agent.exe`, `lbm-service.exe`, `lbm-inject.exe` and the eligible DLLs it contains. `lbm-app.exe` is the window the installer launches; the C# one is still packaged. The agent is the resident process the UI starts; the input service and its injector run as LocalSystem when the installer's multi-PC service task is ticked (docs/multi-pc-service-windows.md). An existing configuration that lists executables by name has to gain them, or the release stops at the signature check below.
 3. Add an *installer* artifact configuration: root is the GitHub artifact ZIP, signing `LittleBigMouse_*.exe`.
 4. Add a release signing policy using the SignPath Foundation certificate.
 5. Store the API token as the `SIGNPATH_API_TOKEN` Actions **secret**, and add these Actions **variables**:
@@ -45,7 +45,7 @@ Little Big Mouse collects no analytics and sends no telemetry. What it stores, a
 
 Signing the setup `.exe` alone would leave the binaries inside it unsigned, and those are the ones Windows judges once they are installed on disk. So the binaries are signed first, then the installer is **recompiled** from the signed files (`ISCC /DSourceDir=...`) and signed in turn.
 
-Both stages fail closed: the workflow asserts that `LittleBigMouse.Ui.Avalonia.exe`, `LittleBigMouse.Hook.exe`, `lbm-agent.exe`, `lbm-service.exe`, `lbm-inject.exe` and the installer each carry a `Valid` signature whose simple publisher name is exactly `SignPath Foundation`. A signing request that comes back successful without having signed those files stops the release.
+Both stages fail closed: the workflow asserts that `LittleBigMouse.Ui.Avalonia.exe`, `lbm-app.exe`, `LittleBigMouse.Hook.exe`, `lbm-agent.exe`, `lbm-service.exe`, `lbm-inject.exe` and the installer each carry a `Valid` signature whose simple publisher name is exactly `SignPath Foundation`. A signing request that comes back successful without having signed those files stops the release.
 
 The draft release carries the installer and nothing else, deliberately: the in-app updater downloads `assets[0]`, so an extra asset sorting ahead of it would be handed to existing users in place of the setup program.
 

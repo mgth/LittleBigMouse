@@ -23,7 +23,7 @@ AppName=Little Big Mouse
 AppVersion={#AppVer}
 DefaultDirName={commonpf}\LittleBigMouse
 DefaultGroupName=Little Big Mouse
-UninstallDisplayIcon={app}\LittleBigMouse.Ui.Avalonia.exe
+UninstallDisplayIcon={app}\lbm-app.exe
 ; Give the setup .exe the LBM icon, which this installer did not do at first.
 SetupIconFile=..\LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets\lbm-logo.ico
 Compression=lzma2
@@ -53,6 +53,10 @@ Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags
 ; on a wildcard that matches nothing. Add it back with the file, if one ever needs
 ; shipping again.
 Source: "{#SourceDir}\*.json"; DestDir: "{app}"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
+; lbm-app's pictures (manufacturer logos, LBM icons), read from icons\ beside it. CI
+; stages them there; a wildcard that matched nothing would stop the compile, so an
+; installer cannot be built without them.
+Source: "{#SourceDir}\icons\*"; DestDir: "{app}\icons"; Check: Is64BitInstallMode; Flags: recursesubdirs ignoreversion
 
 ;Source: "..\bin\x86\Release\net10.0\*.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode
 ;Source: "..\bin\x86\Release\net10.0\*.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode
@@ -68,11 +72,15 @@ Type: files; Name: "{app}\Uninstall.exe"
 Root: HKLM64; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\LittleBigMouse"; Flags: deletekey; Check: IsWin64
 Root: HKLM32; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\LittleBigMouse"; Flags: deletekey
 
+; The window is lbm-app (egui): it starts the agent beside it when none runs, and the
+; agent's tray Open and logon task come back to it. The C# window is still installed
+; (its build output is what this installer packages, and AppVer is read off it) but
+; nothing launches it any more.
 [Icons]
-Name: "{group}\Little Big Mouse"; Filename: "{app}\LittleBigMouse.Ui.Avalonia.exe"
+Name: "{group}\Little Big Mouse"; Filename: "{app}\lbm-app.exe"
 
 [Run]
-Filename: {app}\LittleBigMouse.Ui.Avalonia.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
+Filename: {app}\lbm-app.exe; Description: Run Application; Flags: postinstall nowait skipifsilent runascurrentuser
 
 [Code]
 var

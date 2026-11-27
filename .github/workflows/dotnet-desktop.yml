@@ -196,6 +196,24 @@ jobs:
     - name: Stage agent next to UI output
       run: Copy-Item rust\target\release\lbm-agent.exe (Join-Path $env:UI_OUTPUT 'lbm-agent.exe')
 
+    # The window the installer launches (lbm-app, egui). The agent's tray Open finds
+    # it beside itself, before the C# window that is still packaged.
+    - name: Stage window next to UI output
+      run: Copy-Item rust\target\release\lbm-app.exe (Join-Path $env:UI_OUTPUT 'lbm-app.exe')
+
+    # lbm-app reads its pictures (manufacturer logos under Icon/Pnp, the LBM ones) from
+    # an icons folder beside its exe (`icons_root`); the C# window has them embedded,
+    # so nothing in its build output carries them. Without this, an installed or
+    # portable lbm-app draws the screen map with no logo. The Dell logo stands for
+    # the tree: present at its path, the layout `icons_root` expects is too.
+    - name: Stage window pictures next to UI output
+      run: |
+        $icons = Join-Path $env:UI_OUTPUT 'icons'
+        if (Test-Path $icons) { Remove-Item -Recurse -Force $icons }
+        Copy-Item -Recurse LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets $icons
+        $dell = Join-Path $icons 'Icon\Pnp\Dell.DEL.DLL.svg'
+        if (-not (Test-Path -LiteralPath $dell)) { throw "missing ${dell}: lbm-app would draw no manufacturer logo" }
+
     # The multi-PC input service and the injector it launches
     # (docs/multi-pc-service-windows.md). In the portable too, where nothing installs
     # them: the installer creates the service only when its task is ticked, and the
@@ -230,12 +248,15 @@ jobs:
         # Also fails the step if ISCC somehow reported success without producing it.
         Get-ChildItem LittleBigMouse.Setup\LittleBigMouse_*.exe | Select-Object Name, Length
 
+    # On every build, so a branch can be installed and tried on Windows without a
+    # tag. Unsigned off a tag: SmartScreen and Smart App Control will say so. Kept two
+    # weeks off a tag, the repository default on one.
     - name: Upload installer artifact
-      if: startsWith(github.ref, 'refs/tags/v')
       uses: actions/upload-artifact@v4
       with:
         name: LittleBigMouse-installer
         path: LittleBigMouse.Setup\LittleBigMouse_*.exe
+        retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
 
     # Signing input for the release job below. Same exclusions as the portable:
     # the linux/osx runtime folders are dead weight in a Windows installer and
@@ -335,15 +356,15 @@ jobs:
 
     # A signing request can come back "successful" having signed nothing that
     # matters, so assert on the executables Windows will actually judge: the UI,
-    # the hook, the agent the UI starts, and the input service and its injector,
-    # which run as LocalSystem.
+    # the window the installer launches (lbm-app), the hook, the agent, and the
+    # input service and its injector, which run as LocalSystem.
     - name: Verify signed binaries
       id: signed
       run: |
         $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
         if (-not $ui) { throw 'SignPath returned no signed UI executable' }
         $dir = $ui.Directory.FullName
-        $names = 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
+        $names = 'lbm-app.exe', 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
         foreach ($target in @($ui.FullName) + ($names | ForEach-Object { Join-Path $dir $_ })) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target

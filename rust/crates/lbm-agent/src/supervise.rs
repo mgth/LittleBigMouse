@@ -23,12 +23,12 @@ const HOOK_NAMES: &[&str] = &["LittleBigMouse.Hook.exe", "lbm-hook.exe"];
 const HOOK_NAMES: &[&str] = &["lbm-hook"];
 
 /// Frontends the tray's Open may find beside the agent when no `--ui` names one: the
-/// C# window first (the v6.0 frontend: installed, the agent sits next to it — C#
-/// `AgentLauncher.Find`), then the egui one (`lbm-app`).
+/// egui window (`lbm-app`) first — the one the installer launches — then the C# one,
+/// still packaged beside it, for a folder that has only that.
 #[cfg(windows)]
-const FRONTEND_NAMES: &[&str] = &["LittleBigMouse.Ui.Avalonia.exe", "lbm-app.exe"];
+const FRONTEND_NAMES: &[&str] = &["lbm-app.exe", "LittleBigMouse.Ui.Avalonia.exe"];
 #[cfg(not(windows))]
-const FRONTEND_NAMES: &[&str] = &["LittleBigMouse.Ui.Avalonia", "lbm-app"];
+const FRONTEND_NAMES: &[&str] = &["lbm-app", "LittleBigMouse.Ui.Avalonia"];
 
 /// The frontend beside this executable, for the tray's Open when no `--ui` was given:
 /// the session's autostart entry and the scheduled task launch the agent bare, and an
@@ -370,12 +370,19 @@ mod tests {
     fn the_first_frontend_present_beside_the_agent_is_the_one_opened() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), None);
-        let egui = dir.path().join(FRONTEND_NAMES[1]);
+        let csharp = dir.path().join(FRONTEND_NAMES[1]);
+        std::fs::write(&csharp, "").unwrap();
+        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), Some(csharp));
+        let egui = dir.path().join(FRONTEND_NAMES[0]);
         std::fs::write(&egui, "").unwrap();
         assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), Some(egui));
-        let window = dir.path().join(FRONTEND_NAMES[0]);
-        std::fs::write(&window, "").unwrap();
-        assert_eq!(first_beside(dir.path(), FRONTEND_NAMES), Some(window));
+    }
+
+    #[test]
+    fn the_egui_window_comes_before_the_csharp_one() {
+        // The installer launches lbm-app; the tray must open the same window.
+        assert!(FRONTEND_NAMES[0].starts_with("lbm-app"));
+        assert!(FRONTEND_NAMES[1].starts_with("LittleBigMouse.Ui.Avalonia"));
     }
 
     #[test]

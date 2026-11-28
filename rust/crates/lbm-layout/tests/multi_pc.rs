@@ -765,3 +765,39 @@ fn the_panel_identity_needs_a_name_and_a_serial_string() {
         None
     );
 }
+
+/// Two local monitors sharing one panel identity (two inputs of one panel plugged in
+/// here, `E035` and `E031`): the remote display goes to the one with its exact panel
+/// key, whichever comes first in the layout.
+#[test]
+fn the_exact_panel_key_wins_over_a_shared_panel_identity_in_either_order() {
+    for codes in [["E035", "E031"], ["E031", "E035"]] {
+        let mut layout = Layout::new(design_options());
+        for (i, code) in codes.iter().enumerate() {
+            let mut edid = edid("SAM", code, "H1AK500000", 697.0, 392.0);
+            edid.model = Some("Odyssey G80SD".to_owned());
+            let connector = format!("DP-{}", i + 1);
+            add_monitor(
+                &mut layout,
+                &output(&connector, 3840.0 * i as f64, 3840.0, 2160.0, edid),
+            );
+        }
+        assert_eq!(layout.monitors().len(), 2, "{codes:?}");
+
+        merge_remote(
+            &mut layout,
+            LAPTOP,
+            "laptop",
+            &[g80sd_there("Odyssey G80SD")],
+        );
+
+        let source = remote_source_id(LAPTOP, "SAME031_H1AK500000");
+        let holder = layout
+            .monitors()
+            .iter()
+            .find(|m| m.sources.contains(&source))
+            .unwrap();
+        assert_eq!(holder.id, "SAME031_H1AK500000", "{codes:?}");
+        assert_eq!(layout.monitors().len(), 2, "{codes:?}");
+    }
+}

@@ -126,13 +126,19 @@ pub fn merge_remote(
     layout.resolve_active_sources();
 }
 
-/// Whether the remote display is this monitor's panel: the same
-/// [`crate::model::panel_key`], or the same [`crate::model::panel_identity`] for a
-/// monitor whose inputs carry different product codes. Never two missing keys.
-fn is_same_panel(monitor: &Monitor, display: &RemoteMonitor) -> bool {
+/// How well the remote display matches this monitor's panel: 2 for the same
+/// [`crate::model::panel_key`], 1 for only the same [`crate::model::panel_identity`]
+/// (a monitor whose inputs carry different product codes), 0 for no match. Two missing
+/// keys never match.
+fn panel_match(monitor: &Monitor, display: &RemoteMonitor) -> u8 {
     let same = |a: &Option<String>, b: &Option<String>| a.is_some() && a == b;
-    same(&monitor.panel_key, &display.panel_key)
-        || same(&monitor.panel_identity, &display.panel_identity)
+    if same(&monitor.panel_key, &display.panel_key) {
+        2
+    } else if same(&monitor.panel_identity, &display.panel_identity) {
+        1
+    } else {
+        0
+    }
 }
 
 fn add_remote_monitor(
@@ -148,20 +154,28 @@ fn add_remote_monitor(
         display_source(machine_id, machine_name, &source_id, display),
     );
 
-    // A panel already known, and not through this machine: a second source of it.
+    // A panel already known, and not through this machine: a second source of it. The
+    // exact panel key first: two local monitors may share the panel identity (two
+    // inputs of one panel plugged in here), and the one whose key is the remote's is
+    // its input. The first in the layout's order among equals.
     let shared = layout
         .monitors()
         .iter()
-        .find(|m| {
-            is_same_panel(m, display)
-                && !m.sources.iter().any(|s| {
-                    s != &source_id
-                        && layout
-                            .source(s)
-                            .is_some_and(|s| s.source.host.as_deref() == Some(machine_id))
-                })
+        .filter(|m| {
+            !m.sources.iter().any(|s| {
+                s != &source_id
+                    && layout
+                        .source(s)
+                        .is_some_and(|s| s.source.host.as_deref() == Some(machine_id))
+            })
         })
-        .map(|m| m.id.clone());
+        .map(|m| (panel_match(m, display), m))
+        .filter(|&(rank, _)| rank > 0)
+        .fold(None::<(u8, &Monitor)>, |best, (rank, m)| match best {
+            Some((best_rank, _)) if best_rank >= rank => best,
+            _ => Some((rank, m)),
+        })
+        .map(|(_, m)| m.id.clone());
     if let Some(monitor_id) = shared {
         let source = PhysicalSource {
             monitor: monitor_id.clone(),

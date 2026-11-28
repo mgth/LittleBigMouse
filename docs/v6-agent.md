@@ -206,7 +206,9 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   comme avant.
 - Mises à jour (`update`, C# `ApplicationUpdaterViewModel`), Windows seulement : une
   minute après le démarrage, puis une fois par jour, si `AutoUpdate` est vrai, et à
-  chaque « Check for update » du tray. La liste vient de l'API GitHub Releases. Les
+  chaque « Check for update » du tray. La liste vient de l'API GitHub Releases, par pages
+  de cent, en suivant le `rel="next"` de l'en-tête `Link` ; une page en échec fait
+  échouer la vérification, jamais « à jour » sur une liste partielle. Les
   brouillons sont écartés, les pré-versions ne sont retenues que si `IncludeBetaUpdates`
   est vrai, et il faut un installeur `.exe` hébergé sous les releases du dépôt. La version
   est lue dans le nom de la release, sinon dans son tag, et comparée à `LBM_VERSION`
@@ -214,7 +216,9 @@ Les tests C# de `DisplayChangeCoordinator` et `EngineController` sont la spécif
   Un clic sur la bulle télécharge l'installeur dans `%TEMP%\LittleBigMouse-update`. Le
   fichier est vérifié : `WinVerifyTrust` avec révocation sur toute la chaîne, et un
   signataire nommé exactement `SignPath Foundation`. Il est ensuite lancé élevé
-  (`runas`). Un installeur refusé est supprimé sans avoir été lancé, et la bulle propose
+  (`runas`). De la vérification jusqu'à la création du processus, le fichier reste
+  ouvert en partage lecture seule : ni écriture, ni renommage, ni suppression, ni
+  renommage de son dossier ; `WinVerifyTrust` le lit par ce handle (`hFile`). Un installeur refusé est supprimé sans avoir été lancé, et la bulle propose
   la page de la release. Sans icône (`HideTrayIcon`), aucune vérification automatique
   n'est faite : rien ne pourrait en afficher le résultat.
 - Tray (`tray`, C# `TrayIconController`) : un frontend comme les autres, dans le processus.

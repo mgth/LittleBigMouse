@@ -3,13 +3,17 @@
 //! installer run elevated (`ShellExecuteExW`, verb `runas`) — what C# did with `runas`.
 
 use std::ffi::c_void;
+use std::fs::{File, OpenOptions};
 use std::os::windows::ffi::OsStrExt;
+use std::os::windows::fs::OpenOptionsExt;
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde_json::Value;
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{ERROR_CANCELLED, HANDLE, HWND, INVALID_HANDLE_VALUE};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_CANCELLED, HANDLE, HWND, INVALID_HANDLE_VALUE,
+};
 use windows::Win32::Security::Cryptography::{CertGetNameStringW, CERT_NAME_SIMPLE_DISPLAY_TYPE};
 use windows::Win32::Security::WinTrust::{
     WTHelperGetProvCertFromChain, WTHelperGetProvSignerFromChain, WTHelperProvDataFromStateData,
@@ -17,10 +21,13 @@ use windows::Win32::Security::WinTrust::{
     WINTRUST_FILE_INFO, WTD_CHOICE_FILE, WTD_REVOKE_WHOLECHAIN, WTD_STATEACTION_CLOSE,
     WTD_STATEACTION_VERIFY, WTD_UI_NONE,
 };
-use windows::Win32::UI::Shell::{ShellExecuteExW, ShellExecuteW, SHELLEXECUTEINFOW};
+use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
+use windows::Win32::UI::Shell::{
+    ShellExecuteExW, ShellExecuteW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+};
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-use super::{Platform, Release, PUBLISHER, RELEASES};
+use super::{next_link, Page, Platform, Release, PUBLISHER};
 
 /// No installer is anywhere near this; a bigger answer is not one.
 const MAX_INSTALLER: u64 = 200 * 1024 * 1024;
@@ -91,10 +98,10 @@ impl Windows {
 }
 
 impl Platform for Windows {
-    async fn releases(&self) -> Result<Value, String> {
+    async fn page(&self, url: &str) -> Result<Page, String> {
         let response = self
             .client
-            .get(RELEASES)
+            .get(url)
             .header("Accept", "application/vnd.github+json")
             .timeout(Duration::from_secs(30))
             .send()
@@ -103,18 +110,34 @@ impl Platform for Windows {
         if !response.status().is_success() {
             return Err(format!("GitHub answered {}", response.status()));
         }
+        let next = response
+            .headers()
+            .get("link")
+            .and_then(|link| link.to_str().ok())
+            .and_then(next_link);
         let body = response.bytes().await.map_err(|e| e.to_string())?;
-        serde_json::from_slice(&body).map_err(|e| format!("GitHub's answer is not JSON ({e})"))
+        let releases = serde_json::from_slice(&body)
+            .map_err(|e| format!("GitHub's answer is not JSON ({e})"))?;
+        Ok(Page { releases, next })
     }
 
     async fn install(&self, release: &Release) -> Result<(), String> {
         let path = self.download(release).await?;
         tokio::task::spawn_blocking(move || {
-            if let Err(why) = verify(&path) {
+            // Held from the check until Windows has the process: what runs is what was
+            // checked (see `hold`).
+            let held = hold(&path)?;
+            if let Err(why) = verify_held(&path, &held) {
+                drop(held);
                 let _ = std::fs::remove_file(&path);
                 return Err(why);
             }
-            launch(&path)
+            let launched = launch(&path);
+            drop(held);
+            if launched.is_err() {
+                let _ = std::fs::remove_file(&path);
+            }
+            launched
         })
         .await
         .map_err(|e| e.to_string())?
@@ -151,13 +174,32 @@ fn wide(path: &Path) -> Vec<u16> {
     path.as_os_str().encode_wide().chain(Some(0)).collect()
 }
 
-/// The installer's signature is valid, its chain trusted and unrevoked, and its signer
-/// is [`PUBLISHER`]. The error is the reason, for the user.
+/// Opens the installer so that, while the handle lives, nobody can write it, rename it,
+/// delete it or replace it (sharing: read only), nor rename the folder it is in: the
+/// path then names the same content from the check to the launch. Readers are let in,
+/// Windows itself among them when it maps the file into the new process.
+fn hold(path: &Path) -> Result<File, String> {
+    OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ.0)
+        .open(path)
+        .map_err(|e| format!("The installer could not be opened ({e})"))
+}
+
+/// The signature verdict on a file (see [`verify_held`]), held open while it is read.
 pub fn verify(path: &Path) -> Result<(), String> {
+    verify_held(path, &hold(path)?)
+}
+
+/// The installer's signature is valid, its chain trusted and unrevoked, and its signer
+/// is [`PUBLISHER`]; read through `held`, the handle that keeps it as it is. The error is
+/// the reason, for the user.
+fn verify_held(path: &Path, held: &File) -> Result<(), String> {
     let path = wide(path);
     let mut file = WINTRUST_FILE_INFO {
         cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
         pcwszFilePath: PCWSTR(path.as_ptr()),
+        hFile: HANDLE(held.as_raw_handle()),
         ..Default::default()
     };
     let mut data = WINTRUST_DATA {
@@ -232,11 +274,13 @@ fn signer(state: HANDLE) -> Option<String> {
 }
 
 /// Runs the installer elevated: its wizard takes over, and closes this agent itself
-/// (`CloseApplications=force`).
+/// (`CloseApplications=force`). Returns once the process exists — its image mapped, so
+/// the file can no longer change under it — and the caller may let the file go.
 fn launch(path: &Path) -> Result<(), String> {
     let file = wide(path);
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
         lpVerb: w!("runas"),
         lpFile: PCWSTR(file.as_ptr()),
         nShow: SW_SHOWNORMAL.0,
@@ -244,9 +288,15 @@ fn launch(path: &Path) -> Result<(), String> {
     };
     // SAFETY: `info` points at strings that outlive the call.
     match unsafe { ShellExecuteExW(&mut info) } {
-        Ok(()) => Ok(()),
+        Ok(()) if info.hProcess.is_invalid() => {
+            Err("Windows did not say the installer started".to_owned())
+        }
+        Ok(()) => {
+            // SAFETY: the process handle the call opened for us, closed once.
+            let _ = unsafe { CloseHandle(info.hProcess) };
+            Ok(())
+        }
         Err(e) if e.code() == ERROR_CANCELLED.to_hresult() => {
-            let _ = std::fs::remove_file(path);
             Err("The administrator prompt was declined".to_owned())
         }
         Err(e) => Err(format!("The installer could not be started ({e})")),

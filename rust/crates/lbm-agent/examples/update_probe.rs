@@ -11,7 +11,7 @@
 
 #[cfg(windows)]
 fn main() {
-    use lbm_agent::update::{self, Platform};
+    use lbm_agent::update;
 
     let files: Vec<String> = std::env::args().skip(1).collect();
     if !files.is_empty() {
@@ -28,7 +28,7 @@ fn main() {
     runtime.block_on(async {
         println!("this build: {:?}", update::current());
         let platform = update::Windows::new().expect("an HTTP client");
-        let releases = match platform.releases().await {
+        let releases = match update::releases(&platform).await {
             Ok(releases) => releases,
             Err(why) => {
                 println!("no list: {why}");

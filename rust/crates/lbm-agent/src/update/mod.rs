@@ -10,8 +10,10 @@
 //! day, a check the option forbids is not made, and none is made automatically while the
 //! tray icon is hidden (there would be nowhere to say what it found).
 //!
-//! **What is asked.** `GET` [`RELEASES`], the public GitHub Releases API, with a
-//! `LittleBigMouse` user agent (PRIVACY.md). The newest published release wins: drafts
+//! **What is asked.** `GET` [`FIRST_PAGE`], the public GitHub Releases API, with a
+//! `LittleBigMouse` user agent (PRIVACY.md), a hundred releases a page and every page
+//! GitHub links as `next` ([`releases`]): a stable release behind a page of betas is
+//! still found. The newest published release wins: drafts
 //! are skipped, pre-releases are offered only under "Include beta versions", and a
 //! release needs an installer (`.exe`) asset and a version, read from its name and else
 //! from its tag, as C# did.
@@ -19,7 +21,8 @@
 //! **What is done.** The tray says a newer version exists. Clicking that notice
 //! downloads the installer, checks its Authenticode signature (valid, and signed by
 //! [`PUBLISHER`], the identity SIGNING.md has the release workflow insist on) and runs
-//! it elevated. A file that fails the check is deleted unrun and the notice offers the
+//! it elevated — the file held open from the check to the launch, so that what runs is
+//! what was checked. A file that fails the check is deleted unrun and the notice offers the
 //! release page instead.
 //!
 //! The loop is [`run`], over a [`Platform`] so that it can be tested without a network
@@ -41,8 +44,14 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{verify, Windows};
 
-/// The public list of releases, newest first.
-pub const RELEASES: &str = "https://api.github.com/repos/mgth/LittleBigMouse/releases";
+/// The first page of the public list of releases, newest first: as many releases as GitHub gives at once.
+pub const FIRST_PAGE: &str =
+    "https://api.github.com/repos/mgth/LittleBigMouse/releases?per_page=100";
+/// Where every page GitHub links to must be (it names the repository by number there).
+const API: &str = "https://api.github.com/";
+/// Pages followed at most: a thousand releases. A list longer than that is not believed
+/// (it would only ever be a loop), and the check fails rather than say "up to date".
+const MAX_PAGES: usize = 10;
 /// Where a release's page and its files must be, compared without regard to case.
 const RELEASE_PAGES: &str = "https://github.com/mgth/littlebigmouse/releases/";
 /// The only publisher whose installer is run (SIGNING.md).
@@ -146,6 +155,54 @@ fn installer_name(name: &str) -> bool {
         && !name.starts_with('.')
 }
 
+/// One page of the API's list, and the address of the next one, from the `Link` header.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Page {
+    pub releases: Value,
+    pub next: Option<String>,
+}
+
+/// The address a `Link` header gives as `rel="next"`, if it is GitHub's API.
+pub fn next_link(header: &str) -> Option<String> {
+    header.split(',').find_map(|link| {
+        let (target, params) = link.trim().strip_prefix('<')?.split_once('>')?;
+        let next = params.split(';').any(|param| {
+            param.trim().strip_prefix("rel=").is_some_and(|rel| {
+                rel.trim_matches('"')
+                    .split_ascii_whitespace()
+                    .any(|r| r.eq_ignore_ascii_case("next"))
+            })
+        });
+        (next && on_api(target)).then(|| target.to_owned())
+    })
+}
+
+fn on_api(url: &str) -> bool {
+    url.get(..API.len())
+        .is_some_and(|start| start.eq_ignore_ascii_case(API))
+}
+
+/// The whole list, every page followed. Any page that fails fails the list: an answer
+/// from part of it could call a user up to date who is not.
+pub async fn releases(platform: &impl Platform) -> Result<Value, String> {
+    let mut all = Vec::new();
+    let mut url = FIRST_PAGE.to_owned();
+    for _ in 0..MAX_PAGES {
+        let page = platform.page(&url).await?;
+        let Value::Array(list) = page.releases else {
+            return Err("GitHub's answer is not a list of releases".to_owned());
+        };
+        all.extend(list);
+        match page.next.filter(|next| on_api(next)) {
+            Some(next) => url = next,
+            None => return Ok(Value::Array(all)),
+        }
+    }
+    Err(format!(
+        "GitHub lists more than {MAX_PAGES} pages of releases"
+    ))
+}
+
 /// What the tray is asked to do, from its menu or from a click on a notice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -169,8 +226,9 @@ pub struct Notice {
 
 /// What a platform does for the loop: Windows' network, signature check and shell.
 pub trait Platform: Send + Sync {
-    /// The API's list of releases (the JSON array).
-    fn releases(&self) -> impl Future<Output = Result<Value, String>> + Send;
+    /// One page of the API's list of releases (the JSON array, and the next page's
+    /// address).
+    fn page(&self, url: &str) -> impl Future<Output = Result<Page, String>> + Send;
     /// Downloads, checks and runs the installer of `release`. The error says why
     /// nothing was run, in words for the user.
     fn install(&self, release: &Release) -> impl Future<Output = Result<(), String>> + Send;
@@ -309,7 +367,7 @@ impl<P: Platform> Checker<P> {
     /// One check; `manual` when the user asked for it, who is then told everything.
     async fn check(&mut self, manual: bool) {
         let beta = self.settings.unwrap_or_default().beta;
-        let releases = match self.platform.releases().await {
+        let releases = match releases(&self.platform).await {
             Ok(releases) => releases,
             Err(why) => {
                 eprintln!("[lbm-agent] update check failed: {why}");

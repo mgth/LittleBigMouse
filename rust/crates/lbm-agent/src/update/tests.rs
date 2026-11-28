@@ -123,7 +123,12 @@ fn this_build_has_a_version_to_compare() {
 /// A network and a shell that only remember what they were asked.
 #[derive(Clone)]
 struct Fake {
+    /// The first page.
     releases: Arc<Mutex<Result<Value, String>>>,
+    /// The pages after it, linked one to the next.
+    more: Arc<Mutex<Vec<Result<Value, String>>>>,
+    /// Every page asked, in order.
+    asked: Arc<Mutex<Vec<String>>>,
     fetched: Arc<Mutex<u32>>,
     installed: Arc<Mutex<Vec<Version>>>,
     install_fails: Arc<Mutex<Option<String>>>,
@@ -134,6 +139,8 @@ impl Default for Fake {
     fn default() -> Self {
         Fake {
             releases: Arc::new(Mutex::new(Ok(json!([])))),
+            more: Default::default(),
+            asked: Default::default(),
             fetched: Default::default(),
             installed: Default::default(),
             install_fails: Default::default(),
@@ -143,9 +150,31 @@ impl Default for Fake {
 }
 
 impl Platform for Fake {
-    fn releases(&self) -> impl Future<Output = Result<Value, String>> + Send {
-        *self.fetched.lock().unwrap() += 1;
-        let answer = self.releases.lock().unwrap().clone();
+    fn page(&self, url: &str) -> impl Future<Output = Result<Page, String>> + Send {
+        self.asked.lock().unwrap().push(url.to_owned());
+        let more = self.more.lock().unwrap().clone();
+        // Page n (1 the first) links to n + 1 while there is one, as GitHub does.
+        let link = |n: usize| {
+            (n <= more.len()).then(|| {
+                format!(
+                    "https://api.github.com/repositories/30456575/releases?page={}",
+                    n + 1
+                )
+            })
+        };
+        let answer = if url == FIRST_PAGE {
+            *self.fetched.lock().unwrap() += 1;
+            self.releases.lock().unwrap().clone().map(|releases| Page {
+                releases,
+                next: link(1),
+            })
+        } else {
+            let n: usize = url.rsplit("page=").next().unwrap().parse().unwrap();
+            more[n - 2].clone().map(|releases| Page {
+                releases,
+                next: link(n),
+            })
+        };
         async move { answer }
     }
 
@@ -408,4 +437,79 @@ async fn the_check_ends_when_the_tray_goes() {
     let _subscription = calls_rx.recv().await;
     drop(commands);
     task.await.unwrap();
+}
+
+#[test]
+fn the_next_page_is_read_from_the_link_header() {
+    // What GitHub answered for this repository's releases.
+    let header = "<https://api.github.com/repositories/30456575/releases?page=2>; rel=\"next\", \
+                  <https://api.github.com/repositories/30456575/releases?page=2>; rel=\"last\"";
+    assert_eq!(
+        next_link(header).as_deref(),
+        Some("https://api.github.com/repositories/30456575/releases?page=2")
+    );
+    let last = "<https://api.github.com/repositories/30456575/releases?page=1>; rel=\"prev\", \
+                <https://api.github.com/repositories/30456575/releases?page=1>; rel=\"first\"";
+    assert_eq!(next_link(last), None, "the last page links to no next one");
+    assert_eq!(next_link(""), None);
+    assert_eq!(
+        next_link("<https://example.com/releases?page=2>; rel=\"next\""),
+        None,
+        "a next page anywhere but GitHub's API is not followed"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_stable_release_behind_a_page_of_betas_is_found() {
+    let betas: Vec<Value> = (1..=30)
+        .rev()
+        .map(|n| {
+            entry(
+                &format!("6.1.0-beta.{n}"),
+                &format!("v6.1.0-beta.{n}"),
+                true,
+            )
+        })
+        .collect();
+    let mut h = Harness::start("5.6.0", json!(betas)).await;
+    *h.fake.more.lock().unwrap() = vec![Ok(json!([
+        entry("6.0.0", "v6.0.0", false),
+        entry("5.6.0", "v5.6.0", false)
+    ]))];
+    h.state(json!({ "Engine": "Running", "AutoUpdate": false }));
+    h.settle().await;
+    h.commands.send(Command::Check).unwrap();
+    h.settle().await;
+    assert_eq!(
+        h.notices.try_recv().unwrap().title,
+        "Little Big Mouse 6.0.0 is available",
+        "the stable release of the second page, not \"up to date\""
+    );
+    assert_eq!(
+        *h.fake.asked.lock().unwrap(),
+        [
+            FIRST_PAGE,
+            "https://api.github.com/repositories/30456575/releases?page=2"
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_page_that_fails_fails_the_check() {
+    let mut h = Harness::start(
+        "5.6.0",
+        json!([entry("6.1.0-beta.1", "v6.1.0-beta.1", true)]),
+    )
+    .await;
+    *h.fake.more.lock().unwrap() = vec![Err("HTTP 502".to_owned())];
+    h.state(json!({ "Engine": "Running", "AutoUpdate": false }));
+    h.settle().await;
+    h.commands.send(Command::Check).unwrap();
+    h.settle().await;
+    let notice = h.notices.try_recv().unwrap();
+    assert_eq!(
+        (notice.title.as_str(), notice.text.as_str()),
+        ("Could not check for updates", "HTTP 502"),
+        "never \"up to date\" on half a list"
+    );
 }

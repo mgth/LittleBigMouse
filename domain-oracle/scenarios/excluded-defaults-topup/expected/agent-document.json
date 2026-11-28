@@ -24,7 +24,8 @@
     "FocusKeepApps": "",
     "FocusRestoreApps": "",
     "HideTrayIcon": false,
-    "BoundToAgent": false
+    "BoundToAgent": false,
+    "IncludeBetaUpdates": false
   },
   "Layout": {
     "Options": {

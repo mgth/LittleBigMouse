@@ -73,6 +73,7 @@ pub fn apply_global_options(o: &mut LayoutOptions, dto: Option<&GlobalOptionsDto
     keep(&mut o.rescue_shortcut, &dto.rescue_shortcut);
     keep(&mut o.hide_tray_icon, &dto.hide_tray_icon);
     keep(&mut o.bound_to_agent, &dto.bound_to_agent);
+    keep(&mut o.include_beta_updates, &dto.include_beta_updates);
 }
 
 /// C# `Apply(ILayoutOptions, LayoutOptionsDto?)`: the per-layout options.
@@ -433,6 +434,7 @@ pub fn to_global_options_dto(
         rescue_shortcut: Some(o.rescue_shortcut.clone()),
         hide_tray_icon: Some(o.hide_tray_icon),
         bound_to_agent: Some(o.bound_to_agent),
+        include_beta_updates: Some(o.include_beta_updates),
         excluded_defaults_version,
         ..Default::default()
     }

@@ -24,5 +24,6 @@
   "FocusRestoreApps": "",
   "HideTrayIcon": true,
   "BoundToAgent": false,
+  "IncludeBetaUpdates": false,
   "ExcludedDefaultsVersion": 2
 }

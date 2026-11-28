@@ -415,10 +415,13 @@ fn number(
 
 /// Edits one category; the caller owns the single scroll area, including exclusions.
 /// Global settings still save immediately, layout settings use the main Save button.
+///
+/// `windows` shows the settings only Windows acts on: elevation, and the update check
+/// (elsewhere the package manager owns updates, and the agent has no check to run).
 pub fn panel(
     ui: &mut egui::Ui,
     options: &mut LayoutOptions,
-    elevated: bool,
+    windows: bool,
     rescue: &mut crate::shortcut::Recording,
     unavailable: Option<&str>,
     page: Page,
@@ -443,7 +446,7 @@ pub fn panel(
                     "Keep the main window closed at startup",
                     &mut options.start_minimized,
                 );
-                if elevated {
+                if windows {
                     ui.separator();
                     what.app |= toggle(
                         ui,
@@ -463,15 +466,25 @@ pub fn panel(
                     &mut options.hide_tray_icon,
                 );
             });
-            group(ui, "Updates", |ui| {
-                what.app |= toggle(
-                    ui,
-                    Icon::Update,
-                    "Check for updates automatically",
-                    "Look for new versions in the background",
-                    &mut options.auto_update,
-                );
-            });
+            if windows {
+                group(ui, "Updates", |ui| {
+                    what.app |= toggle(
+                        ui,
+                        Icon::Update,
+                        "Check for updates automatically",
+                        "At startup, then once a day",
+                        &mut options.auto_update,
+                    );
+                    ui.separator();
+                    what.app |= toggle(
+                        ui,
+                        Icon::Update,
+                        "Include beta versions",
+                        "Also offer pre-releases, automatically or from the tray",
+                        &mut options.include_beta_updates,
+                    );
+                });
+            }
         }
         Page::Mouse => {
             note(

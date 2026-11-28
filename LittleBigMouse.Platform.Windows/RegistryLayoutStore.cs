@@ -94,6 +94,7 @@ public class RegistryLayoutStore : ILayoutStore
         RescueShortcut = root.TryGetString("RescueShortcut"),
         HideTrayIcon = root.TryGetBool("HideTrayIcon"),
         BoundToAgent = root.TryGetBool("BoundToAgent"),
+        IncludeBetaUpdates = root.TryGetBool("IncludeBetaUpdates"),
         ExcludedDefaultsVersion = root.TryGetInt("ExcludedDefaultsVersion")
     };
 
@@ -305,6 +306,7 @@ public class RegistryLayoutStore : ILayoutStore
         Set(root, "RescueShortcut", o.RescueShortcut);
         Set(root, "HideTrayIcon", o.HideTrayIcon);
         Set(root, "BoundToAgent", o.BoundToAgent);
+        Set(root, "IncludeBetaUpdates", o.IncludeBetaUpdates);
         Set(root, "ExcludedDefaultsVersion", o.ExcludedDefaultsVersion);
     }
 

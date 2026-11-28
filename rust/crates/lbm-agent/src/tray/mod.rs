@@ -16,6 +16,10 @@
 //! where it is not while the other machine has it. The badge changes with the state the
 //! crossing publishes: nothing is polled.
 //!
+//! Under Windows the tray is also where the update check speaks (`crate::update`): its
+//! menu has "Check for update", and what the check finds comes as a notice, a click on
+//! which carries on (install, or open the release page).
+//!
 //! [`TrayModel`] is all of that; `linux` and `windows` only draw it.
 
 use std::sync::Arc;
@@ -25,6 +29,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::api::{self, Call, Request};
 use crate::icons::{Badge, MenuIcon, TrayIcon};
+use crate::update::{self, Notice};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -36,25 +41,38 @@ pub use linux::run;
 #[cfg(windows)]
 pub use windows::run;
 
-/// What the menu does (C#'s `TrayMenu`, less "Check for update": the agent does not
-/// update itself).
+/// What the menu does (C#'s `TrayMenu`; "Check for update" under Windows only, where
+/// there is a check).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Open,
     Start,
     Stop,
     Refresh,
+    CheckForUpdate,
     Exit,
 }
 
 impl Action {
     /// The menu, in order; `None` is a separator.
-    pub const MENU: [Option<Action>; 6] = [
+    #[cfg(not(windows))]
+    pub const MENU: &[Option<Action>] = &[
         Some(Action::Open),
         Some(Action::Start),
         Some(Action::Stop),
         Some(Action::Refresh),
         None,
+        Some(Action::Exit),
+    ];
+    /// The menu, in order; `None` is a separator.
+    #[cfg(windows)]
+    pub const MENU: &[Option<Action>] = &[
+        Some(Action::Open),
+        Some(Action::Start),
+        Some(Action::Stop),
+        Some(Action::Refresh),
+        None,
+        Some(Action::CheckForUpdate),
         Some(Action::Exit),
     ];
 
@@ -64,6 +82,7 @@ impl Action {
             Action::Start => "Start",
             Action::Stop => "Stop",
             Action::Refresh => "Refresh",
+            Action::CheckForUpdate => "Check for update",
             Action::Exit => "Exit",
         }
     }
@@ -76,14 +95,16 @@ impl Action {
             Action::Start => MenuIcon::Start,
             Action::Stop => MenuIcon::Stop,
             Action::Refresh => MenuIcon::Refresh,
+            Action::CheckForUpdate => MenuIcon::Update,
             Action::Exit => MenuIcon::Exit,
         }
     }
 
-    /// The request it sends; `None` for Open, which launches the frontend instead.
+    /// The request it sends; `None` for Open, which launches the frontend instead, and
+    /// for Check for update, which goes to the update check.
     fn method(self) -> Option<&'static str> {
         match self {
-            Action::Open => None,
+            Action::Open | Action::CheckForUpdate => None,
             Action::Start => Some("Start"),
             Action::Stop => Some("Stop"),
             Action::Refresh => Some("Refresh"),
@@ -107,6 +128,12 @@ pub struct TrayModel {
     client: api::Client,
     next_id: u64,
     open: Arc<dyn Fn() + Send + Sync>,
+    /// The update check, where there is one.
+    updates: Option<UnboundedSender<update::Command>>,
+    /// The check's notice waiting to be shown.
+    notice: Option<Notice>,
+    /// What a click on the notice last shown does.
+    clicked: Option<update::Command>,
 }
 
 impl TrayModel {
@@ -126,11 +153,46 @@ impl TrayModel {
             client,
             next_id: 0,
             open,
+            updates: None,
+            notice: None,
+            clicked: None,
+        }
+    }
+
+    /// The tray of an agent that checks for updates: its menu's entry and its notices'
+    /// clicks go to `updates`.
+    pub fn with_updates(mut self, updates: UnboundedSender<update::Command>) -> Self {
+        self.updates = Some(updates);
+        self
+    }
+
+    /// The update check has something to say: kept until the platform shows it.
+    pub fn tell(&mut self, notice: Notice) {
+        self.notice = Some(notice);
+    }
+
+    /// The notice to show now, if any; a click on it will do what it says.
+    pub fn take_notice(&mut self) -> Option<Notice> {
+        let notice = self.notice.take()?;
+        self.clicked = notice.click;
+        Some(notice)
+    }
+
+    /// The notice last shown was clicked.
+    pub fn notice_clicked(&mut self) {
+        if let (Some(command), Some(updates)) = (self.clicked.take(), &self.updates) {
+            let _ = updates.send(command);
         }
     }
 
     /// A menu entry (or a click on the icon: Open).
     pub fn act(&mut self, action: Action) {
+        if action == Action::CheckForUpdate {
+            if let Some(updates) = &self.updates {
+                let _ = updates.send(update::Command::Check);
+            }
+            return;
+        }
         let Some(method) = action.method() else {
             (self.open)();
             return;
@@ -318,16 +380,64 @@ mod tests {
     #[test]
     fn every_entry_has_an_icon_of_its_own() {
         let icons: Vec<MenuIcon> = Action::MENU.iter().flatten().map(|a| a.icon()).collect();
+        let mut expected = vec![
+            MenuIcon::Logo,
+            MenuIcon::Start,
+            MenuIcon::Stop,
+            MenuIcon::Refresh,
+        ];
+        if cfg!(windows) {
+            expected.push(MenuIcon::Update);
+        }
+        expected.push(MenuIcon::Exit);
+        assert_eq!(icons, expected);
+    }
+
+    #[test]
+    fn check_for_update_is_offered_only_where_there_is_a_check() {
         assert_eq!(
-            icons,
-            [
-                MenuIcon::Logo,
-                MenuIcon::Start,
-                MenuIcon::Stop,
-                MenuIcon::Refresh,
-                MenuIcon::Exit
-            ]
+            Action::MENU.contains(&Some(Action::CheckForUpdate)),
+            cfg!(windows),
+            "the package manager owns updates off Windows"
         );
+    }
+
+    #[test]
+    fn the_update_entry_and_notices_drive_the_update_check() {
+        let (tray, mut calls, opened) = model();
+        let (updates, mut commands) = tokio::sync::mpsc::unbounded_channel();
+        let mut tray = tray.with_updates(updates);
+
+        tray.act(Action::CheckForUpdate);
+        assert_eq!(commands.try_recv().ok(), Some(update::Command::Check));
+        assert!(calls.try_recv().is_err(), "the agent is not asked");
+        assert_eq!(opened.load(Ordering::Relaxed), 0, "nor the frontend opened");
+
+        // A notice shown, then clicked: what it says it does is done, once.
+        tray.tell(Notice {
+            title: "Little Big Mouse 6.0.1 is available".to_owned(),
+            text: "Click to download and install it.".to_owned(),
+            warning: false,
+            click: Some(update::Command::Install),
+        });
+        let shown = tray.take_notice().expect("a notice to show");
+        assert_eq!(shown.title, "Little Big Mouse 6.0.1 is available");
+        assert!(tray.take_notice().is_none(), "shown once");
+        tray.notice_clicked();
+        tray.notice_clicked();
+        assert_eq!(commands.try_recv().ok(), Some(update::Command::Install));
+        assert!(commands.try_recv().is_err(), "one click, one install");
+
+        // A notice that leads nowhere: its click does nothing.
+        tray.tell(Notice {
+            title: "Little Big Mouse is up to date".to_owned(),
+            text: "Version 6.0.1".to_owned(),
+            warning: false,
+            click: None,
+        });
+        let _ = tray.take_notice();
+        tray.notice_clicked();
+        assert!(commands.try_recv().is_err());
     }
 
     #[test]

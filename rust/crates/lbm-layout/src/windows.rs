@@ -66,7 +66,7 @@ pub struct WindowsEdid {
     pub serial_number: Option<String>,
     /// `None` for an analog input.
     pub video_interface: Option<String>,
-    /// First detailed timing's image size, in mm. Never rotated.
+    /// The image size in mm (`lbm_display::edid::Edid::image_size_mm`). Never rotated.
     pub physical_width: f64,
     pub physical_height: f64,
 }
@@ -80,6 +80,15 @@ impl WindowsEdid {
             self.product_code.as_deref(),
             self.serial_number.as_deref(),
             self.serial.as_deref(),
+        )
+    }
+
+    /// The panel's other identity: [`crate::model::panel_identity`].
+    pub fn panel_identity(&self) -> Option<String> {
+        crate::model::panel_identity(
+            self.manufacturer_code.as_deref(),
+            self.model.as_deref(),
+            self.serial_number.as_deref(),
         )
     }
 }
@@ -399,6 +408,7 @@ pub fn create_physical_monitor(
     let mut physical = Monitor::new(id, model);
     physical.device_id = Some(monitor.id.clone());
     physical.panel_key = monitor.edid.as_ref().and_then(WindowsEdid::panel_key);
+    physical.panel_identity = monitor.edid.as_ref().and_then(WindowsEdid::panel_identity);
     physical.serial_number = Some(
         monitor
             .edid

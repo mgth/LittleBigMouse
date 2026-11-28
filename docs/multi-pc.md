@@ -234,7 +234,16 @@ On a remote (`lbm-hook/src/remote`):
 - **Cross-machine identity** of a panel: EDID manufacturer code + product code +
   serial (the serial string, else the binary serial). Never the checksum or the
   interface, which differ per input. Two displays from two machines with the same
-  key are **one `Monitor` with two sources**.
+  key are **one `Monitor` with two sources**. Some monitors give each input its own
+  product code too (a Samsung Odyssey G80SD: `SAME035` on DisplayPort, `SAME031` on
+  HDMI): a second key, the **panel identity** — manufacturer + monitor name descriptor
+  + serial string, only when the EDID has both — makes them one panel as well
+  (`lbm_layout::model::panel_identity`). It decides nothing else: ids stay named by
+  the panel key.
+- **Image size**: the first detailed timing's millimetres, unless they contradict the
+  basic block's centimetres (by more than 10 mm or 10 %), then the centimetres
+  (`lbm_display::edid::Edid::image_size_mm`). The same G80SD's HDMI EDID gives
+  1872 x 1053 mm for a 70 x 39 cm panel.
 - **Ids of a remote display** (`lbm_layout::remote`): its source is
   `{id on the remote}@{first 8 characters of the machine id}`, never one of this
   machine's ids. A display no monitor of the layout already shows becomes a monitor of

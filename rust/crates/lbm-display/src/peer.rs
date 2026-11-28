@@ -86,13 +86,14 @@ pub fn remote_monitor_as(display: &PeerDisplay, form: IdForm) -> RemoteMonitor {
         connector: display.connector.clone(),
         name: display.name.clone(),
         panel_key: edid.as_ref().and_then(Edid::panel_key),
+        panel_identity: edid.as_ref().and_then(Edid::panel_identity),
         local_id,
         pnp_code,
         model_name: edid.as_ref().and_then(|e| non_empty(&e.model)),
         video_interface: edid.as_ref().and_then(|e| e.video_interface.clone()),
         edid_size_mm: edid
             .as_ref()
-            .map(|e| (e.physical_width, e.physical_height))
+            .map(Edid::image_size_mm)
             .filter(|&(w, h)| w > 0.0 && h > 0.0),
         x: display.x,
         y: display.y,

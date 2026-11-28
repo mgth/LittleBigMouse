@@ -801,3 +801,48 @@ fn the_exact_panel_key_wins_over_a_shared_panel_identity_in_either_order() {
         assert_eq!(layout.monitors().len(), 2, "{codes:?}");
     }
 }
+
+/// A local `E031` and a remote announcing two inputs of one panel, `E035` and `E031`,
+/// under one panel identity: the remote's `E031` joins the local `E031` whichever the
+/// remote lists first, and its `E035` becomes a monitor of its own.
+#[test]
+fn the_exact_panel_keys_of_a_remotes_whole_batch_win_in_either_order() {
+    let there_e035 = {
+        let mut d = g80sd_there("Odyssey G80SD");
+        d.id = "SAME035_H1AK500000".to_owned();
+        d.panel_key = Some("SAME035_H1AK500000".to_owned());
+        d.pnp_code = Some("SAME035".to_owned());
+        d
+    };
+    let there_e031 = g80sd_there("Odyssey G80SD");
+    for batch in [
+        [there_e035.clone(), there_e031.clone()],
+        [there_e031.clone(), there_e035.clone()],
+    ] {
+        let mut layout = Layout::new(design_options());
+        let mut edid = edid("SAM", "E031", "H1AK500000", 697.0, 392.0);
+        edid.model = Some("Odyssey G80SD".to_owned());
+        add_monitor(&mut layout, &output("HDMI-1", 0.0, 3840.0, 2160.0, edid));
+
+        merge_remote(&mut layout, LAPTOP, "laptop", &batch);
+
+        let order: Vec<_> = batch.iter().map(|d| d.id.clone()).collect();
+        let local = layout.monitor("SAME031_H1AK500000").unwrap();
+        assert_eq!(
+            local.sources,
+            [
+                "SAME031_H1AK500000".to_owned(),
+                remote_source_id(LAPTOP, "SAME031_H1AK500000")
+            ],
+            "{order:?}"
+        );
+        assert_eq!(layout.monitors().len(), 2, "{order:?}");
+        assert!(
+            layout
+                .monitors()
+                .iter()
+                .any(|m| m.sources == [remote_source_id(LAPTOP, "SAME035_H1AK500000")]),
+            "{order:?}"
+        );
+    }
+}

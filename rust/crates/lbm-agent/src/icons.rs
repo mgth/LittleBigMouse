@@ -196,15 +196,18 @@ pub enum MenuIcon {
     Stop,
     Refresh,
     Exit,
+    /// Check for update (Windows' menu only).
+    Update,
 }
 
 impl MenuIcon {
-    pub const ALL: [MenuIcon; 5] = [
+    pub const ALL: [MenuIcon; 6] = [
         MenuIcon::Logo,
         MenuIcon::Start,
         MenuIcon::Stop,
         MenuIcon::Refresh,
         MenuIcon::Exit,
+        MenuIcon::Update,
     ];
 
     /// Its name in the freedesktop Icon Naming Spec, which every conforming theme (Breeze,
@@ -216,6 +219,7 @@ impl MenuIcon {
             MenuIcon::Stop => Some("media-playback-stop"),
             MenuIcon::Refresh => Some("view-refresh"),
             MenuIcon::Exit => Some("application-exit"),
+            MenuIcon::Update => Some("system-software-update"),
         }
     }
 
@@ -250,12 +254,13 @@ macro_rules! menu_pngs {
 }
 
 /// In [`MenuIcon`] order.
-const MENU_PNGS: [[(u32, &[u8]); 6]; 5] = [
+const MENU_PNGS: [[(u32, &[u8]); 6]; 6] = [
     menu_pngs!("open"),
     menu_pngs!("start"),
     menu_pngs!("stop"),
     menu_pngs!("refresh"),
     menu_pngs!("exit"),
+    menu_pngs!("update"),
 ];
 
 /// The first of `pixmaps` (smallest first) at least `wanted` wide, or the largest: a
@@ -448,7 +453,7 @@ mod tests {
         assert!(has(MenuIcon::Logo, |&[r, g, b]| b > 150
             && r < 60
             && g < 160));
-        for icon in [MenuIcon::Refresh, MenuIcon::Exit] {
+        for icon in [MenuIcon::Refresh, MenuIcon::Exit, MenuIcon::Update] {
             assert!(
                 colours(icon)
                     .iter()
@@ -469,6 +474,7 @@ mod tests {
                 Some("media-playback-stop"),
                 Some("view-refresh"),
                 Some("application-exit"),
+                Some("system-software-update"),
             ]
         );
     }

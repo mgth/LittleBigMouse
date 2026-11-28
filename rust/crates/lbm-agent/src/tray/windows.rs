@@ -6,11 +6,15 @@
 //! than message-only so that it hears `TaskbarCreated`, broadcast when Explorer restarts:
 //! the icon is then added again. The agent's side tells the window when the state changed;
 //! the window redraws from the model, which both share.
+//!
+//! The update check's notices are the icon's balloon (a toast on Windows 10 and 11); a
+//! click on one comes back as `NIN_BALLOONUSERCLICK`. Without an icon — the user hid it —
+//! there is nowhere to show them, and they are only logged.
 
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -20,8 +24,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetSystemMetricsForDpi, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
-    NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIIF_WARNING, NIM_ADD,
+    NIM_DELETE, NIM_MODIFY, NIN_BALLOONUSERCLICK, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
@@ -36,12 +40,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use super::{follow, Action, TrayModel};
 use crate::api::{self, Call};
 use crate::icons::{self, Badge, MenuIcon, Pixmap, TrayIcon};
+use crate::update::{Command, Notice};
 
 const CLASS_NAME: PCWSTR = w!("LittleBigMouseAgentTray");
 /// The icon's messages to its window.
 const WM_TRAY: u32 = WM_APP + 1;
 /// The agent's: the state changed, redraw.
 const WM_REDRAW: u32 = WM_APP + 2;
+/// The update check's: a notice waits in the model.
+const WM_NOTICE: u32 = WM_APP + 3;
 /// The icon's id within the window.
 const ICON_ID: u32 = 1;
 
@@ -64,13 +71,22 @@ thread_local! {
 /// Puts the icon up and keeps it on the agent's state until the agent goes. Without a
 /// notification area (a service session, a test runner) it says so and returns: the agent
 /// runs on without one.
-pub async fn run(calls: UnboundedSender<Call>, open: Arc<dyn Fn() + Send + Sync>) {
+///
+/// `updates` is the update check's end: where the menu's entry and the notices' clicks
+/// go, and where its notices come from.
+pub async fn run(
+    calls: UnboundedSender<Call>,
+    open: Arc<dyn Fn() + Send + Sync>,
+    updates: Option<(UnboundedSender<Command>, UnboundedReceiver<Notice>)>,
+) {
     let (client, frames) = api::in_process();
-    let model = Arc::new(Mutex::new(TrayModel::new(
-        calls.clone(),
-        client.clone(),
-        open,
-    )));
+    let mut tray = TrayModel::new(calls.clone(), client.clone(), open);
+    let mut notices = None;
+    if let Some((commands, receiver)) = updates {
+        tray = tray.with_updates(commands);
+        notices = Some(receiver);
+    }
+    let model = Arc::new(Mutex::new(tray));
     let (ready, window) = tokio::sync::oneshot::channel();
     let shared = model.clone();
     let spawned = std::thread::Builder::new()
@@ -84,15 +100,30 @@ pub async fn run(calls: UnboundedSender<Call>, open: Arc<dyn Fn() + Send + Sync>
         eprintln!("[lbm-agent] no tray: the notification area refused the icon");
         return;
     };
-    let post = |msg| {
+    let post = move |msg| {
         // SAFETY: a message to the tray's window, which checks what it is sent.
         unsafe { PostMessageW(HWND(window as _), msg, WPARAM(0), LPARAM(0)) }.is_ok()
     };
+    // The notices, handed to the window as they come; this task ends with the check.
+    let relay = notices.map(|mut notices| {
+        let model = model.clone();
+        tokio::spawn(async move {
+            while let Some(notice) = notices.recv().await {
+                model.lock().unwrap_or_else(|p| p.into_inner()).tell(notice);
+                if !post(WM_NOTICE) {
+                    return;
+                }
+            }
+        })
+    });
     follow(&calls, client, frames, |state| {
         model.lock().unwrap_or_else(|p| p.into_inner()).show(state);
         post(WM_REDRAW)
     })
     .await;
+    if let Some(relay) = relay {
+        relay.abort();
+    }
     post(WM_CLOSE);
 }
 
@@ -198,6 +229,51 @@ fn refresh(window: HWND) -> bool {
     done
 }
 
+/// Shows the notice waiting in the model as the icon's balloon.
+fn show_notice(window: HWND) {
+    TRAY.with(|tray| {
+        let tray = tray.borrow();
+        let Some(tray) = tray.as_ref() else {
+            return;
+        };
+        let mut model = tray.model.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(notice) = model.take_notice() else {
+            return;
+        };
+        if !tray.shown {
+            eprintln!(
+                "[lbm-agent] {}: {} (no tray icon to say it)",
+                notice.title, notice.text
+            );
+            return;
+        }
+        let mut data = NOTIFYICONDATAW {
+            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: window,
+            uID: ICON_ID,
+            uFlags: NIF_INFO,
+            dwInfoFlags: if notice.warning {
+                NIIF_WARNING
+            } else {
+                NIIF_INFO
+            },
+            ..Default::default()
+        };
+        fill(&mut data.szInfoTitle, &notice.title);
+        fill(&mut data.szInfo, &notice.text);
+        // SAFETY: a filled NOTIFYICONDATAW of this window's icon.
+        if !unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) }.as_bool() {
+            eprintln!("[lbm-agent] {}: {} (not shown)", notice.title, notice.text);
+        }
+    });
+}
+
+/// `text` into a fixed, NUL-terminated buffer of the shell's, cut to fit.
+fn fill(buffer: &mut [u16], text: &str) {
+    let text: Vec<u16> = text.encode_utf16().take(buffer.len() - 1).collect();
+    buffer[..text.len()].copy_from_slice(&text);
+}
+
 /// Adds, redraws or removes the icon from the model.
 fn notify(window: HWND, message: windows::Win32::UI::Shell::NOTIFY_ICON_MESSAGE) -> bool {
     TRAY.with(|tray| {
@@ -215,11 +291,10 @@ fn notify(window: HWND, message: windows::Win32::UI::Shell::NOTIFY_ICON_MESSAGE)
             hIcon: tray.icons[index(model.icon(), model.badge())],
             ..Default::default()
         };
-        let tip: Vec<u16> = format!("LittleBigMouse — {}", model.state())
-            .encode_utf16()
-            .take(data.szTip.len() - 1)
-            .collect();
-        data.szTip[..tip.len()].copy_from_slice(&tip);
+        fill(
+            &mut data.szTip,
+            &format!("LittleBigMouse — {}", model.state()),
+        );
         // SAFETY: a filled NOTIFYICONDATAW of this window.
         unsafe { Shell_NotifyIconW(message, &data) }.as_bool()
     })
@@ -251,11 +326,20 @@ unsafe extern "system" fn window_procedure(
         WM_TRAY => match lparam.0 as u32 {
             WM_LBUTTONUP => act(Action::Open),
             WM_RBUTTONUP => menu(window),
+            NIN_BALLOONUSERCLICK => TRAY.with(|tray| {
+                if let Some(tray) = tray.borrow().as_ref() {
+                    tray.model
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .notice_clicked();
+                }
+            }),
             _ => {}
         },
         WM_REDRAW => {
             refresh(window);
         }
+        WM_NOTICE => show_notice(window),
         _ if Some(msg) == taskbar_created => {
             // Explorer restarted: it has forgotten the icon, whatever we believed.
             TRAY.with(|tray| {
@@ -539,7 +623,8 @@ mod tests {
     fn the_menu_ids_are_the_models_entries() {
         // The ids TrackPopupMenu returns are the entries' positions plus one.
         assert_eq!(Action::MENU[0], Some(Action::Open));
-        assert_eq!(Action::MENU[5], Some(Action::Exit));
         assert_eq!(Action::MENU[4], None);
+        assert_eq!(Action::MENU[5], Some(Action::CheckForUpdate));
+        assert_eq!(Action::MENU[6], Some(Action::Exit));
     }
 }

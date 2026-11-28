@@ -362,11 +362,21 @@ fn run(options: Options) -> ExitCode {
                 None
             }
         };
-        #[cfg(any(target_os = "linux", windows))]
+        #[cfg(target_os = "linux")]
         if !options.no_tray {
             tokio::spawn(lbm_agent::tray::run(
                 calls.clone(),
                 opener(options.ui.clone().or_else(frontend_beside_agent)),
+            ));
+        }
+        // Under Windows the tray is also where the update check speaks: no tray, no check
+        // (it would have nowhere to say what it found).
+        #[cfg(windows)]
+        if !options.no_tray {
+            tokio::spawn(lbm_agent::tray::run(
+                calls.clone(),
+                opener(options.ui.clone().or_else(frontend_beside_agent)),
+                update_check(&calls),
             ));
         }
         drop(calls);
@@ -388,6 +398,38 @@ fn run(options: Options) -> ExitCode {
             .await;
         ExitCode::SUCCESS
     })
+}
+
+/// Starts the update check (`lbm_agent::update`) and answers the tray's end of it.
+#[cfg(windows)]
+fn update_check(
+    calls: &tokio::sync::mpsc::UnboundedSender<lbm_agent::api::Call>,
+) -> Option<(
+    tokio::sync::mpsc::UnboundedSender<lbm_agent::update::Command>,
+    tokio::sync::mpsc::UnboundedReceiver<lbm_agent::update::Notice>,
+)> {
+    use lbm_agent::update;
+    let Some(current) = update::current() else {
+        eprintln!("[lbm-agent] no update check: this build's version cannot be compared");
+        return None;
+    };
+    let platform = match update::Windows::new() {
+        Ok(platform) => platform,
+        Err(error) => {
+            eprintln!("[lbm-agent] no update check: {error}");
+            return None;
+        }
+    };
+    let (commands, commands_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (notices_tx, notices) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(update::run(
+        platform,
+        current,
+        calls.clone(),
+        commands_rx,
+        notices_tx,
+    ));
+    Some((commands, notices))
 }
 
 /// What the tray's Open does: launch the frontend, if there is one to launch.

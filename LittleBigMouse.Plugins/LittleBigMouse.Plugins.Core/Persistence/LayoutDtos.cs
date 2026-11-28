@@ -41,6 +41,7 @@ public class GlobalOptionsDto
     public string? FocusRestoreApps { get; set; }
     public bool? HideTrayIcon { get; set; }
     public bool? BoundToAgent { get; set; }
+    public bool? IncludeBetaUpdates { get; set; }
 
     /// <summary>
     /// Version of the excluded-defaults top-up already applied (see

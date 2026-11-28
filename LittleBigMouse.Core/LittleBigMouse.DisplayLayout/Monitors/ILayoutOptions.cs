@@ -50,6 +50,7 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
       public bool IsUnaryRatio { get; set; } = false;
       public bool Enabled { get; set; } = true;
       public bool AutoUpdate { get; set; } = true;
+      public bool IncludeBetaUpdates { get; set; } = false;
       public bool LoadAtStartup { get; set; } = false;
       public bool HomeCinema { get; set; } = false;
       public bool Pinned { get; set; } = false;
@@ -219,6 +220,11 @@ public interface ILayoutOptions : INotifyPropertyChanged // Change IPropertyChan
    /// Allow software to check for updates online
    /// </summary>
    bool AutoUpdate { get; set; }
+
+   /// <summary>
+   /// The update check also offers pre-releases (betas). Read by the v6 agent only.
+   /// </summary>
+   bool IncludeBetaUpdates { get; set; }
 
    /// <summary>
    /// Allow software sto start with user logon

@@ -104,6 +104,9 @@ pub struct GlobalOptionsDto {
     /// C# `GlobalOptionsDto.BoundToAgent`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bound_to_agent: Option<bool>,
+    /// C# `GlobalOptionsDto.IncludeBetaUpdates`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_beta_updates: Option<bool>,
     /// C# `GlobalOptionsDto.ExcludedDefaultsVersion`: the version of the
     /// excluded-defaults top-up already applied (see
     /// [`ExcludedListPersistence`](crate::ExcludedListPersistence)). Not mapped to the

@@ -1,4 +1,6 @@
-# Build LittleBigMouse: managed UI (net10 / Avalonia) + the hook daemon (Rust, x64).
+# Build LittleBigMouse. What Windows ships is the Rust workspace only (x64): the
+# window, the agent, the hook, the input service and its injector. The C# sources are
+# no longer packaged; their tests still run.
 # - Push / PR on master or v6 (the integration branch of the three-process
 #   architecture, docs/v6-architecture-plan.md on that branch): run the suites,
 #   build everything (installer included, as a smoke test), upload a portable
@@ -23,9 +25,10 @@ on:
   workflow_dispatch:
 
 env:
-  UI_PROJECT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\LittleBigMouse.Ui.Avalonia.csproj
   HOOK_RUST_PROJECT: rust\Cargo.toml
-  UI_OUTPUT: LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\bin\x64\Release\net10.0
+  # The whole Windows package, and nothing else: the portable artifact, the signing
+  # input and what the installer reads (SourceDir's default) are this folder.
+  STAGE: artifacts\windows
 
 jobs:
   # The Rust workspace on Linux: the only place the hook's evdev/uinput, portal
@@ -121,120 +124,101 @@ jobs:
     - name: Clippy (Rust, Windows)
       run: cargo clippy --manifest-path $env:HOOK_RUST_PROJECT --all-targets -- -D warnings
 
-    - name: Build UI (net10, x64 Release)
-      run: |
-        $buildArgs = @('-c','Release','-p:Platform=x64')
-        if ("${{ steps.ver.outputs.version }}") { $buildArgs += "-p:Version=${{ steps.ver.outputs.version }}" }
-        dotnet build $env:UI_PROJECT @buildArgs
-
     # windows-latest ships a stable Rust toolchain preinstalled, so no install step.
-    # LBM_VERSION is to build.rs what -p:Version is to the managed build: off a tag
-    # it stays empty and the version resource falls back to Directory.Build.props.
-    - name: Build hook (Rust, release)
+    # LBM_VERSION is what the build scripts stamp into each exe's version resource:
+    # off a tag it stays empty and they fall back to Directory.Build.props.
+    - name: Build (Rust, release)
       env:
         LBM_VERSION: ${{ steps.ver.outputs.version }}
       run: cargo build --release --manifest-path $env:HOOK_RUST_PROJECT
 
-    # The hook shipped with no VERSIONINFO at all until build.rs was added, and the
-    # failure mode is silent: a missing crate, a target without a resource compiler,
-    # or a props file that stops parsing all leave a nameless exe that still builds
-    # and still runs. Assert on the artifact rather than trust the build script.
-    - name: Verify hook version resource
+    # An empty folder filled by name, so that nothing a build happened to leave
+    # behind can be packaged, or sent to be signed.
+    - name: Stage the package
       run: |
-        $exe = 'rust\target\release\lbm-hook.exe'
-        $info = (Get-Item $exe).VersionInfo
-        if ($info.ProductName -ne 'Little Big Mouse') {
-          throw "hook ProductName is '$($info.ProductName)', expected 'Little Big Mouse'"
+        if (Test-Path $env:STAGE) { Remove-Item -Recurse -Force $env:STAGE }
+        New-Item -ItemType Directory -Force $env:STAGE | Out-Null
+        # Cargo can't emit a target named with a '.', so the hook is built as
+        # lbm-hook.exe and renamed to the name the agent looks for here.
+        $binaries = [ordered]@{
+          'lbm-app.exe'     = 'lbm-app.exe'
+          'lbm-agent.exe'   = 'lbm-agent.exe'
+          'lbm-hook.exe'    = 'LittleBigMouse.Hook.exe'
+          # The multi-PC input service and the injector it launches
+          # (docs/multi-pc-service-windows.md). In the portable too, where nothing
+          # installs them: the installer creates the service only when its task is
+          # ticked, and the service runs only from a folder administrators alone can
+          # change.
+          'lbm-service.exe' = 'lbm-service.exe'
+          'lbm-inject.exe'  = 'lbm-inject.exe'
         }
-        if ($info.FileVersion -notmatch '^\d+\.\d+\.\d+') {
-          throw "hook FileVersion is '$($info.FileVersion)', expected a numeric version"
+        foreach ($built in $binaries.Keys) {
+          Copy-Item (Join-Path 'rust\target\release' $built) (Join-Path $env:STAGE $binaries[$built])
         }
-        if ("${{ steps.ver.outputs.version }}" -and
-            $info.FileVersion -ne "${{ steps.ver.outputs.version }}") {
-          throw "hook FileVersion is '$($info.FileVersion)', expected the tag version"
-        }
-        "hook: $($info.ProductName) $($info.FileVersion)"
-
-    # lbm-app.exe carries the Little Big Mouse icon in the same resource script as its
-    # VERSIONINFO (crates/lbm-app/build.rs). That build script only warns when the
-    # resource fails, which would bring back the generic exe icon unnoticed; the
-    # product name proves the script ran and was linked.
-    - name: Verify app icon and version resource
-      run: |
-        $exe = 'rust\target\release\lbm-app.exe'
-        $info = (Get-Item $exe).VersionInfo
-        if ($info.ProductName -ne 'Little Big Mouse') {
-          throw "app ProductName is '$($info.ProductName)', expected 'Little Big Mouse': the icon resource is missing too"
-        }
-        "app: $($info.ProductName) $($info.FileVersion)"
-
-    # A hook that imports vcruntime140.dll does not start at all on a Windows
-    # that never installed a VC++ redistributable (#539), and every machine that
-    # builds it has one — so the break is invisible right up to the user. The
-    # static CRT that avoids it is set in .cargo/config.toml, which Cargo
-    # resolves from the working directory: moving this build into the hook's own
-    # directory, or adding a second config closer to the manifest, silently
-    # drops the flag. Read the imports off the artifact instead of trusting
-    # that; a PE names its DLLs in plain ASCII, so no toolchain is needed.
-    - name: Verify hook needs no VC++ redistributable
-      run: |
-        $exe = 'rust\target\release\lbm-hook.exe'
-        $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
-        if ($text -match 'VCRUNTIME\d|MSVCP\d') {
-          throw "hook imports the MSVC runtime: it will not start where no VC++ redistributable was ever installed (#539)"
-        }
-        "hook: statically linked, no VC++ redistributable needed"
-
-    - name: Stage hook next to UI output
-      # Cargo can't emit a target named with a '.', so the Rust binary is built as
-      # lbm-hook.exe and renamed to the contract name here.
-      run: Copy-Item rust\target\release\lbm-hook.exe (Join-Path $env:UI_OUTPUT 'LittleBigMouse.Hook.exe')
-
-    # The UI looks for the agent beside its own exe (AgentLauncher), and the
-    # installer's firewall rule for the multi-PC port names this exact path. Without
-    # it the installed v6 has no agent to start and the rule guards nothing.
-    - name: Stage agent next to UI output
-      run: Copy-Item rust\target\release\lbm-agent.exe (Join-Path $env:UI_OUTPUT 'lbm-agent.exe')
-
-    # The window the installer launches (lbm-app, egui). The agent's tray Open finds
-    # it beside itself, before the C# window that is still packaged.
-    - name: Stage window next to UI output
-      run: Copy-Item rust\target\release\lbm-app.exe (Join-Path $env:UI_OUTPUT 'lbm-app.exe')
-
-    # lbm-app reads its pictures (manufacturer logos under Icon/Pnp, the LBM ones) from
-    # an icons folder beside its exe (`icons_root`); the C# window has them embedded,
-    # so nothing in its build output carries them. Without this, an installed or
-    # portable lbm-app draws the screen map with no logo. The Dell logo stands for
-    # the tree: present at its path, the layout `icons_root` expects is too.
-    - name: Stage window pictures next to UI output
-      run: |
-        $icons = Join-Path $env:UI_OUTPUT 'icons'
-        if (Test-Path $icons) { Remove-Item -Recurse -Force $icons }
+        # lbm-app reads its pictures (manufacturer logos under Icon/Pnp, the LBM
+        # ones) from an icons folder beside its exe (`icons_root`). Without this, an
+        # installed or portable lbm-app draws the screen map with no logo. The Dell
+        # logo stands for the tree: present at its path, the layout `icons_root`
+        # expects is too.
+        $icons = Join-Path $env:STAGE 'icons'
         Copy-Item -Recurse LittleBigMouse.Ui\LittleBigMouse.Ui.Avalonia\Assets $icons
         $dell = Join-Path $icons 'Icon\Pnp\Dell.DEL.DLL.svg'
         if (-not (Test-Path -LiteralPath $dell)) { throw "missing ${dell}: lbm-app would draw no manufacturer logo" }
 
-    # The multi-PC input service and the injector it launches
-    # (docs/multi-pc-service-windows.md). In the portable too, where nothing installs
-    # them: the installer creates the service only when its task is ticked, and the
-    # service runs only from a folder administrators alone can change.
-    - name: Stage input service next to UI output
+    # A build script that cannot embed its resource only warns, and a nameless exe
+    # still builds and still runs. SignPath constrains the product name and version of
+    # every file it signs (SIGNING.md), so assert on the staged files themselves.
+    - name: Verify version resources
       run: |
-        Copy-Item rust\target\release\lbm-service.exe (Join-Path $env:UI_OUTPUT 'lbm-service.exe')
-        Copy-Item rust\target\release\lbm-inject.exe (Join-Path $env:UI_OUTPUT 'lbm-inject.exe')
+        $version = "${{ steps.ver.outputs.version }}"
+        if (-not $version) { $version = ([xml](Get-Content Directory.Build.props -Raw)).SelectNodes('//Version')[0].InnerText.Trim() }
+        # Each exe has its own: lbm-inject is built in the hook's package, and would
+        # otherwise carry the hook's name.
+        $names = 'lbm-app.exe', 'lbm-agent.exe', 'LittleBigMouse.Hook.exe', 'lbm-service.exe', 'lbm-inject.exe'
+        foreach ($name in $names) {
+          $info = (Get-Item (Join-Path $env:STAGE $name)).VersionInfo
+          if ($info.ProductName -ne 'Little Big Mouse') {
+            throw "$name ProductName is '$($info.ProductName)', expected 'Little Big Mouse'"
+          }
+          if ($info.FileVersion -ne $version) { throw "$name FileVersion is '$($info.FileVersion)', expected '$version'" }
+          if ($info.ProductVersion -ne $version) { throw "$name ProductVersion is '$($info.ProductVersion)', expected '$version'" }
+          if ($info.OriginalFilename -ne $name) { throw "$name OriginalFilename is '$($info.OriginalFilename)'" }
+          "${name}: $($info.ProductName) $($info.ProductVersion), $($info.FileDescription)"
+        }
+        # Exactly these programs: no library or third-party binary slips in beside
+        # them, where it would be shipped, and offered for signing.
+        $found = @(Get-ChildItem $env:STAGE -Recurse -File -Include *.exe, *.dll, *.sys, *.msi | ForEach-Object Name)
+        $extra = @($found | Where-Object { $names -notcontains $_ })
+        if ($extra.Count -or $found.Count -ne $names.Count) { throw "unexpected binaries in the package: $($found -join ', ')" }
+
+    # A program that imports vcruntime140.dll does not start at all on a Windows
+    # that never installed a VC++ redistributable (#539), and every machine that
+    # builds it has one — so the break is invisible right up to the user. The
+    # static CRT that avoids it is set in .cargo/config.toml, which Cargo
+    # resolves from the working directory: moving this build into a crate's own
+    # directory, or adding a second config closer to the manifest, silently
+    # drops the flag. Read the imports off the artifacts instead of trusting
+    # that; a PE names its DLLs in plain ASCII, so no toolchain is needed.
+    - name: Verify no VC++ redistributable is needed
+      run: |
+        foreach ($exe in Get-ChildItem $env:STAGE -Filter *.exe) {
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe.FullName))
+          if ($text -match 'VCRUNTIME\d|MSVCP\d') {
+            throw "$($exe.Name) imports the MSVC runtime: it will not start where no VC++ redistributable was ever installed (#539)"
+          }
+          "$($exe.Name): statically linked"
+        }
 
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
       with:
         name: LittleBigMouse-portable
-        path: |
-          ${{ env.UI_OUTPUT }}
-          !${{ env.UI_OUTPUT }}\runtimes\linux*\**
-          !${{ env.UI_OUTPUT }}\runtimes\osx*\**
+        path: ${{ env.STAGE }}
+        if-no-files-found: error
 
     # Compiled on every build, not only on tags: the installer script breaks in ways
-    # the app build can't catch (ISCC aborts on a wildcard matching nothing, so
-    # dropping the last file of a kind from the output is enough), and a release tag
+    # the app build can't catch (ISCC aborts on a file missing from the stage), and a
+    # release tag
     # is far too late to find out. Costs a few seconds. Only the two publishing
     # steps below stay tag-only.
     - name: Compile installer (InnoSetup)
@@ -248,6 +232,14 @@ jobs:
         # Also fails the step if ISCC somehow reported success without producing it.
         Get-ChildItem LittleBigMouse.Setup\LittleBigMouse_*.exe | Select-Object Name, Length
 
+    # Compiling proves little about the [Code] section: install over what a 5.x
+    # installation leaves, its logon task included, and uninstall. The runner is
+    # thrown away afterwards.
+    - name: Test the installer (upgrade from 5.x, uninstall)
+      run: |
+        $setup = Get-ChildItem LittleBigMouse.Setup\LittleBigMouse_*.exe | Select-Object -First 1
+        .\LittleBigMouse.Setup\Test-Installer.ps1 -Setup $setup.FullName
+
     # On every build, so a branch can be installed and tried on Windows without a
     # tag. Unsigned off a tag: SmartScreen and Smart App Control will say so. Kept two
     # weeks off a tag, the repository default on one.
@@ -258,18 +250,14 @@ jobs:
         path: LittleBigMouse.Setup\LittleBigMouse_*.exe
         retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
 
-    # Signing input for the release job below. Same exclusions as the portable:
-    # the linux/osx runtime folders are dead weight in a Windows installer and
-    # would only slow the round-trip to SignPath.
+    # Signing input for the release job below: the same folder as the portable.
     - name: Upload application for release signing
       if: startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_PROJECT_SLUG != ''
       uses: actions/upload-artifact@v4
       with:
         name: LittleBigMouse-unsigned-win-x64
-        path: |
-          ${{ env.UI_OUTPUT }}
-          !${{ env.UI_OUTPUT }}\runtimes\linux*\**
-          !${{ env.UI_OUTPUT }}\runtimes\osx*\**
+        path: ${{ env.STAGE }}
+        if-no-files-found: error
         retention-days: 2
 
     # Only drafts the unsigned installer while SignPath is not configured yet.
@@ -281,7 +269,7 @@ jobs:
       with:
         draft: true
         # Name the release with the bare numeric version (not the "v5.3.0" tag): the
-        # in-app updater parses the release name as a Version, and a "v" prefix or a
+        # updater of the C# application (5.x, still installed out there) parses the release name as a Version, and a "v" prefix or a
         # word breaks it (shows "online version 0.0" and blocks the upgrade).
         name: ${{ steps.ver.outputs.version }}
         files: LittleBigMouse.Setup\LittleBigMouse_*.exe
@@ -355,17 +343,17 @@ jobs:
         output-artifact-directory: artifacts\signed-app
 
     # A signing request can come back "successful" having signed nothing that
-    # matters, so assert on the executables Windows will actually judge: the UI,
-    # the window the installer launches (lbm-app), the hook, the agent, and the
-    # input service and its injector, which run as LocalSystem.
+    # matters, so assert on the executables Windows will actually judge: the window
+    # the installer launches (lbm-app), the agent, the hook, and the input service
+    # and its injector, which run as LocalSystem.
     - name: Verify signed binaries
       id: signed
       run: |
-        $ui = Get-ChildItem artifacts\signed-app -Recurse -Filter LittleBigMouse.Ui.Avalonia.exe | Select-Object -First 1
-        if (-not $ui) { throw 'SignPath returned no signed UI executable' }
-        $dir = $ui.Directory.FullName
-        $names = 'lbm-app.exe', 'LittleBigMouse.Hook.exe', 'lbm-agent.exe', 'lbm-service.exe', 'lbm-inject.exe'
-        foreach ($target in @($ui.FullName) + ($names | ForEach-Object { Join-Path $dir $_ })) {
+        $agent = Get-ChildItem artifacts\signed-app -Recurse -Filter lbm-agent.exe | Select-Object -First 1
+        if (-not $agent) { throw 'SignPath returned no signed agent' }
+        $dir = $agent.Directory.FullName
+        $names = 'lbm-app.exe', 'lbm-agent.exe', 'LittleBigMouse.Hook.exe', 'lbm-service.exe', 'lbm-inject.exe'
+        foreach ($target in $names | ForEach-Object { Join-Path $dir $_ }) {
           if (-not (Test-Path -LiteralPath $target)) { throw "Missing signed binary: $target" }
           $sig = Get-AuthenticodeSignature -LiteralPath $target
           if ($sig.Status -ne 'Valid') { throw "$target signature: $($sig.StatusMessage)" }
@@ -423,7 +411,7 @@ jobs:
         draft: true
         # Bare numeric version, as in the unsigned path above.
         name: ${{ steps.ver.outputs.version }}
-        # The installer and nothing else: the in-app updater downloads assets[0],
+        # The installer and nothing else: the 5.x updater downloads assets[0],
         # so any extra asset sorting ahead of it (an SBOM, a checksum file) would
         # be handed to every existing user as if it were the setup .exe.
         files: artifacts\release\LittleBigMouse_*.exe

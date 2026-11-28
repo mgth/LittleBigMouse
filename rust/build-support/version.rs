@@ -1,5 +1,5 @@
 // Version resolution shared by the build scripts that stamp a Windows VERSIONINFO
-// resource (lbm-hook, lbm-app). Pulled in with `include!`, so each build script
+// resource (lbm-hook, lbm-agent, lbm-service, lbm-app). Pulled in with `include!`, so each build script
 // keeps its own dependencies (`roxmltree`) and nothing here becomes a crate.
 
 /// LBM_VERSION (release CI, from the git tag) > Directory.Build.props (the

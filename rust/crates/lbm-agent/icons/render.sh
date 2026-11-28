@@ -11,12 +11,13 @@ for state in on off dead paused; do
 done
 
 # The menu's entries: the UI's own pictograms (Start, Stop, Refresh, and the logo for
-# Open), and Exit drawn here after lbm-ui's Icon::Power, the UI having none. Sizes: the
+# Open), and Exit and Update drawn here after lbm-ui's Icon::Power and Icon::Update, the
+# UI having no SVG of them. Sizes: the
 # small icon at 100, 125, 150, 200, 250 and 300 % (SM_CXSMICON).
-for pair in open:lbm_logo start:Start stop:Stop refresh:Refresh exit:; do
+for pair in open:lbm_logo start:Start stop:Stop refresh:Refresh exit:Exit update:Update; do
     name=${pair%%:*} source=${pair#*:}
     file="$svg/$source.svg"
-    [ -n "$source" ] || file="$here/menu/Exit.svg"
+    [ -f "$here/menu/$source.svg" ] && file="$here/menu/$source.svg"
     for size in 16 20 24 32 40 48; do
         rsvg-convert -w "$size" -h "$size" "$file" -o "$here/menu/$name-$size.png"
     done

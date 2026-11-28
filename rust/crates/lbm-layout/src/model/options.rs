@@ -46,6 +46,8 @@ pub struct LayoutOptions {
     pub priority: String,
     pub priority_unhooked: String,
     pub auto_update: bool,
+    /// The update check also offers pre-releases (betas). Windows only, like the check.
+    pub include_beta_updates: bool,
     pub home_cinema: bool,
     pub pinned: bool,
     pub start_minimized: bool,
@@ -94,6 +96,7 @@ impl Default for LayoutOptions {
             priority: "Normal".to_owned(),
             priority_unhooked: "Below".to_owned(),
             auto_update: false,
+            include_beta_updates: false,
             home_cinema: false,
             pinned: false,
             start_minimized: false,

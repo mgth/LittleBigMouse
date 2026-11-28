@@ -415,6 +415,8 @@ impl<W: AgentWorld> Agent<W> {
             saved: layout.map(|l| l.saved),
             load_at_startup: self.world.app_options().map(|(startup, _)| startup),
             hide_tray_icon: self.world.app_options().map(|(_, hidden)| hidden),
+            auto_update: self.world.update_options().map(|(auto, _)| auto),
+            include_beta_updates: self.world.update_options().map(|(_, beta)| beta),
             previewing: self.reconciler.previewing(),
             shortcut_unavailable: unavailable_now(
                 self.shortcut_unavailable.as_deref(),

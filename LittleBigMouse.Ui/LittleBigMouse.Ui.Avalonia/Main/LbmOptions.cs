@@ -25,6 +25,14 @@ public class LbmOptions : SavableReactiveModel, ILayoutOptions
     bool _autoUpdate;
 
     [DataMember]
+    public bool IncludeBetaUpdates
+    {
+        get => _includeBetaUpdates;
+        set => this.SetAndRaise(ref _includeBetaUpdates, value);
+    }
+    bool _includeBetaUpdates;
+
+    [DataMember]
     public bool LoadAtStartup
     {
         get => _loadAtStartup;

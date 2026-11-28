@@ -51,6 +51,7 @@ public static class LayoutDtoMapper
         o.RescueShortcut = dto.RescueShortcut ?? o.RescueShortcut;
         o.HideTrayIcon = dto.HideTrayIcon ?? o.HideTrayIcon;
         o.BoundToAgent = dto.BoundToAgent ?? o.BoundToAgent;
+        o.IncludeBetaUpdates = dto.IncludeBetaUpdates ?? o.IncludeBetaUpdates;
     }
 
     public static void Apply(ILayoutOptions o, LayoutOptionsDto? dto)
@@ -222,6 +223,7 @@ public static class LayoutDtoMapper
         RescueShortcut = o.RescueShortcut,
         HideTrayIcon = o.HideTrayIcon,
         BoundToAgent = o.BoundToAgent,
+        IncludeBetaUpdates = o.IncludeBetaUpdates,
         ExcludedDefaultsVersion = excludedDefaultsVersion
     };
 

@@ -23,8 +23,8 @@ const HOOK_NAMES: &[&str] = &["LittleBigMouse.Hook.exe", "lbm-hook.exe"];
 const HOOK_NAMES: &[&str] = &["lbm-hook"];
 
 /// Frontends the tray's Open may find beside the agent when no `--ui` names one: the
-/// egui window (`lbm-app`) first — the one the installer launches — then the C# one,
-/// still packaged beside it, for a folder that has only that.
+/// egui window (`lbm-app`) first — the one the setup ships — then the C# one, which
+/// it no longer does, for a folder that has only that.
 #[cfg(windows)]
 const FRONTEND_NAMES: &[&str] = &["lbm-app.exe", "LittleBigMouse.Ui.Avalonia.exe"];
 #[cfg(not(windows))]
